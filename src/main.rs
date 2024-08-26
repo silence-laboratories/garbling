@@ -1,4 +1,6 @@
 
+use std::mem;
+
 use circuit::BinaryCircuit;
 use config::constants::AES_KEY;
 use evaluator_operations::BinaryEvaluator;
@@ -31,10 +33,15 @@ fn main() {
 
     println!("{}", bool_vec_to_hex(o1));
     
-    let (gen, een, gc, din, delta) = aescirc.garble(AES_KEY);
-    let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, &mut AesHash::new(AES_KEY), gc.clone());
+    let (gen, een, gc, din, delta) = aescirc.garble(AesHash::new(AES_KEY));
+    let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, AesHash::new(AES_KEY), gc.clone());
     let output = aescirc.evaluator_evaluate(&mut evaluator, key, message).unwrap();
     let decoutput = evaluator.get_plaintext_output(aescirc.get_output_gate_ids().to_vec(), output.clone());
+
+    let size_of_vec_struct = mem::size_of_val(&gc);
+    let size_of_elements = gc.len() * mem::size_of::<i32>();
+    let total_size = size_of_vec_struct + size_of_elements;
+    println!("Total size of Vec: {} bytes", total_size);
     
     let mut o1 = decoutput.clone();
 

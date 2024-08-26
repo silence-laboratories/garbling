@@ -1,33 +1,33 @@
 use std::{collections::HashMap, fmt::Error};
 
-use crate::{config::constants::BLOCK, exec::{BinaryOperations, ExecutionPrimitives}, hash_aes::AesHash, utils::xor_blocks};
+use crate::{config::constants::BLOCK, exec::{BinaryOperations, ExecutionPrimitives}, hash_aes::HashFunction, utils::xor_blocks};
 
-pub struct BinaryEvaluator {
+pub struct BinaryEvaluator<H: HashFunction> {
     garbler_encoding: HashMap<usize, BLOCK>,
     evaluator_encoding: HashMap<usize, BLOCK>,
     decoding_infos: HashMap<usize, u8>,
     pub delta: BLOCK, 
-    pub rng: AesHash,
+    pub rng: H,
     pub cache: Vec<BLOCK>,
     pub gateindex: u128,
     pub currentcacheindex: usize,
 }
 
-impl BinaryEvaluator {
+impl<H: HashFunction> BinaryEvaluator<H> {
     pub fn new(
         garbler_encoding: HashMap<usize, BLOCK>, 
         evaluator_encoding: HashMap<usize, BLOCK>, 
         decoding_infos: HashMap<usize, u8>,
         delta: BLOCK, 
-        hash: &mut AesHash, 
+        hash: H, 
         gc: Vec<BLOCK>
-    ) -> BinaryEvaluator {
+    ) -> BinaryEvaluator<H> {
         BinaryEvaluator {
             garbler_encoding: garbler_encoding,
             evaluator_encoding: evaluator_encoding,
             decoding_infos: decoding_infos,
             delta: delta,
-            rng: hash.clone(),
+            rng: hash,
             cache: gc,
             gateindex: 0,
             currentcacheindex: 0,
@@ -49,7 +49,7 @@ impl BinaryEvaluator {
         op
     }
 
-    pub fn get_plaintext_output (&self, output_gates: Vec<usize>, garbled_output: HashMap<usize, <BinaryEvaluator as ExecutionPrimitives>::Item>) -> Vec<bool> {
+    pub fn get_plaintext_output (&self, output_gates: Vec<usize>, garbled_output: HashMap<usize, <BinaryEvaluator<H> as ExecutionPrimitives>::Item>) -> Vec<bool> {
         let mut output = Vec::new();
         println!("keys: {:?}", garbled_output.keys());
         for x in output_gates {
@@ -62,7 +62,7 @@ impl BinaryEvaluator {
 }
 
 
-impl ExecutionPrimitives for BinaryEvaluator {
+impl<H: HashFunction> ExecutionPrimitives for BinaryEvaluator<H> {
     type Item = BLOCK;
 
     fn constant(&mut self, _x: u16) -> Result<Self::Item, Error> {
@@ -90,7 +90,7 @@ impl ExecutionPrimitives for BinaryEvaluator {
     }
 }
 
-impl BinaryOperations for BinaryEvaluator {
+impl<H: HashFunction> BinaryOperations for BinaryEvaluator<H> {
     fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Error> {
         let output = xor_blocks(*x, *y);
         Ok(output)

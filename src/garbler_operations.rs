@@ -1,21 +1,21 @@
 use std::fmt::Error;
 
-use crate::{config::constants::BLOCK, exec::{BinaryOperations, ExecutionPrimitives}, hash_aes::AesHash, utils::xor_blocks};
+use crate::{config::constants::BLOCK, exec::{BinaryOperations, ExecutionPrimitives}, hash_aes::HashFunction, utils::xor_blocks};
 
 #[derive(Clone)]
-pub struct BinaryGarbler {
+pub struct BinaryGarbler<H: HashFunction> {
     pub delta: BLOCK, 
-    pub rng: AesHash,
+    pub rng: H,
     pub cache: Vec<BLOCK>,
     pub gateindex: u128,
     pub outputindex: u128,
 }
 
-impl BinaryGarbler {
-    pub fn new(hash: &mut AesHash) -> BinaryGarbler {
+impl<H: HashFunction> BinaryGarbler<H> {
+    pub fn new(mut hash: H) -> BinaryGarbler<H> {
         BinaryGarbler {
-            delta: Self::get_random_delta(hash),
-            rng: hash.clone(),
+            delta: Self::get_random_delta(&mut hash),
+            rng: hash,
             cache: Vec::new(),
             gateindex: 0,
             outputindex: 0,
@@ -26,7 +26,7 @@ impl BinaryGarbler {
         value[0] & 1
     }
 
-    fn get_random_delta(hash: &mut AesHash) -> BLOCK {
+    fn get_random_delta(hash: &mut H) -> BLOCK {
         let mut temp = hash.get_random_hash();
         temp[0] = temp[0] | 1;
         temp
@@ -43,9 +43,9 @@ impl BinaryGarbler {
     }
     
     fn garble_and_gate(&mut self, 
-        a: <BinaryGarbler as ExecutionPrimitives>::Item, 
-        b: <BinaryGarbler as ExecutionPrimitives>::Item
-    ) -> (<BinaryGarbler as ExecutionPrimitives>::Item, <BinaryGarbler as ExecutionPrimitives>::Item, <BinaryGarbler as ExecutionPrimitives>::Item) {
+        a: <BinaryGarbler<H> as ExecutionPrimitives>::Item, 
+        b: <BinaryGarbler<H> as ExecutionPrimitives>::Item
+    ) -> (<BinaryGarbler<H> as ExecutionPrimitives>::Item, <BinaryGarbler<H> as ExecutionPrimitives>::Item, <BinaryGarbler<H> as ExecutionPrimitives>::Item) {
         let p_a = Self::lsb(a);
         let p_b = Self::lsb(b);
 
@@ -62,8 +62,8 @@ impl BinaryGarbler {
     fn gen_half_gate(&self, 
         p_a: u8, 
         p_b: u8, 
-        a: <BinaryGarbler as ExecutionPrimitives>::Item, j: BLOCK
-    ) -> (<BinaryGarbler as ExecutionPrimitives>::Item, <BinaryGarbler as ExecutionPrimitives>::Item) {
+        a: <BinaryGarbler<H> as ExecutionPrimitives>::Item, j: BLOCK
+    ) -> (<BinaryGarbler<H> as ExecutionPrimitives>::Item, <BinaryGarbler<H> as ExecutionPrimitives>::Item) {
         let temp1 = self.rng.tccr_hash(a, j);
         let adelta = xor_blocks(a, self.delta);
         let temp2 = self.rng.tccr_hash(adelta, j);
@@ -79,10 +79,10 @@ impl BinaryGarbler {
     }
 
     fn eval_half_gate(&self, p_b: u8, 
-        a: <BinaryGarbler as ExecutionPrimitives>::Item, 
-        b: <BinaryGarbler as ExecutionPrimitives>::Item, 
+        a: <BinaryGarbler<H> as ExecutionPrimitives>::Item, 
+        b: <BinaryGarbler<H> as ExecutionPrimitives>::Item, 
         j2: BLOCK
-    ) -> (<BinaryGarbler as ExecutionPrimitives>::Item, <BinaryGarbler as ExecutionPrimitives>::Item) {
+    ) -> (<BinaryGarbler<H> as ExecutionPrimitives>::Item, <BinaryGarbler<H> as ExecutionPrimitives>::Item) {
         let temp1 = self.rng.tccr_hash(b, j2);
         let bdelta = xor_blocks(b, self.delta);
         let temp2 = self.rng.tccr_hash(bdelta, j2);
@@ -111,7 +111,7 @@ impl BinaryGarbler {
     }
 }
 
-impl ExecutionPrimitives for BinaryGarbler {
+impl<H: HashFunction> ExecutionPrimitives for BinaryGarbler<H> {
     type Item = BLOCK;
 
     fn constant(&mut self, x: u16) -> Result<Self::Item, Error> {
@@ -143,7 +143,7 @@ impl ExecutionPrimitives for BinaryGarbler {
     }
 }
 
-impl BinaryOperations for BinaryGarbler {
+impl<H: HashFunction> BinaryOperations for BinaryGarbler<H> {
     fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Error> {
         let output = xor_blocks(*x, *y);
         Ok(output)

@@ -7,7 +7,7 @@ use crate::config::constants::BLOCK;
 use crate::evaluator_operations::BinaryEvaluator;
 use crate::exec::{BinaryOperations, ExecutionPrimitives};
 use crate::garbler_operations::BinaryGarbler;
-use crate::hash_aes::AesHash;
+use crate::hash_aes::HashFunction;
 use crate::plaintext_operations::BinaryPlaintext;
 
 
@@ -251,13 +251,13 @@ impl BinaryCircuit {
             return Vec::new();
         }
 
-        let z = self.evaluate(&mut BinaryPlaintext, garbler_inputs, evaluator_inputs);       
+        let z = self.eval(&mut BinaryPlaintext, garbler_inputs, evaluator_inputs);       
 
         z.unwrap()
 
     }
 
-    fn garbler_evaluate(&self, f: &mut BinaryGarbler) -> 
+    fn garbler_evaluate<H: HashFunction>(&self, f: &mut BinaryGarbler<H>) -> 
     Result<(
         HashMap<usize, BLOCK>, 
         HashMap<usize, BLOCK>, 
@@ -321,7 +321,7 @@ impl BinaryCircuit {
         Ok((garbler_input_encodings, evaluator_input_encodings, f.get_garbled_circuit(), decoding_infos))
     }
 
-    pub fn evaluator_evaluate(&self, f: &mut BinaryEvaluator, garbler_inputs: &[bool], evaluator_inputs: &[bool]) -> 
+    pub fn evaluator_evaluate<H: HashFunction>(&self, f: &mut BinaryEvaluator<H>, garbler_inputs: &[bool], evaluator_inputs: &[bool]) -> 
     Result<HashMap<usize, BLOCK>, 
         Error> 
     {
@@ -382,19 +382,19 @@ impl BinaryCircuit {
         Ok(garbled_output)
     }
 
-    pub fn garble(&self, key: BLOCK) -> (
+    pub fn garble<H: HashFunction>(&self, rng: H) -> (
         HashMap<usize, BLOCK>, 
         HashMap<usize, BLOCK>, 
         Vec<BLOCK>, 
         HashMap<usize, u8>,
         BLOCK
     ) {
-        let mut garbler = BinaryGarbler::new(&mut AesHash::new(key));
+        let mut garbler = BinaryGarbler::new(rng);
         let (gen, een, gc, din) = self.garbler_evaluate(&mut garbler).unwrap();
         (gen, een, gc, din, garbler.delta)
     }
 
-    pub fn evaluate<F: BinaryOperations>(&self, f: &mut F, garbler_inputs: &[bool], evaluator_inputs: &[bool]) -> Result<Vec<F::Item>, Error> {
+    pub fn eval<F: BinaryOperations>(&self, f: &mut F, garbler_inputs: &[bool], evaluator_inputs: &[bool]) -> Result<Vec<F::Item>, Error> {
         let mut cache : Vec<Option<F::Item>> = vec![None; self.gates.len()];
         for (i, gate) in self.gates.iter().enumerate() {
             let (z_ref, value) = match *gate {
@@ -779,11 +779,11 @@ mod tests {
         let circuit = builder.finish();
 
         
-        let (gen, een, gc, din, delta) = circuit.garble(AES_KEY);
+        let (gen, een, gc, din, delta) = circuit.garble(AesHash::new(AES_KEY));
         
         for i in 0..2 {
                 for j in 0..2 {
-                    let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, &mut AesHash::new(AES_KEY), gc.clone());
+                    let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, AesHash::new(AES_KEY), gc.clone());
                     let output = circuit.evaluator_evaluate(&mut evaluator, [i != 0].as_slice(), [j != 0].as_slice()).unwrap();
                     let decoutput = evaluator.get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
                     let z = i ^ j;
@@ -805,11 +805,11 @@ mod tests {
         builder.output(result);
         let circuit = builder.finish();
         
-        let (gen, een, gc, din, delta) = circuit.garble(AES_KEY);
+        let (gen, een, gc, din, delta) = circuit.garble(AesHash::new(AES_KEY));
 
         for i in 0..2 {
             for j in 0..2 {
-                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, &mut AesHash::new(AES_KEY), gc.clone());
+                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, AesHash::new(AES_KEY), gc.clone());
                 let output = circuit.evaluator_evaluate(&mut evaluator, [i != 0].as_slice(), [j != 0].as_slice()).unwrap();
                 let decoutput = evaluator.get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
                 let z = i & j;
@@ -830,11 +830,11 @@ mod tests {
         builder.output(result);
         let circuit = builder.finish();
         
-        let (gen, een, gc, din, delta) = circuit.garble(AES_KEY);
+        let (gen, een, gc, din, delta) = circuit.garble(AesHash::new(AES_KEY));
         
         for _i in 0..2 {
             for j in 0..2 {
-                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, &mut AesHash::new(AES_KEY), gc.clone());
+                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, AesHash::new(AES_KEY), gc.clone());
                 let output = circuit.evaluator_evaluate(&mut evaluator, [].as_slice(), [j != 0].as_slice()).unwrap();
                 let decoutput = evaluator.get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
                 // let output = circuit.evaluate_plaintext([].as_slice(), [j != 0].as_slice());
@@ -856,8 +856,8 @@ mod tests {
                 let result = builder.xor(result1, result2);
                 builder.output(result);
                 let circuit = builder.finish();
-                let (gen, een, gc, din, delta) = circuit.garble(AES_KEY);
-                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, &mut AesHash::new(AES_KEY), gc.clone());
+                let (gen, een, gc, din, delta) = circuit.garble(AesHash::new(AES_KEY));
+                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, AesHash::new(AES_KEY), gc.clone());
                 let output = circuit.evaluator_evaluate(&mut evaluator, [].as_slice(), [j != 0].as_slice()).unwrap();
                 let decoutput = evaluator.get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
                 let z = i ^ j;
@@ -871,7 +871,7 @@ mod tests {
     #[test]
     fn test_comparison_circuit_garbled() {        
         let comparison_circuit = build_comparison_circuit();
-        let (gen, een, gc, din, delta) = comparison_circuit.garble(AES_KEY);
+        let (gen, een, gc, din, delta) = comparison_circuit.garble(AesHash::new(AES_KEY));
         for i in 0..3 {
             for j in 0..3 {
                 let ibit1 = i%2 != 0;
@@ -879,7 +879,7 @@ mod tests {
                 let ibit2 = (i/2)%2 != 0;
                 let jbit2 = (j/2)%2 != 0;
                 
-                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, &mut AesHash::new(AES_KEY), gc.clone());
+                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, AesHash::new(AES_KEY), gc.clone());
                 let output = comparison_circuit.evaluator_evaluate(&mut evaluator, [ibit1, ibit2].as_slice(), [jbit1, jbit2].as_slice()).unwrap();
                 let decoutput = evaluator.get_plaintext_output(comparison_circuit.get_output_gate_ids().to_vec(), output.clone());
 
@@ -894,10 +894,10 @@ mod tests {
     #[test]
     fn test_aes_garbled() {
         let circuit = BinaryCircuit::parse("aes128.txt");
-        let (gen, een, gc, din, delta) = circuit.garble(AES_KEY);
+        let (gen, een, gc, din, delta) = circuit.garble(AesHash::new(AES_KEY));
         for i in 0..2 {
             for j in 0..2 {
-                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, &mut AesHash::new(AES_KEY), gc.clone());
+                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), delta, AesHash::new(AES_KEY), gc.clone());
                 let output = circuit.evaluator_evaluate(&mut evaluator, [i != 0; 128].as_slice(), [j != 0; 128].as_slice()).unwrap();
                 let decoutput = evaluator.get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
                 let count = 2*i + j;

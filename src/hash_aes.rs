@@ -7,6 +7,14 @@ use rand::Rng;
 
 use crate::config::constants::BLOCK;
 
+pub trait HashFunction: Clone {
+    fn cr_hash(&self, x: BLOCK) -> BLOCK;
+    fn ccr_hash(&self, x: BLOCK) -> BLOCK;
+    fn tccr_hash(&self, x: BLOCK, i: BLOCK) -> BLOCK;
+    fn get_random_hash(&self) -> BLOCK;
+}
+
+
 #[derive(Clone)]
 pub struct AesHash {
     aes: Aes128,
@@ -17,15 +25,17 @@ impl AesHash {
         let aes = Aes128::new(&GenericArray::from(key));
         AesHash {aes}
     }
+}
 
-    pub fn cr_hash(&self, x: BLOCK) -> BLOCK {
+impl HashFunction for AesHash {
+    fn cr_hash(&self, x: BLOCK) -> BLOCK {
         let mut output = GenericArray::from(x);
         self.aes.encrypt_block(&mut output);
         let output_needed: BLOCK = output.try_into().expect("Conversion Failed!!!");
         output_needed
     }
 
-    pub fn ccr_hash(&self, x: BLOCK) -> BLOCK {
+    fn ccr_hash(&self, x: BLOCK) -> BLOCK {
         let mut y = [0u8; 16];
         for i in 0..8 {
             y[i] = x[i] ^ x[i+8];
@@ -36,7 +46,7 @@ impl AesHash {
         self.cr_hash(y)
     } 
 
-    pub fn tccr_hash(&self, x: BLOCK, i: BLOCK) -> BLOCK {
+    fn tccr_hash(&self, x: BLOCK, i: BLOCK) -> BLOCK {
         let mut y = GenericArray::from(x);
         self.aes.encrypt_block(&mut y);
         let mut block: BLOCK= y.try_into().expect("Conversion Failed!!!");
@@ -53,7 +63,7 @@ impl AesHash {
         block
     }
 
-    pub fn get_random_hash(&self) -> BLOCK {
+    fn get_random_hash(&self) -> BLOCK {
         let mut rng = rand::thread_rng(); 
         let bytes: BLOCK = rng.gen();
         let mut output = GenericArray::from(bytes);
