@@ -8,10 +8,12 @@ use rand::Rng;
 use crate::config::constants::BLOCK;
 
 pub trait HashFunction: Clone {
+    fn initialize(&mut self, key: BLOCK);
     fn cr_hash(&self, x: BLOCK) -> BLOCK;
     fn ccr_hash(&self, x: BLOCK) -> BLOCK;
     fn tccr_hash(&self, x: BLOCK, i: BLOCK) -> BLOCK;
     fn get_random_hash(&self) -> BLOCK;
+    fn get_hash(&self, x: &[u8]) -> BLOCK;
 }
 
 
@@ -71,5 +73,41 @@ impl HashFunction for AesHash {
         let output_needed: BLOCK = output.try_into().expect("Conversion Failed!!!");
         output_needed
     }
-}
 
+    fn get_hash(&self, input: &[u8]) -> BLOCK {
+        let mut previous_block = GenericArray::from([0u8; 16]); // Initialize to zero for CBC
+        let mut output_block = GenericArray::from([0u8; 16]);
+
+        if input.len() % 16 != 0 {
+            println!("Invalid length input!!!!");
+            return  [0u8; 16];
+        }
+
+        for chunk in input.chunks_exact(16) {
+            let mut block = GenericArray::clone_from_slice(chunk);
+
+            // XOR with the previous block (CBC chaining)
+            for i in 0..16 {
+                block[i] ^= previous_block[i];
+            }
+
+            // Encrypt the block
+            self.aes.encrypt_block(&mut block);
+
+            // Update the previous block
+            previous_block = block;
+        }
+
+        output_block.copy_from_slice(&previous_block);
+
+        // Return the final encrypted block as the CBC-MAC
+        let mut result = [0u8; 16];
+        result.copy_from_slice(&output_block);
+
+        result
+    }
+    
+    fn initialize(&mut self, key: BLOCK) {
+        self.aes = Aes128::new(&GenericArray::from(key));
+    }
+}

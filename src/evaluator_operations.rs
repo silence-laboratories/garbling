@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Error};
 
-use crate::{config::constants::BLOCK, exec::{BinaryOperations, ExecutionPrimitives}, hash_aes::HashFunction, utils::xor_blocks};
+use crate::{config::constants::BLOCK, exec::{BinaryOperations, ExecutionPrimitives}, hash_function::HashFunction, utils::xor_blocks};
 
 pub struct BinaryEvaluator<H: HashFunction> {
     garbler_encoding: HashMap<usize, BLOCK>,
@@ -51,7 +51,6 @@ impl<H: HashFunction> BinaryEvaluator<H> {
 
     pub fn get_plaintext_output (&self, output_gates: Vec<usize>, garbled_output: HashMap<usize, <BinaryEvaluator<H> as ExecutionPrimitives>::Item>) -> Vec<bool> {
         let mut output = Vec::new();
-        println!("keys: {:?}", garbled_output.keys());
         for x in output_gates {
             let glsb = Self::lsb(*garbled_output.get(&x).unwrap());
             let declsb = self.decoding_infos.get(&x).unwrap().to_owned();

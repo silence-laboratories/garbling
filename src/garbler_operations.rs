@@ -1,6 +1,6 @@
 use std::fmt::Error;
 
-use crate::{config::constants::BLOCK, exec::{BinaryOperations, ExecutionPrimitives}, hash_aes::HashFunction, utils::xor_blocks};
+use crate::{config::constants::BLOCK, exec::{BinaryOperations, ExecutionPrimitives}, hash_function::HashFunction, utils::xor_blocks};
 
 #[derive(Clone)]
 pub struct BinaryGarbler<H: HashFunction> {

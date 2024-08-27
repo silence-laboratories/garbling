@@ -4,17 +4,20 @@ use std::mem;
 use circuit::BinaryCircuit;
 use config::constants::AES_KEY;
 use evaluator_operations::BinaryEvaluator;
-use hash_aes::AesHash;
+use hash_function::AesHash;
 
 mod config;
-mod hash_aes;
+mod hash_function;
 pub mod circuit;
-mod errors;
 pub mod exec;
 pub mod plaintext_operations;
 mod garbler_operations;
 mod evaluator_operations;
 pub mod utils;
+pub mod commitments;
+pub mod threepartytraits;
+pub mod circuit_builder;
+pub mod gate;
 
 fn main() {
     let aescirc = BinaryCircuit::parse("aes128.txt");
