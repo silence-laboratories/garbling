@@ -1,7 +1,8 @@
 use std::{collections::HashMap, fmt::Error};
 
-use crate::{config::constants::BLOCK, exec::{BinaryOperations, ExecutionPrimitives}, hash_function::HashFunction, utils::xor_blocks};
+use crate::{circuit::BinaryCircuit, config::constants::BLOCK, exec::{BinaryOperations, ExecutionPrimitives}, gate::BinaryGate, hash_function::HashFunction, threepartytraits::ThreePartyBinaryEvaluator, utils::xor_blocks};
 
+#[derive(Clone)]
 pub struct BinaryEvaluator<H: HashFunction> {
     garbler_encoding: HashMap<usize, BLOCK>,
     evaluator_encoding: HashMap<usize, BLOCK>,
@@ -57,6 +58,73 @@ impl<H: HashFunction> BinaryEvaluator<H> {
             output.push(glsb ^ declsb != 0)
         }
         output
+    }
+
+    pub fn evaluate(&mut self, circ: BinaryCircuit, garbler_inputs: &[bool], evaluator_inputs: &[bool]) -> 
+    Result<HashMap<usize, BLOCK>, Error> {
+        let mut cache : Vec<Option<BLOCK>> = vec![None; circ.gates.len()];
+        for (i, gate) in circ.gates.iter().enumerate() {
+            let (z_ref, value) = match *gate {
+                BinaryGate::GarblerInput { id } => {                    
+                    assert!(
+                        id < garbler_inputs.len(),
+                        "id={} gb_inps.len()={}",
+                        id,
+                        garbler_inputs.len()
+                    );
+                    let input_hash = self.process_garbler_input(id, garbler_inputs[id])?;
+                    (None, input_hash)
+                },
+                BinaryGate::EvaluatorInput { id } => {
+                    assert!(
+                        id < evaluator_inputs.len(),
+                        "id={} ev_inps.len()={}",
+                        id,
+                        evaluator_inputs.len()
+                    );
+                    let input_hash = self.process_evaluator_input(id, evaluator_inputs[id])?;
+                    (None, input_hash)
+                },
+                BinaryGate::Constant { val } => (
+                    None, self.constant(val)?
+                ),
+                BinaryGate::Inv { xid, out } => (
+                    out, self.negate(
+                        cache[xid]
+                        .as_ref()
+                        .ok_or(Error)?
+                    )?
+                ),
+                BinaryGate::Xor { xid, yid, out } => (
+                    out, self.xor(
+                        cache[xid]
+                        .as_ref()
+                        .ok_or(Error)?, 
+                        cache[yid]
+                        .as_ref()
+                        .ok_or(Error)?
+                    )?
+                ),
+                BinaryGate::And { xid, yid, id: _, out } => (
+                    out, self.and(
+                        cache[xid]
+                        .as_ref()
+                        .ok_or(Error)?, 
+                        cache[yid]
+                        .as_ref()
+                        .ok_or(Error)?
+                    )?
+                ),
+            };
+            cache[z_ref.unwrap_or(i)] = Some(value)
+        }
+        let mut garbled_output: HashMap<usize, BLOCK> = HashMap::new();
+        for r in circ.get_output_gate_ids().iter() {
+            let x = cache[*r].as_ref().ok_or_else(|| Error)?;
+            let dec = self.output(x)?.unwrap();
+            garbled_output.insert(*r, dec);
+        }
+        Ok(garbled_output)
     }
 }
 
@@ -123,5 +191,278 @@ impl<H: HashFunction> BinaryOperations for BinaryEvaluator<H> {
 
     fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, Error> {
         Ok(*x)
+    }
+}
+
+impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
+    fn evaluate_threeparty(&mut self, circ: BinaryCircuit, garbler_inputs: &[bool], evaluator_inputs: [&[bool]; 2]) -> 
+    Result<HashMap<usize, BLOCK>, Error> {
+        let mut cache : Vec<Option<BLOCK>> = vec![None; circ.gates.len()];
+        for (i, gate) in circ.gates.iter().enumerate() {
+            let (z_ref, value) = match *gate {
+                BinaryGate::GarblerInput { id } => {                    
+                    assert!(
+                        id < garbler_inputs.len(),
+                        "id={} gb_inps.len()={}",
+                        id,
+                        garbler_inputs.len()
+                    );
+                    let input_hash = self.process_garbler_input(id, garbler_inputs[id])?;
+                    (None, input_hash)
+                },
+                BinaryGate::EvaluatorInput { id } => {
+                    assert!(
+                        id/2 < evaluator_inputs[0].len() && id/2 < evaluator_inputs[1].len(),
+                        "id={} ev_inps.len()={}",
+                        id,
+                        evaluator_inputs.len()
+                    );
+                    if id % 2 == 0 {
+                        (None, self.process_evaluator_input(id, evaluator_inputs[0][id/2].clone()).unwrap())
+                    }
+                    else {
+                        (None, self.process_evaluator_input(id, evaluator_inputs[1][id/2].clone()).unwrap())
+                    }
+                },
+                BinaryGate::Constant { val } => (
+                    None, self.constant(val)?
+                ),
+                BinaryGate::Inv { xid, out } => (
+                    out, self.negate(
+                        cache[xid]
+                        .as_ref()
+                        .ok_or(Error)?
+                    )?
+                ),
+                BinaryGate::Xor { xid, yid, out } => (
+                    out, self.xor(
+                        cache[xid]
+                        .as_ref()
+                        .ok_or(Error)?, 
+                        cache[yid]
+                        .as_ref()
+                        .ok_or(Error)?
+                    )?
+                ),
+                BinaryGate::And { xid, yid, id: _, out } => (
+                    out, self.and(
+                        cache[xid]
+                        .as_ref()
+                        .ok_or(Error)?, 
+                        cache[yid]
+                        .as_ref()
+                        .ok_or(Error)?
+                    )?
+                ),
+            };
+            cache[z_ref.unwrap_or(i)] = Some(value)
+        }
+        let mut garbled_output: HashMap<usize, BLOCK> = HashMap::new();
+        for r in circ.get_output_gate_ids().iter() {
+            let x = cache[*r].as_ref().ok_or_else(|| Error)?;
+            let dec = self.output(x)?.unwrap();
+            garbled_output.insert(*r, dec);
+        }
+        Ok(garbled_output)
+    }  
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::BinaryEvaluator;
+    use crate::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder, config::constants::AES_KEY, garbler_operations::BinaryGarbler, hash_function::AesHash};
+
+    #[test]
+    fn test_xor_gate_garbled() {
+        let mut builder = CircuitBuilder::new();
+        
+        let eval_input_1 = builder.evaluator_input();
+        let garb_input_1 = builder.garbler_input();
+
+        let result = builder.xor(eval_input_1, garb_input_1);
+        builder.output(result);
+        let circuit = builder.finish();
+
+        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY));
+        let (gen, een, gc, din) = garbler.garble(circuit.clone()).unwrap();
+        
+        for i in 0..2 {
+                for j in 0..2 {
+                    let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), garbler.delta, AesHash::new(AES_KEY), gc.clone());
+                    let output = evaluator.evaluate(circuit.clone(), [i != 0].as_slice(), [j != 0].as_slice()).unwrap();
+                    let decoutput = evaluator.get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
+                    let z = i ^ j;
+                    assert!((z == 1) == decoutput[0],
+                    "z: {} output: {:?}", z, decoutput[0])
+            }
+        }
+    }
+    
+    #[test]
+    fn test_and_gate_garbled() {
+        let mut builder = CircuitBuilder::new();
+        
+        let eval_input_1 = builder.evaluator_input();
+        let garb_input_1 = builder.garbler_input();
+
+        let result = builder.and(eval_input_1, garb_input_1);
+        builder.output(result);
+        let circuit = builder.finish();
+        
+        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY));
+        let (gen, een, gc, din) = garbler.garble(circuit.clone()).unwrap();
+
+        for i in 0..2 {
+            for j in 0..2 {
+                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), garbler.delta, AesHash::new(AES_KEY), gc.clone());
+                let output = evaluator.evaluate(circuit.clone(), [i != 0].as_slice(), [j != 0].as_slice()).unwrap();
+                let decoutput = evaluator.get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
+                let z = i & j;
+                assert!((z == 1) == decoutput[0],
+                "z: {} output: {:?} {} {}", z, decoutput[0], i, j)
+            }
+        }
+    }
+    
+    #[test]
+    fn test_not_gate_garbled() {
+        let mut builder = CircuitBuilder::new();
+        
+        let eval_input_1 = builder.evaluator_input();
+
+        let result = builder.negate(eval_input_1);
+        builder.output(result);
+        let circuit = builder.finish();
+        
+        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY));
+        let (gen, een, gc, din) = garbler.garble(circuit.clone()).unwrap();
+        
+        for _i in 0..2 {
+            for j in 0..2 {
+                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), garbler.delta, AesHash::new(AES_KEY), gc.clone());
+                let output = evaluator.evaluate(circuit.clone(), [].as_slice(), [j != 0].as_slice()).unwrap();
+                let decoutput = evaluator.get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
+                // let output = circuit.evaluate_plaintext([].as_slice(), [j != 0].as_slice());
+                let z = 1 - j;
+                assert!((z == 1) == decoutput[0],
+                "z: {} output: {:?}", z, decoutput[0])
+            }
+        }
+    }
+
+    #[test]
+    fn test_constant_gate_garbled() {
+        for i in 0..2 {
+            for j in 0..2 {
+                let mut builder = CircuitBuilder::new();
+                let result1 = builder.constant(i);
+                let result2 = builder.constant(j);
+                let result = builder.xor(result1, result2);
+                builder.output(result);
+                let circuit = builder.finish();
+                let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY));
+                let (gen, een, gc, din) = garbler.garble(circuit.clone()).unwrap();
+                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), garbler.delta, AesHash::new(AES_KEY), gc.clone());
+                let output = evaluator.evaluate(circuit.clone(),[].as_slice(), [j != 0].as_slice()).unwrap();
+                let decoutput = evaluator.get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
+                let z = i ^ j;
+                assert!((z == 1) == decoutput[0],
+                "z: {} output: {:?}", z, decoutput[0])
+            }
+        }
+    }
+    
+    pub fn build_comparison_circuit() -> BinaryCircuit {
+        let mut builder = CircuitBuilder::new();
+        
+        let eval_input_1 = builder.evaluator_input();
+        let garb_input_1 = builder.garbler_input();
+        let eval_input_2 = builder.evaluator_input();
+        let garb_input_2 = builder.garbler_input();
+    
+        // Compare the bits
+        let eq0 = builder.xor(eval_input_1, garb_input_1);
+        let eq1 = builder.xor(eval_input_2, garb_input_2);
+    
+        let onewire = builder.constant(1);
+        let temp1 = builder.and(eq0, eq1);
+        let temp2 = builder.xor(eq0, eq1);
+        let before_not = builder.xor(temp1, temp2);
+        let result = builder.xor(before_not, onewire);
+        builder.output(result);
+    
+        let circuit = builder.finish();
+    
+        circuit
+    }
+
+    #[test]
+    fn test_comparison_circuit_garbled() {        
+        let comparison_circuit = build_comparison_circuit();
+        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY));
+        let (gen, een, gc, din) = garbler.garble(comparison_circuit.clone()).unwrap();
+        for i in 0..3 {
+            for j in 0..3 {
+                let ibit1 = i%2 != 0;
+                let jbit1 = j%2 != 0;
+                let ibit2 = (i/2)%2 != 0;
+                let jbit2 = (j/2)%2 != 0;
+                
+                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), garbler.delta, AesHash::new(AES_KEY), gc.clone());
+                let output = evaluator.evaluate(comparison_circuit.clone(), [ibit1, ibit2].as_slice(), [jbit1, jbit2].as_slice()).unwrap();
+                let decoutput = evaluator.get_plaintext_output(comparison_circuit.get_output_gate_ids().to_vec(), output.clone());
+
+                // let output = comparison_circuit.evaluate_plaintext([ibit1, ibit2].as_slice(), [jbit1, jbit2].as_slice());
+                assert!((i == j) == decoutput[0],
+                "i: {}, j: {} output: {:?}", i, j, decoutput[0])
+            }
+        }
+    }
+    
+    fn bool_vec_to_hex(vec: Vec<bool>) -> String {
+        let mut hex_string = String::new();
+        
+        // Process the vector in chunks of 4 bits
+        for chunk in vec.chunks(4) {
+            let mut value = 0;
+            
+            // Convert each bit to its corresponding position in a nibble (4 bits)
+            for (i, bit) in chunk.iter().enumerate() {
+                if *bit {
+                    value |= 1 << (3 - i); // Shift bits according to position
+                }
+            }
+            
+            // Convert the 4-bit value to a hex digit
+            hex_string.push_str(&format!("{:x}", value));
+        }
+        
+        hex_string
+    }
+
+    #[test]
+    fn test_aes_garbled() {
+        let circuit = BinaryCircuit::parse("aes128.txt");
+        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY));
+        let (gen, een, gc, din) = garbler.garble(circuit.clone()).unwrap();
+        for i in 0..2 {
+            for j in 0..2 {
+                let mut evaluator = BinaryEvaluator::new(gen.clone(), een.clone(), din.clone(), garbler.delta, AesHash::new(AES_KEY), gc.clone());
+                let output = evaluator.evaluate(circuit.clone(), [i != 0; 128].as_slice(), [j != 0; 128].as_slice()).unwrap();
+                let decoutput = evaluator.get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
+                let count = 2*i + j;
+                let hexout = bool_vec_to_hex(decoutput);
+                if count == 0 {
+                    assert_eq!(hexout, "74d42c539a5f3211dc3451f72bd29766".to_string(), "outval: {} realval: 74d42c539a5f3211dc3451f72bd29766", hexout);
+                } else if count == 2 {
+                    assert_eq!(hexout, "3493fd1ca2122691b3fabee131a46f85".to_string(), "outval: {} realval: 3493fd1ca2122691b3fabee131a46f85", hexout);
+                } else if count == 1 {
+                    assert_eq!(hexout, "7266b17c4be2ce5f505aa1579331dafc".to_string(), "outval: {} realval: 7266b17c4be2ce5f505aa1579331dafc", hexout);                    
+                } else if count == 3 {
+                    assert_eq!(hexout, "9e9d5c984a0e8a4d0cf3014d3e84fd3d".to_string(), "outval: {} realval: 9e9d5c984a0e8a4d0cf3014d3e84fd3d", hexout);                    
+                }
+            }
+        }
     }
 }

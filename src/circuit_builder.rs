@@ -140,7 +140,7 @@ impl ThreePartyBinaryCircuitBuilder for CircuitBuilder<BinaryCircuit> {
     }
 
     fn evaluator_input_threeparty(&mut self) -> usize {
-        let id = self.get_next_evaluator_input_id();
+        let id = self.get_next_evaluator_input_id_threeparty();
         let r = self.gate(BinaryGate::EvaluatorInput { id: id });
         let s = self.gate(BinaryGate::EvaluatorInput { id: id + 1 });
         self.circ.push_evaluator_input(r);
