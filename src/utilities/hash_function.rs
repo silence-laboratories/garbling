@@ -113,3 +113,30 @@ impl HashFunction for AesHash {
         self.aes = Aes128::new(&GenericArray::from(key));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::config::constants::AES_KEY;
+
+    use super::{AesHash, HashFunction};
+
+    #[test]
+    fn test_hash_function() {
+        let input1 = [0u8; 16];
+        let input2 = [0u8; 32];
+        let function = AesHash::new(AES_KEY);
+
+        let output1 = function.get_hash(&input1);
+        let output2 = function.get_hash(&input2);
+
+        let required_output1 = [
+            102, 233, 75, 212, 239, 138, 44, 59, 136, 76, 250, 89, 202, 52, 43, 46,
+        ];
+        let required_output2 = [
+            247, 149, 189, 74, 82, 226, 158, 215, 19, 211, 19, 250, 32, 233, 141, 188,
+        ];
+
+        assert_eq!(output1, required_output1);
+        assert_eq!(output2, required_output2);
+    }
+}

@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader};
 
 use crate::circuitop::gate::BinaryGate;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BinaryCircuit {
     pub gates: Vec<BinaryGate>,
     pub garbler_input_ids: Vec<usize>,
@@ -219,10 +219,10 @@ impl BinaryCircuit {
         for gate in self.gates.iter() {
             match *gate {
                 BinaryGate::GarblerInput { id } => {
-                    println!("Garblerinput: id: {}", self.garbler_input_ids[id])
+                    println!("GarblerInput: id: {}", self.garbler_input_ids[id])
                 }
                 BinaryGate::EvaluatorInput { id } => {
-                    println!("Evaluatorinput: id: {}", self.evaluator_input_ids[id])
+                    println!("EvaluatorInput: id: {}", self.evaluator_input_ids[id])
                 }
                 BinaryGate::Constant { val } => println!("Constantinput: val: {}", val),
                 BinaryGate::Inv { xid, out } => {
@@ -250,5 +250,66 @@ impl BinaryCircuit {
         for i in self.get_output_gate_ids() {
             println!("output_gates: {}", *i);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
+
+    #[test]
+    fn test_circuit() {
+        let circuit = BinaryCircuit::parse("circuits/binmult.txt");
+
+        let required_circuit = BinaryCircuit {
+            gates: vec![
+                BinaryGate::GarblerInput { id: 0 },
+                BinaryGate::GarblerInput { id: 1 },
+                BinaryGate::EvaluatorInput { id: 0 },
+                BinaryGate::EvaluatorInput { id: 1 },
+                BinaryGate::And {
+                    xid: 0,
+                    yid: 2,
+                    id: 0,
+                    out: Some(4),
+                },
+                BinaryGate::And {
+                    xid: 0,
+                    yid: 3,
+                    id: 1,
+                    out: Some(5),
+                },
+                BinaryGate::And {
+                    xid: 1,
+                    yid: 2,
+                    id: 2,
+                    out: Some(6),
+                },
+                BinaryGate::And {
+                    xid: 1,
+                    yid: 3,
+                    id: 3,
+                    out: Some(7),
+                },
+                BinaryGate::Xor {
+                    xid: 5,
+                    yid: 6,
+                    out: Some(8),
+                },
+                BinaryGate::Xor {
+                    xid: 8,
+                    yid: 7,
+                    out: Some(9),
+                },
+            ],
+            garbler_input_ids: vec![0, 1],
+            evaluator_input_ids: vec![2, 3],
+            output_gate_ids: vec![8, 9],
+            constant_gate_ids: vec![],
+            num_nonfree_gates: 0,
+            num_wires: 10,
+        };
+
+        assert_eq!(required_circuit, circuit);
     }
 }

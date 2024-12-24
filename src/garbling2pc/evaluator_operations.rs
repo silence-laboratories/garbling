@@ -304,30 +304,28 @@ mod tests {
         let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY));
         let garble_output = garbler.garble(circuit.clone()).unwrap();
 
-        for _i in 0..2 {
-            for j in 0..2 {
-                let mut evaluator = BinaryEvaluator::new(
-                    garble_output.garbler_input_encodings.clone(),
-                    garble_output.evaluator_input_encodings.clone(),
-                    garble_output.decoding_infos.clone(),
-                    garbler.delta,
-                    AesHash::new(AES_KEY),
-                    garble_output.garbled_circuit.clone(),
-                );
-                let output = evaluator
-                    .evaluate(circuit.clone(), [].as_slice(), [j != 0].as_slice())
-                    .unwrap();
-                let decoutput = evaluator
-                    .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
-                // let output = circuit.evaluate_plaintext([].as_slice(), [j != 0].as_slice());
-                let z = 1 - j;
-                assert!(
-                    (z == 1) == decoutput[0],
-                    "z: {} output: {:?}",
-                    z,
-                    decoutput[0]
-                )
-            }
+        for j in 0..2 {
+            let mut evaluator = BinaryEvaluator::new(
+                garble_output.garbler_input_encodings.clone(),
+                garble_output.evaluator_input_encodings.clone(),
+                garble_output.decoding_infos.clone(),
+                garbler.delta,
+                AesHash::new(AES_KEY),
+                garble_output.garbled_circuit.clone(),
+            );
+            let output = evaluator
+                .evaluate(circuit.clone(), [].as_slice(), [j != 0].as_slice())
+                .unwrap();
+            let decoutput = evaluator
+                .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
+            // let output = circuit.evaluate_plaintext([].as_slice(), [j != 0].as_slice());
+            let z = 1 - j;
+            assert!(
+                (z == 1) == decoutput[0],
+                "z: {} output: {:?}",
+                z,
+                decoutput[0]
+            )
         }
     }
 

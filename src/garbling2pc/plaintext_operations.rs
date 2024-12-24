@@ -208,14 +208,12 @@ mod tests {
         builder.output(result);
         let circuit = builder.finish();
 
-        for _i in 0..2 {
-            for j in 0..2 {
-                let mut plaintexteval = BinaryPlaintext::new();
-                let output =
-                    plaintexteval.evaluate(circuit.clone(), [].as_slice(), [j != 0].as_slice());
-                let z = 1 - j;
-                assert!((z == 1) == output[0], "z: {} output: {:?}", z, output[0])
-            }
+        for j in 0..2 {
+            let mut plaintexteval = BinaryPlaintext::new();
+            let output =
+                plaintexteval.evaluate(circuit.clone(), [].as_slice(), [j != 0].as_slice());
+            let z = 1 - j;
+            assert!((z == 1) == output[0], "z: {} output: {:?}", z, output[0])
         }
     }
 

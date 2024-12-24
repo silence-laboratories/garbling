@@ -186,3 +186,79 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
         output_circuit
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
+        garbling3pc::threepartytraits::ThreePartyBinaryCircuit,
+    };
+
+    #[test]
+    fn test_circuit_3pc() {
+        let circuit = BinaryCircuit::parse_threeparty("circuits/binmult.txt");
+
+        let required_circuit = BinaryCircuit {
+            gates: vec![
+                BinaryGate::GarblerInput { id: 0 },
+                BinaryGate::GarblerInput { id: 1 },
+                BinaryGate::EvaluatorInput { id: 0 },
+                BinaryGate::EvaluatorInput { id: 1 },
+                BinaryGate::Xor {
+                    xid: 2,
+                    yid: 3,
+                    out: Some(4),
+                },
+                BinaryGate::EvaluatorInput { id: 2 },
+                BinaryGate::EvaluatorInput { id: 3 },
+                BinaryGate::Xor {
+                    xid: 5,
+                    yid: 6,
+                    out: Some(7),
+                },
+                BinaryGate::And {
+                    xid: 0,
+                    yid: 4,
+                    id: 0,
+                    out: Some(8),
+                },
+                BinaryGate::And {
+                    xid: 0,
+                    yid: 7,
+                    id: 1,
+                    out: Some(9),
+                },
+                BinaryGate::And {
+                    xid: 1,
+                    yid: 4,
+                    id: 2,
+                    out: Some(10),
+                },
+                BinaryGate::And {
+                    xid: 1,
+                    yid: 7,
+                    id: 3,
+                    out: Some(11),
+                },
+                BinaryGate::Xor {
+                    xid: 9,
+                    yid: 10,
+                    out: Some(12),
+                },
+                BinaryGate::Xor {
+                    xid: 12,
+                    yid: 11,
+                    out: Some(13),
+                },
+            ],
+            garbler_input_ids: vec![0, 1],
+            evaluator_input_ids: vec![2, 3, 5, 6],
+            output_gate_ids: vec![12, 13],
+            constant_gate_ids: vec![],
+            num_nonfree_gates: 0,
+            num_wires: 0,
+        };
+
+        assert_eq!(required_circuit, circuit);
+    }
+}
