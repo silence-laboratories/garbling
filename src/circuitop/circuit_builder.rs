@@ -1,20 +1,17 @@
 use std::collections::HashMap;
 
-use crate::{circuit::BinaryCircuit, threepartytraits::ThreePartyBinaryCircuitBuilder};
-use crate::gate::BinaryGate;
-
+use crate::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
 
 #[derive(Clone)]
 pub struct CircuitBuilder<BinaryCircuit> {
-    next_ref_id: usize,
-    next_garbler_input_id: usize,
-    next_evaluator_input_id: usize,
-    const_map: HashMap<u16, usize>,
-    circ: BinaryCircuit
+    pub next_ref_id: usize,
+    pub next_garbler_input_id: usize,
+    pub next_evaluator_input_id: usize,
+    pub const_map: HashMap<u16, usize>,
+    pub circ: BinaryCircuit,
 }
 
 impl CircuitBuilder<BinaryCircuit> {
-    
     pub fn new() -> Self {
         CircuitBuilder {
             next_ref_id: 0,
@@ -53,21 +50,21 @@ impl CircuitBuilder<BinaryCircuit> {
         current
     }
 
-    fn gate(&mut self, gate: BinaryGate) -> usize {
+    pub fn gate(&mut self, gate: BinaryGate) -> usize {
         self.circ.push_gate(gate);
         self.get_next_ref_id()
     }
 
     pub fn garbler_input(&mut self) -> usize {
         let id = self.get_next_garbler_input_id();
-        let r = self.gate(BinaryGate::GarblerInput { id: id });
+        let r = self.gate(BinaryGate::GarblerInput { id });
         self.circ.push_garbler_input(r);
         r
     }
 
     pub fn evaluator_input(&mut self) -> usize {
         let id = self.get_next_evaluator_input_id();
-        let r = self.gate(BinaryGate::EvaluatorInput { id: id });
+        let r = self.gate(BinaryGate::EvaluatorInput { id });
         self.circ.push_evaluator_input(r);
         r
     }
@@ -90,22 +87,23 @@ impl CircuitBuilder<BinaryCircuit> {
     }
 
     pub fn xor(&mut self, xid: usize, yid: usize) -> usize {
-        let gate = BinaryGate::Xor { xid: xid, yid: yid, out: None };
-        self.gate(gate)
-    }
-
-    pub fn negate(&mut self, xid: usize) -> usize {
-        let gate = BinaryGate::Inv {
-            xid: xid,
+        let gate = BinaryGate::Xor {
+            xid,
+            yid,
             out: None,
         };
         self.gate(gate)
     }
 
+    pub fn negate(&mut self, xid: usize) -> usize {
+        let gate = BinaryGate::Inv { xid, out: None };
+        self.gate(gate)
+    }
+
     pub fn and(&mut self, xid: usize, yid: usize) -> usize {
         let gate = BinaryGate::And {
-            xid: xid,
-            yid: yid,
+            xid,
+            yid,
             id: self.get_next_ciphertext_id(),
             out: None,
         };
@@ -129,32 +127,10 @@ impl CircuitBuilder<BinaryCircuit> {
     pub fn output(&mut self, id: usize) {
         self.circ.push_output_gate(id);
     }
-
 }
 
-impl ThreePartyBinaryCircuitBuilder for CircuitBuilder<BinaryCircuit> {
-    fn get_next_evaluator_input_id_threeparty(&mut self) -> usize {
-        let current = self.next_evaluator_input_id;
-        self.next_evaluator_input_id += 2;
-        current
-    }
-
-    fn evaluator_input_threeparty(&mut self) -> usize {
-        let id = self.get_next_evaluator_input_id_threeparty();
-        let r = self.gate(BinaryGate::EvaluatorInput { id: id });
-        let s = self.gate(BinaryGate::EvaluatorInput { id: id + 1 });
-        self.circ.push_evaluator_input(r);
-        self.circ.push_evaluator_input(s);
-        let z = self.xor(r, s);
-        z
-    }
-
-    fn evaluator_inputs_threeparty(&mut self, number_of_inputs: u16) -> Vec<usize> {
-        // 0..number_of_inputs.iter().map(|q| self.evaluator_input()).collect()
-        let mut output: Vec<usize> = Vec::new();
-        for _i in 0..number_of_inputs {
-            output.push(self.evaluator_input());
-        }
-        output
+impl Default for CircuitBuilder<BinaryCircuit> {
+    fn default() -> Self {
+        Self::new()
     }
 }

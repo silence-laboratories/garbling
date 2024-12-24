@@ -1,14 +1,33 @@
 use std::{collections::HashMap, fmt::Error};
 
-use crate::{circuit::BinaryCircuit, config::constants::BLOCK, exec::{BinaryOperations, ExecutionPrimitives}, gate::BinaryGate, hash_function::HashFunction, threepartytraits::ThreePartyBinaryGarbler, utils::xor_blocks};
+use crate::{
+    circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
+    config::constants::Block,
+    garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
+    utilities::hash_function::HashFunction,
+    utilities::utils::xor_blocks,
+};
 
 #[derive(Clone)]
 pub struct BinaryGarbler<H: HashFunction> {
-    pub delta: BLOCK, 
+    pub delta: Block,
     pub rng: H,
-    pub cache: Vec<BLOCK>,
+    pub cache: Vec<Block>,
     pub gateindex: u128,
     pub outputindex: u128,
+}
+
+pub struct GarbleAndGateOp<H: HashFunction> {
+    pub t_gen: <BinaryGarbler<H> as ExecutionPrimitives>::Item,
+    pub t_eval: <BinaryGarbler<H> as ExecutionPrimitives>::Item,
+    pub out: <BinaryGarbler<H> as ExecutionPrimitives>::Item,
+}
+
+pub struct GarbleOutput {
+    pub garbler_input_encodings: HashMap<usize, Block>,
+    pub evaluator_input_encodings: HashMap<usize, Block>,
+    pub garbled_circuit: Vec<Block>,
+    pub decoding_infos: HashMap<usize, u8>,
 }
 
 impl<H: HashFunction> BinaryGarbler<H> {
@@ -22,13 +41,13 @@ impl<H: HashFunction> BinaryGarbler<H> {
         }
     }
 
-    fn lsb(value: BLOCK) -> u8 {
+    fn lsb(value: Block) -> u8 {
         value[0] & 1
     }
 
-    fn get_random_delta(hash: &mut H) -> BLOCK {
+    fn get_random_delta(hash: &mut H) -> Block {
         let mut temp = hash.get_random_hash();
-        temp[0] = temp[0] | 1;
+        temp[0] |= 1;
         temp
     }
 
@@ -36,16 +55,17 @@ impl<H: HashFunction> BinaryGarbler<H> {
         self.gateindex += 1;
         self.gateindex
     }
-    
+
     fn get_next_output_index(&mut self) -> u128 {
         self.outputindex += 1;
         self.outputindex
     }
-    
-    fn garble_and_gate(&mut self, 
-        a: <BinaryGarbler<H> as ExecutionPrimitives>::Item, 
-        b: <BinaryGarbler<H> as ExecutionPrimitives>::Item
-    ) -> (<BinaryGarbler<H> as ExecutionPrimitives>::Item, <BinaryGarbler<H> as ExecutionPrimitives>::Item, <BinaryGarbler<H> as ExecutionPrimitives>::Item) {
+
+    fn garble_and_gate(
+        &mut self,
+        a: <BinaryGarbler<H> as ExecutionPrimitives>::Item,
+        b: <BinaryGarbler<H> as ExecutionPrimitives>::Item,
+    ) -> GarbleAndGateOp<H> {
         let p_a = Self::lsb(a);
         let p_b = Self::lsb(b);
 
@@ -56,14 +76,19 @@ impl<H: HashFunction> BinaryGarbler<H> {
         let (t_eval, out_eval) = self.eval_half_gate(p_b, a, b, j2);
         let out = xor_blocks(out_gen, out_eval);
 
-        (t_gen, t_eval, out)
+        GarbleAndGateOp { t_gen, t_eval, out }
     }
 
-    fn gen_half_gate(&self, 
-        p_a: u8, 
-        p_b: u8, 
-        a: <BinaryGarbler<H> as ExecutionPrimitives>::Item, j: BLOCK
-    ) -> (<BinaryGarbler<H> as ExecutionPrimitives>::Item, <BinaryGarbler<H> as ExecutionPrimitives>::Item) {
+    fn gen_half_gate(
+        &self,
+        p_a: u8,
+        p_b: u8,
+        a: <BinaryGarbler<H> as ExecutionPrimitives>::Item,
+        j: Block,
+    ) -> (
+        <BinaryGarbler<H> as ExecutionPrimitives>::Item,
+        <BinaryGarbler<H> as ExecutionPrimitives>::Item,
+    ) {
         let temp1 = self.rng.tccr_hash(a, j);
         let adelta = xor_blocks(a, self.delta);
         let temp2 = self.rng.tccr_hash(adelta, j);
@@ -75,14 +100,19 @@ impl<H: HashFunction> BinaryGarbler<H> {
         if p_a == 1 {
             out_gen = xor_blocks(out_gen, t_gen);
         }
-        (t_gen, out_gen)    
+        (t_gen, out_gen)
     }
 
-    fn eval_half_gate(&self, p_b: u8, 
-        a: <BinaryGarbler<H> as ExecutionPrimitives>::Item, 
-        b: <BinaryGarbler<H> as ExecutionPrimitives>::Item, 
-        j2: BLOCK
-    ) -> (<BinaryGarbler<H> as ExecutionPrimitives>::Item, <BinaryGarbler<H> as ExecutionPrimitives>::Item) {
+    fn eval_half_gate(
+        &self,
+        p_b: u8,
+        a: <BinaryGarbler<H> as ExecutionPrimitives>::Item,
+        b: <BinaryGarbler<H> as ExecutionPrimitives>::Item,
+        j2: Block,
+    ) -> (
+        <BinaryGarbler<H> as ExecutionPrimitives>::Item,
+        <BinaryGarbler<H> as ExecutionPrimitives>::Item,
+    ) {
         let temp1 = self.rng.tccr_hash(b, j2);
         let bdelta = xor_blocks(b, self.delta);
         let temp2 = self.rng.tccr_hash(bdelta, j2);
@@ -96,94 +126,87 @@ impl<H: HashFunction> BinaryGarbler<H> {
         (t_eval, out_eval)
     }
 
-    fn zero(&self) -> BLOCK {
+    fn zero(&mut self) -> Block {
         let mut randval = self.rng.get_random_hash();
-        randval[0] = randval[0] | 1;
+        randval[0] |= 1;
         randval
     }
 
-    pub fn get_decoding(&mut self, x: BLOCK) -> u8 {
+    pub fn get_decoding(&mut self, x: Block) -> u8 {
         Self::lsb(x)
     }
-    
-    pub fn get_garbled_circuit(&self) -> Vec<BLOCK> {
+
+    pub fn get_garbled_circuit(&self) -> Vec<Block> {
         self.cache.clone()
     }
 
-    pub fn garble(&mut self, circ: BinaryCircuit) -> 
-    Result<(
-    HashMap<usize, BLOCK>, 
-    HashMap<usize, BLOCK>, 
-    Vec<BLOCK>, HashMap<usize, u8>), 
-    Error> {
-        let mut cache : Vec<Option<BLOCK>> = vec![None; circ.gates.len()];
-        let mut garbler_input_encodings: HashMap<usize, BLOCK> = HashMap::new();
-        let mut evaluator_input_encodings: HashMap<usize, BLOCK> = HashMap::new();
+    pub fn garble(&mut self, circ: BinaryCircuit) -> Result<GarbleOutput, Error> {
+        let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
+        let mut garbler_input_encodings: HashMap<usize, Block> = HashMap::new();
+        let mut evaluator_input_encodings: HashMap<usize, Block> = HashMap::new();
         for (i, gate) in circ.gates.iter().enumerate() {
             let (z_ref, value) = match *gate {
                 BinaryGate::GarblerInput { id } => {
                     let input_hash = self.process_garbler_input(id, false)?;
-                    garbler_input_encodings.insert(id, input_hash.clone());
+                    garbler_input_encodings.insert(id, input_hash);
                     (None, input_hash)
-                },
+                }
                 BinaryGate::EvaluatorInput { id } => {
                     let input_hash = self.process_evaluator_input(id, false)?;
-                    evaluator_input_encodings.insert(id, input_hash.clone());
+                    evaluator_input_encodings.insert(id, input_hash);
                     (None, input_hash)
-                },
-                BinaryGate::Constant { val } => (
-                    None, self.constant(val)?
-                ),
-                BinaryGate::Inv { xid, out } => (
-                    out, self.negate(
-                        cache[xid]
-                        .as_ref()
-                        .ok_or(Error)?
-                    )?
-                ),
+                }
+                BinaryGate::Constant { val } => (None, self.constant(val)?),
+                BinaryGate::Inv { xid, out } => {
+                    (out, self.negate(cache[xid].as_ref().ok_or(Error)?)?)
+                }
                 BinaryGate::Xor { xid, yid, out } => (
-                    out, self.xor(
-                        cache[xid]
-                        .as_ref()
-                        .ok_or(Error)?, 
-                        cache[yid]
-                        .as_ref()
-                        .ok_or(Error)?
-                    )?
+                    out,
+                    self.xor(
+                        cache[xid].as_ref().ok_or(Error)?,
+                        cache[yid].as_ref().ok_or(Error)?,
+                    )?,
                 ),
-                BinaryGate::And { xid, yid, id: _, out } => (
-                    out, self.and(
-                        cache[xid]
-                        .as_ref()
-                        .ok_or(Error)?, 
-                        cache[yid]
-                        .as_ref()
-                        .ok_or(Error)?
-                    )?
+                BinaryGate::And {
+                    xid,
+                    yid,
+                    id: _,
+                    out,
+                } => (
+                    out,
+                    self.and(
+                        cache[xid].as_ref().ok_or(Error)?,
+                        cache[yid].as_ref().ok_or(Error)?,
+                    )?,
                 ),
             };
             cache[z_ref.unwrap_or(i)] = Some(value)
         }
         let mut decoding_infos: HashMap<usize, u8> = HashMap::new();
         for r in circ.get_output_gate_ids().iter() {
-            let x = cache[*r].as_ref().ok_or_else(|| Error)?;
+            let x = cache[*r].as_ref().ok_or(Error)?;
             let dec = self.get_decoding(*x);
             decoding_infos.insert(*r, dec);
         }
-        Ok((garbler_input_encodings, evaluator_input_encodings, self.get_garbled_circuit(), decoding_infos))
+        Ok(GarbleOutput {
+            garbler_input_encodings,
+            evaluator_input_encodings,
+            garbled_circuit: self.get_garbled_circuit(),
+            decoding_infos,
+        })
     }
 }
 
 impl<H: HashFunction> ExecutionPrimitives for BinaryGarbler<H> {
-    type Item = BLOCK;
+    type Item = Block;
 
     fn constant(&mut self, x: u16) -> Result<Self::Item, Error> {
         let zerowire = self.zero();
-        let mut newwire = zerowire.clone();
+        let mut newwire = zerowire;
         if x == 1 {
             newwire = xor_blocks(newwire, self.delta);
         }
-        self.cache.push(newwire.clone());
+        self.cache.push(newwire);
         Ok(zerowire)
     }
 
@@ -200,7 +223,7 @@ impl<H: HashFunction> ExecutionPrimitives for BinaryGarbler<H> {
     fn process_garbler_input(&mut self, _id: usize, _x: bool) -> Result<Self::Item, Error> {
         Ok(self.rng.get_random_hash())
     }
-    
+
     fn process_evaluator_input(&mut self, _id: usize, _x: bool) -> Result<Self::Item, Error> {
         Ok(self.rng.get_random_hash())
     }
@@ -213,25 +236,14 @@ impl<H: HashFunction> BinaryOperations for BinaryGarbler<H> {
     }
 
     fn and(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Error> {
-        let (t_gen, t_eval, out) = self.garble_and_gate(*x, *y);
-        self.cache.push(t_gen);
-        self.cache.push(t_eval);
-        Ok(out)
+        let garble_and_gate_op = self.garble_and_gate(*x, *y);
+        self.cache.push(garble_and_gate_op.t_gen);
+        self.cache.push(garble_and_gate_op.t_eval);
+        Ok(garble_and_gate_op.out)
     }
 
     fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, Error> {
         let d = self.delta;
         self.xor(&d, x)
-    }
-}
-
-impl<H: HashFunction> ThreePartyBinaryGarbler for BinaryGarbler<H> {
-    fn garble_threeparty(&mut self, circ: BinaryCircuit) -> 
-    Result<(
-    HashMap<usize, BLOCK>, 
-    HashMap<usize, BLOCK>, 
-    Vec<BLOCK>, HashMap<usize, u8>), 
-    Error> {
-        self.garble(circ)
     }
 }
