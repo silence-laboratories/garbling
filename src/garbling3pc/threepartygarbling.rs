@@ -219,7 +219,9 @@ pub fn threepg_create_msg3_p1(
         for a in 0..2 {
             let e_en_j = if b_vec[2][j] ^ (a != 0) {
                 xor_blocks(e_en_j_origin, delta)
-            } else {e_en_j_origin};
+            } else {
+                e_en_j_origin
+            };
             let witness: Block = rng.gen();
             let commitment = hash_commit.commit(e_en_j, witness);
             p3_commitments.insert((j, a), commitment);
@@ -235,7 +237,9 @@ pub fn threepg_create_msg3_p1(
         for a in 0..2 {
             let e_en_j = if b_vec[2][p3_ip_nos + j] ^ (a != 0) {
                 xor_blocks(e_en_j_origin, delta)
-            } else {e_en_j_origin};
+            } else {
+                e_en_j_origin
+            };
             let witness: Block = rng.gen();
             let commitment = hash_commit.commit(e_en_j, witness);
             p3_commitments.insert((p3_ip_nos + j, a), commitment);
@@ -254,7 +258,7 @@ pub fn threepg_create_msg3_p1(
         }
     }
     // println!("x1_decom: {:?}\n", x1_decom);
-    
+
     for (i, b_i) in b_vec[2].iter().enumerate().take(p3_ip_nos) {
         let val = b_i ^ p1_state_r1.x[i];
         if val {
@@ -348,7 +352,6 @@ pub fn threepg_create_msg3_p2(
 
     // println!("garbler input encodings: {:?}\n", garble_output.garbler_input_encodings);
     // println!("evaluator input encodings: {:?}\n", garble_output.evaluator_input_encodings);
-    
 
     for j in 0..p1_ip_nos {
         let g_en_j_origin = *garble_output.garbler_input_encodings.get(&j).unwrap();
@@ -389,7 +392,6 @@ pub fn threepg_create_msg3_p2(
     // println!("p2 commitments: {:?}\n", p2_commitments);
     // println!("p2 decommitments: {:?}\n", p2_decommitments);
 
-
     for j in 0..p3_ip_nos {
         let e_en_j_origin = *garble_output
             .evaluator_input_encodings
@@ -398,7 +400,9 @@ pub fn threepg_create_msg3_p2(
         for a in 0..2 {
             let e_en_j = if b_vec[2][j] ^ (a != 0) {
                 xor_blocks(e_en_j_origin, delta)
-            } else {e_en_j_origin};
+            } else {
+                e_en_j_origin
+            };
             // println!("{} {} {:?}", j, a, e_en_j);
             let witness: Block = rng.gen();
             let commitment = hash_commit.commit(e_en_j, witness);
@@ -415,7 +419,9 @@ pub fn threepg_create_msg3_p2(
         for a in 0..2 {
             let e_en_j = if b_vec[2][p3_ip_nos + j] ^ (a != 0) {
                 xor_blocks(e_en_j_origin, delta)
-            } else {e_en_j_origin};
+            } else {
+                e_en_j_origin
+            };
             // println!("{} {} {:?}", p3_ip_nos + j, a, e_en_j);
             let witness: Block = rng.gen();
             let commitment = hash_commit.commit(e_en_j, witness);
@@ -452,7 +458,7 @@ pub fn threepg_create_msg3_p2(
             x4_decom.push(*p3_decommitments.get(&(i + p3_ip_nos, 0)).unwrap());
         }
     }
-    
+
     // println!("x4_decom {:?}\n", x4_decom);
 
     Ok((
@@ -503,8 +509,7 @@ pub fn threepg_create_msg4_p3(
     let mut garbled_garbler_inputs: HashMap<usize, Block> =
         HashMap::with_capacity(p1_ip_nos + p2_ip_nos);
     let mut garbled_evaluator_inputs: HashMap<usize, Block> = HashMap::with_capacity(p3_ip_nos);
-    let mut garbled_evaluator_inputs_2: HashMap<usize, Block> =
-        HashMap::with_capacity(p3_ip_nos);
+    let mut garbled_evaluator_inputs_2: HashMap<usize, Block> = HashMap::with_capacity(p3_ip_nos);
 
     let comm = &msg3_recv_p1.com_vals.p1_commitments;
     let decom = &msg3_recv_p1.decom_vals.x12_decom;
@@ -588,7 +593,7 @@ pub fn threepg_create_msg4_p3(
             return None;
         }
     }
-    
+
     // println!("garbled evaluator inputs: {:?}\n", garbled_evaluator_inputs);
     // println!("garbled evaluator inputs 2: {:?}\n", garbled_evaluator_inputs_2);
 
@@ -656,7 +661,12 @@ pub fn threepg_process_msg4_p12(
 //     println!("output: {:?}", output);
 // }
 
-pub fn test_run_3party_garbling(circuit: &BinaryCircuit, input_p1: &[bool], input_p2: &[bool], input_p3: &[bool]) {
+pub fn test_run_3party_garbling(
+    circuit: &BinaryCircuit,
+    input_p1: &[bool],
+    input_p2: &[bool],
+    input_p3: &[bool],
+) {
     let mut rng_comm = rand::thread_rng();
 
     let inputlen_p1 = input_p1.len();
@@ -707,7 +717,7 @@ pub fn test_run_3party_garbling(circuit: &BinaryCircuit, input_p1: &[bool], inpu
     let msg4_p3 = threepg_create_msg4_p3(&state_r1_p3, &msg3_p1, &msg3_p2, circuit).unwrap();
 
     // Round 4
-    
+
     // P3 sends msg4_p3 to P1 and P2
     threepg_process_msg4_p12(&msg4_p3, &msg3_p1, circuit, &int_r3_p1);
     threepg_process_msg4_p12(&msg4_p3, &msg3_p2, circuit, &int_r3_p2);
@@ -716,16 +726,13 @@ pub fn test_run_3party_garbling(circuit: &BinaryCircuit, input_p1: &[bool], inpu
     // threepg_soft_decode(&msg4_p3, &circuit);
 
     // println!("{:?}", int_r3_p1.decoding_info.clone());
-
 }
 
 #[cfg(test)]
 mod tests {
     use crate::customcircuits::comparison::build_comparison_circuit_threeparty;
 
-    use super::
-        test_run_3party_garbling
-    ;
+    use super::test_run_3party_garbling;
 
     #[test]
     pub fn test_three_party_garbling() {
