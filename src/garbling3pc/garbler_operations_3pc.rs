@@ -1,4 +1,4 @@
-use std::fmt::Error;
+use rand::{CryptoRng, RngCore};
 
 use crate::{
     circuitop::circuit::BinaryCircuit,
@@ -8,8 +8,10 @@ use crate::{
 
 use super::threepartytraits::ThreePartyBinaryGarbler;
 
-impl<H: HashFunction> ThreePartyBinaryGarbler for BinaryGarbler<H> {
-    fn garble_threeparty(&mut self, circ: BinaryCircuit) -> Result<GarbleOutput, Error> {
+impl<'a, H: HashFunction, R: RngCore + CryptoRng> ThreePartyBinaryGarbler
+    for BinaryGarbler<'a, H, R>
+{
+    fn garble_threeparty(&mut self, circ: BinaryCircuit) -> Result<GarbleOutput, String> {
         self.garble(circ)
     }
 }

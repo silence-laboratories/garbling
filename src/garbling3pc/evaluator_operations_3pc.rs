@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Error};
+use std::collections::HashMap;
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
@@ -18,7 +18,7 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
         circ: BinaryCircuit,
         garbler_inputs: &[bool],
         evaluator_inputs: [&[bool]; 2],
-    ) -> Result<HashMap<usize, Block>, Error> {
+    ) -> Result<HashMap<usize, Block>, String> {
         let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
         for (i, gate) in circ.gates.iter().enumerate() {
             let (z_ref, value) = match *gate {
@@ -55,13 +55,13 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
                 }
                 BinaryGate::Constant { val } => (None, self.constant(val)?),
                 BinaryGate::Inv { xid, out } => {
-                    (out, self.negate(cache[xid].as_ref().ok_or(Error)?)?)
+                    (out, self.negate(cache[xid].as_ref().ok_or("None")?)?)
                 }
                 BinaryGate::Xor { xid, yid, out } => (
                     out,
                     self.xor(
-                        cache[xid].as_ref().ok_or(Error)?,
-                        cache[yid].as_ref().ok_or(Error)?,
+                        cache[xid].as_ref().ok_or("None")?,
+                        cache[yid].as_ref().ok_or("None")?,
                     )?,
                 ),
                 BinaryGate::And {
@@ -72,8 +72,8 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
                 } => (
                     out,
                     self.and(
-                        cache[xid].as_ref().ok_or(Error)?,
-                        cache[yid].as_ref().ok_or(Error)?,
+                        cache[xid].as_ref().ok_or("None")?,
+                        cache[yid].as_ref().ok_or("None")?,
                     )?,
                 ),
             };
@@ -81,7 +81,7 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
         }
         let mut garbled_output: HashMap<usize, Block> = HashMap::new();
         for r in circ.get_output_gate_ids().iter() {
-            let x = cache[*r].as_ref().ok_or(Error)?;
+            let x = cache[*r].as_ref().ok_or("None")?;
             let dec = self.output(x)?.unwrap();
             garbled_output.insert(*r, dec);
         }
@@ -93,7 +93,7 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
         circ: BinaryCircuit,
         garbled_garbler_inputs: HashMap<usize, Block>,
         garbled_evaluator_inputs: [HashMap<usize, Block>; 2],
-    ) -> Result<HashMap<usize, Block>, Error> {
+    ) -> Result<HashMap<usize, Block>, String> {
         let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
         // let eval_len = circ.num_evaluator_inputs() / 2;
         for (i, gate) in circ.gates.iter().enumerate() {
@@ -123,13 +123,13 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
                 }
                 BinaryGate::Constant { val } => (None, self.constant(val)?),
                 BinaryGate::Inv { xid, out } => {
-                    (out, self.negate(cache[xid].as_ref().ok_or(Error)?)?)
+                    (out, self.negate(cache[xid].as_ref().ok_or("None")?)?)
                 }
                 BinaryGate::Xor { xid, yid, out } => (
                     out,
                     self.xor(
-                        cache[xid].as_ref().ok_or(Error)?,
-                        cache[yid].as_ref().ok_or(Error)?,
+                        cache[xid].as_ref().ok_or("None")?,
+                        cache[yid].as_ref().ok_or("None")?,
                     )?,
                 ),
                 BinaryGate::And {
@@ -140,8 +140,8 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
                 } => (
                     out,
                     self.and(
-                        cache[xid].as_ref().ok_or(Error)?,
-                        cache[yid].as_ref().ok_or(Error)?,
+                        cache[xid].as_ref().ok_or("None")?,
+                        cache[yid].as_ref().ok_or("None")?,
                     )?,
                 ),
             };
@@ -149,7 +149,7 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
         }
         let mut garbled_output: HashMap<usize, Block> = HashMap::new();
         for r in circ.get_output_gate_ids().iter() {
-            let x = cache[*r].as_ref().ok_or(Error)?;
+            let x = cache[*r].as_ref().ok_or("None")?;
             let dec = self.output(x)?.unwrap();
             garbled_output.insert(*r, dec);
         }
@@ -159,18 +159,20 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
 
 #[cfg(test)]
 mod tests {
-    use rand::Rng;
+    use rand::{Rng, SeedableRng};
+    use rand_chacha::ChaCha8Rng;
 
     use super::BinaryEvaluator;
     use crate::{
         circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder},
         config::constants::AES_KEY,
+        customcircuits::comparison::build_comparison_circuit_threeparty,
         garbling2pc::garbler_operations::BinaryGarbler,
         garbling3pc::threepartytraits::{
             ThreePartyBinaryCircuit, ThreePartyBinaryCircuitBuilder, ThreePartyBinaryEvaluator,
             ThreePartyBinaryGarbler,
         },
-        utilities::hash_function::AesHash,
+        utilities::{hash_function::AesHash, utils::bool_vec_to_hex},
     };
 
     #[test]
@@ -184,7 +186,8 @@ mod tests {
         builder.output(result);
         let circuit = builder.finish();
 
-        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY));
+        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
+        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
         let mut rng = rand::thread_rng();
 
@@ -230,7 +233,8 @@ mod tests {
         builder.output(result);
         let circuit = builder.finish();
 
-        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY));
+        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
+        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
         let mut rng = rand::thread_rng();
 
@@ -277,7 +281,8 @@ mod tests {
         builder.output(result);
         let circuit = builder.finish();
 
-        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY));
+        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
+        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
         let mut rng = rand::thread_rng();
 
@@ -311,32 +316,11 @@ mod tests {
         }
     }
 
-    pub fn build_comparison_circuit_threeparty() -> BinaryCircuit {
-        let mut builder = CircuitBuilder::new();
-
-        let eval_input_1 = builder.evaluator_input_threeparty();
-        let garb_input_1 = builder.garbler_input();
-        let eval_input_2 = builder.evaluator_input_threeparty();
-        let garb_input_2 = builder.garbler_input();
-
-        // Compare the bits
-        let eq0 = builder.xor(eval_input_1, garb_input_1);
-        let eq1 = builder.xor(eval_input_2, garb_input_2);
-
-        let onewire = builder.constant(1);
-        let temp1 = builder.and(eq0, eq1);
-        let temp2 = builder.xor(eq0, eq1);
-        let before_not = builder.xor(temp1, temp2);
-        let result = builder.xor(before_not, onewire);
-        builder.output(result);
-
-        builder.finish()
-    }
-
     #[test]
     fn test_comparison_circuit_garbled_3pc() {
         let comparison_circuit = build_comparison_circuit_threeparty();
-        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY));
+        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
+        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
         let garble_output = garbler
             .garble_threeparty(comparison_circuit.clone())
             .unwrap();
@@ -384,32 +368,12 @@ mod tests {
         }
     }
 
-    fn bool_vec_to_hex(vec: Vec<bool>) -> String {
-        let mut hex_string = String::new();
-
-        // Process the vector in chunks of 4 bits
-        for chunk in vec.chunks(4) {
-            let mut value = 0;
-
-            // Convert each bit to its corresponding position in a nibble (4 bits)
-            for (i, bit) in chunk.iter().enumerate() {
-                if *bit {
-                    value |= 1 << (3 - i); // Shift bits according to position
-                }
-            }
-
-            // Convert the 4-bit value to a hex digit
-            hex_string.push_str(&format!("{:x}", value));
-        }
-
-        hex_string
-    }
-
     #[test]
     fn test_aes_garbled_3pc() {
         let circuit = BinaryCircuit::parse_threeparty("circuits/aes128.txt");
+        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
+        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
         let mut rng = rand::thread_rng();
-        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY));
         let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
         for i in 0..2 {
             for j in 0..2 {

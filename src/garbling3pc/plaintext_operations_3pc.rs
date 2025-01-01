@@ -110,9 +110,11 @@ mod tests {
     use super::BinaryPlaintext;
     use crate::{
         circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder},
+        customcircuits::comparison::build_comparison_circuit_threeparty,
         garbling3pc::threepartytraits::{
             ThreePartyBinaryCircuit, ThreePartyBinaryCircuitBuilder, ThreePartyBinaryPlaintext,
         },
+        utilities::utils::bool_vec_to_hex,
     };
 
     #[test]
@@ -200,28 +202,6 @@ mod tests {
         }
     }
 
-    pub fn build_comparison_circuit_threeparty() -> BinaryCircuit {
-        let mut builder = CircuitBuilder::new();
-
-        let eval_input_1 = builder.evaluator_input_threeparty();
-        let garb_input_1 = builder.garbler_input();
-        let eval_input_2 = builder.evaluator_input_threeparty();
-        let garb_input_2 = builder.garbler_input();
-
-        // Compare the bits
-        let eq0 = builder.xor(eval_input_1, garb_input_1);
-        let eq1 = builder.xor(eval_input_2, garb_input_2);
-
-        let onewire = builder.constant(1);
-        let temp1 = builder.and(eq0, eq1);
-        let temp2 = builder.xor(eq0, eq1);
-        let before_not = builder.xor(temp1, temp2);
-        let result = builder.xor(before_not, onewire);
-        builder.output(result);
-
-        builder.finish()
-    }
-
     #[test]
     fn test_comparison_circuit_plain_3pc() {
         let comparison_circuit = build_comparison_circuit_threeparty();
@@ -253,27 +233,6 @@ mod tests {
                 )
             }
         }
-    }
-
-    fn bool_vec_to_hex(vec: Vec<bool>) -> String {
-        let mut hex_string = String::new();
-
-        // Process the vector in chunks of 4 bits
-        for chunk in vec.chunks(4) {
-            let mut value = 0;
-
-            // Convert each bit to its corresponding position in a nibble (4 bits)
-            for (i, bit) in chunk.iter().enumerate() {
-                if *bit {
-                    value |= 1 << (3 - i); // Shift bits according to position
-                }
-            }
-
-            // Convert the 4-bit value to a hex digit
-            hex_string.push_str(&format!("{:x}", value));
-        }
-
-        hex_string
     }
 
     #[test]

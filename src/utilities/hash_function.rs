@@ -1,8 +1,5 @@
 use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
 use aes::Aes128;
-// use rand::rngs::ThreadRng;
-use rand::{Rng, SeedableRng};
-use rand_chacha::ChaChaRng;
 
 use crate::config::constants::Block;
 
@@ -11,14 +8,12 @@ pub trait HashFunction: Clone {
     fn cr_hash(&self, x: Block) -> Block;
     fn ccr_hash(&self, x: Block) -> Block;
     fn tccr_hash(&self, x: Block, i: Block) -> Block;
-    fn get_random_hash(&mut self) -> Block;
     fn get_hash(&self, x: &[u8]) -> Block;
 }
 
 #[derive(Clone)]
 pub struct AesHash {
     aes: Aes128,
-    rng: ChaChaRng,
 }
 
 impl AesHash {
@@ -27,10 +22,7 @@ impl AesHash {
         let mut rngkey = [0u8; 32];
         rngkey[16..(16 + 16)].copy_from_slice(&key);
         rngkey[..16].copy_from_slice(&key);
-        AesHash {
-            aes,
-            rng: ChaChaRng::from_seed(rngkey),
-        }
+        AesHash { aes }
     }
 }
 
@@ -66,14 +58,6 @@ impl HashFunction for AesHash {
             block[m] ^= bz[m]
         }
         block
-    }
-
-    fn get_random_hash(&mut self) -> Block {
-        let bytes: Block = self.rng.gen();
-        let mut output = GenericArray::from(bytes);
-        self.aes.encrypt_block(&mut output);
-        let output_needed: Block = output.into();
-        output_needed
     }
 
     fn get_hash(&self, input: &[u8]) -> Block {

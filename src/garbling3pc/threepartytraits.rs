@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Error};
+use std::collections::HashMap;
 
 use crate::{
     circuitop::circuit::BinaryCircuit, config::constants::Block,
@@ -25,7 +25,7 @@ pub trait ThreePartyBinaryPlaintext {
 }
 
 pub trait ThreePartyBinaryGarbler {
-    fn garble_threeparty(&mut self, circ: BinaryCircuit) -> Result<GarbleOutput, Error>;
+    fn garble_threeparty(&mut self, circ: BinaryCircuit) -> Result<GarbleOutput, String>;
 }
 
 pub trait ThreePartyBinaryEvaluator {
@@ -34,11 +34,11 @@ pub trait ThreePartyBinaryEvaluator {
         circ: BinaryCircuit,
         garbler_inputs: &[bool],
         evaluator_inputs: [&[bool]; 2],
-    ) -> Result<HashMap<usize, Block>, Error>;
+    ) -> Result<HashMap<usize, Block>, String>;
     fn garbled_evaluate_threeparty(
         &mut self,
         circ: BinaryCircuit,
         garbled_garbler_inputs: HashMap<usize, Block>,
         garbled_evaluator_inputs: [HashMap<usize, Block>; 2],
-    ) -> Result<HashMap<usize, Block>, Error>;
+    ) -> Result<HashMap<usize, Block>, String>;
 }

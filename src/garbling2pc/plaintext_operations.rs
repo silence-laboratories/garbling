@@ -105,33 +105,33 @@ impl Default for BinaryPlaintext {
 impl ExecutionPrimitives for BinaryPlaintext {
     type Item = bool;
 
-    fn constant(&mut self, x: u16) -> Result<Self::Item, Error> {
+    fn constant(&mut self, x: u16) -> Result<Self::Item, String> {
         Ok(x != 0)
     }
 
-    fn output(&mut self, x: &Self::Item) -> Result<Option<bool>, std::fmt::Error> {
+    fn output(&mut self, x: &Self::Item) -> Result<Option<bool>, String> {
         Ok(Some(*x))
     }
 
-    fn process_garbler_input(&mut self, _id: usize, x: bool) -> Result<Self::Item, Error> {
+    fn process_garbler_input(&mut self, _id: usize, x: bool) -> Result<Self::Item, String> {
         Ok(x)
     }
 
-    fn process_evaluator_input(&mut self, _id: usize, x: bool) -> Result<Self::Item, Error> {
+    fn process_evaluator_input(&mut self, _id: usize, x: bool) -> Result<Self::Item, String> {
         Ok(x)
     }
 }
 
 impl BinaryOperations for BinaryPlaintext {
-    fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Error> {
+    fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, String> {
         Ok(x ^ y)
     }
 
-    fn and(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Error> {
+    fn and(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, String> {
         Ok(x & y)
     }
 
-    fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, Error> {
+    fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, String> {
         Ok(!x)
     }
 }
@@ -139,7 +139,11 @@ impl BinaryOperations for BinaryPlaintext {
 #[cfg(test)]
 mod tests {
     use super::BinaryPlaintext;
-    use crate::{circuitop::circuit::BinaryCircuit, circuitop::circuit_builder::CircuitBuilder};
+    use crate::{
+        circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder},
+        customcircuits::comparison::build_comparison_circuit,
+        utilities::utils::bool_vec_to_hex,
+    };
 
     #[test]
     fn test_xor_gate_plain() {
@@ -235,28 +239,6 @@ mod tests {
         }
     }
 
-    pub fn build_comparison_circuit() -> BinaryCircuit {
-        let mut builder = CircuitBuilder::new();
-
-        let eval_input_1 = builder.evaluator_input();
-        let garb_input_1 = builder.garbler_input();
-        let eval_input_2 = builder.evaluator_input();
-        let garb_input_2 = builder.garbler_input();
-
-        // Compare the bits
-        let eq0 = builder.xor(eval_input_1, garb_input_1);
-        let eq1 = builder.xor(eval_input_2, garb_input_2);
-
-        let onewire = builder.constant(1);
-        let temp1 = builder.and(eq0, eq1);
-        let temp2 = builder.xor(eq0, eq1);
-        let before_not = builder.xor(temp1, temp2);
-        let result = builder.xor(before_not, onewire);
-        builder.output(result);
-
-        builder.finish()
-    }
-
     #[test]
     fn test_comparison_circuit_plain() {
         let comparison_circuit = build_comparison_circuit();
@@ -282,27 +264,6 @@ mod tests {
                 )
             }
         }
-    }
-
-    fn bool_vec_to_hex(vec: Vec<bool>) -> String {
-        let mut hex_string = String::new();
-
-        // Process the vector in chunks of 4 bits
-        for chunk in vec.chunks(4) {
-            let mut value = 0;
-
-            // Convert each bit to its corresponding position in a nibble (4 bits)
-            for (i, bit) in chunk.iter().enumerate() {
-                if *bit {
-                    value |= 1 << (3 - i); // Shift bits according to position
-                }
-            }
-
-            // Convert the 4-bit value to a hex digit
-            hex_string.push_str(&format!("{:x}", value));
-        }
-
-        hex_string
     }
 
     #[test]
