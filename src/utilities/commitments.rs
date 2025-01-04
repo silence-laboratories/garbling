@@ -20,14 +20,14 @@ impl<H: HashFunction> Commitment for HashCommitment<H> {
         let mut temp = [0u8; 32];
         temp[..16].copy_from_slice(&message);
         temp[16..(16 + 16)].copy_from_slice(&witness);
-        self.hash.get_hash(&temp)
+        self.hash.get_hash(&temp).unwrap()
     }
 
     fn verify(&self, message: Block, witness: Block, commitment: Block) -> bool {
         let mut temp = [0u8; 32];
         temp[..16].copy_from_slice(&message);
         temp[16..(16 + 16)].copy_from_slice(&witness);
-        self.hash.get_hash(&temp) == commitment
+        self.hash.get_hash(&temp).unwrap() == commitment
     }
 }
 

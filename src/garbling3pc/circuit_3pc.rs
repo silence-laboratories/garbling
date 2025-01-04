@@ -3,13 +3,16 @@ use std::{
     io::{BufRead, BufReader},
 };
 
-use crate::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
+use crate::{
+    circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
+    config::errors::FileParsingError,
+};
 
 use super::threepartytraits::ThreePartyBinaryCircuit;
 
 impl ThreePartyBinaryCircuit for BinaryCircuit {
-    fn parse_threeparty(file_name: &str) -> Self {
-        let file = File::open(file_name).expect("Failed to open the circuit file");
+    fn parse_threeparty(file_name: &str) -> Result<Self, FileParsingError> {
+        let file = File::open(file_name)?;
         let mut reader = BufReader::new(file).lines();
 
         let mut num_gates: usize = 0;
@@ -36,26 +39,26 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
                                 if let Ok(_num_garbl_inputs) = num_garbl_inputs.parse::<usize>() {
                                     num_garbler_inputs = _num_garbl_inputs;
                                 } else {
-                                    println!("Failed to parse number of inputs");
+                                    return Err(FileParsingError::InputNoParsingError());
                                 }
                             } else {
-                                println!("Failed to parse number of inputs");
+                                return Err(FileParsingError::InputNoParsingError());
                             }
                         }
                         if let Some(num_eval_inputs) = parts.next() {
                             if let Ok(_num_eval_inputs) = num_eval_inputs.parse::<usize>() {
                                 num_evaluator_inputs = _num_eval_inputs;
                             } else {
-                                println!("Failed to parse number of inputs");
+                                return Err(FileParsingError::InputNoParsingError());
                             }
                         } else {
-                            println!("Failed to parse number of inputs");
+                            return Err(FileParsingError::InputNoParsingError());
                         }
                     } else {
-                        println!("Number of input wires is not 2 greater than equal to 2. Please define two inputs for garbler and evaluator respectively!!!");
+                        return Err(FileParsingError::InputCountError());
                     }
                 } else {
-                    println!("Failed to parse number of inputs");
+                    return Err(FileParsingError::InputNoParsingError());
                 }
             }
         }
@@ -71,10 +74,10 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
                             }
                         }
                     } else {
-                        println!("Number of input wires is not 1");
+                        return Err(FileParsingError::OutputCountError());
                     }
                 } else {
-                    println!("Failed to parse number of outputs");
+                    return Err(FileParsingError::OutputNoParsingError());
                 }
             }
         }
@@ -107,7 +110,7 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
             output_circuit.push_output_gate(num_wires - num_outputs + i)
         }
 
-        for _i in 0..num_gates {
+        for i in 0..num_gates {
             let num_input: usize;
             let mut _num_output = 0;
             let mut input0: usize = 0;
@@ -180,10 +183,10 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
                     out: Some(output),
                 });
             } else {
-                println!("Incorrect file format. gate number: {} from the top", _i);
+                return Err(FileParsingError::FileFormatError(i));
             }
         }
-        output_circuit
+        Ok(output_circuit)
     }
 }
 
@@ -196,7 +199,7 @@ mod tests {
 
     #[test]
     fn test_circuit_3pc() {
-        let circuit = BinaryCircuit::parse_threeparty("circuits/binmult.txt");
+        let circuit = BinaryCircuit::parse_threeparty("circuits/binmult.txt").unwrap();
 
         let required_circuit = BinaryCircuit {
             gates: vec![

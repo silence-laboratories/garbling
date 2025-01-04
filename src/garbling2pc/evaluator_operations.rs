@@ -2,10 +2,12 @@ use std::collections::HashMap;
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::constants::Block,
+    config::{
+        constants::Block,
+        errors::{BinaryOperationsError, EvaluatorError, ExecutionPrimitiveError},
+    },
     garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
-    utilities::hash_function::HashFunction,
-    utilities::utils::xor_blocks,
+    utilities::{hash_function::HashFunction, utils::xor_blocks},
 };
 
 #[derive(Clone)]
@@ -75,39 +77,45 @@ impl<H: HashFunction> BinaryEvaluator<H> {
         circ: BinaryCircuit,
         garbler_inputs: &[bool],
         evaluator_inputs: &[bool],
-    ) -> Result<HashMap<usize, Block>, String> {
+    ) -> Result<HashMap<usize, Block>, EvaluatorError> {
         let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
         for (i, gate) in circ.gates.iter().enumerate() {
             let (z_ref, value) = match *gate {
                 BinaryGate::GarblerInput { id } => {
-                    assert!(
-                        id < garbler_inputs.len(),
-                        "id={} gb_inps.len()={}",
-                        id,
-                        garbler_inputs.len()
-                    );
+                    if id >= garbler_inputs.len() {
+                        return Err(EvaluatorError::GarblerIpLenError(id, garbler_inputs.len()));
+                    }
                     let input_hash = self.process_garbler_input(id, garbler_inputs[id])?;
                     (None, input_hash)
                 }
                 BinaryGate::EvaluatorInput { id } => {
-                    assert!(
-                        id < evaluator_inputs.len(),
-                        "id={} ev_inps.len()={}",
-                        id,
-                        evaluator_inputs.len()
-                    );
+                    if id >= evaluator_inputs.len() {
+                        return Err(EvaluatorError::EvaluatorIpLenError(
+                            id,
+                            evaluator_inputs.len(),
+                        ));
+                    }
                     let input_hash = self.process_evaluator_input(id, evaluator_inputs[id])?;
                     (None, input_hash)
                 }
                 BinaryGate::Constant { val } => (None, self.constant(val)?),
-                BinaryGate::Inv { xid, out } => {
-                    (out, self.negate(cache[xid].as_ref().ok_or("None")?)?)
-                }
+                BinaryGate::Inv { xid, out } => (
+                    out,
+                    self.negate(
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(EvaluatorError::CacheItemError(xid))?,
+                    )?,
+                ),
                 BinaryGate::Xor { xid, yid, out } => (
                     out,
                     self.xor(
-                        cache[xid].as_ref().ok_or("None")?,
-                        cache[yid].as_ref().ok_or("None")?,
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(EvaluatorError::CacheItemError(xid))?,
+                        cache[yid]
+                            .as_ref()
+                            .ok_or(EvaluatorError::CacheItemError(yid))?,
                     )?,
                 ),
                 BinaryGate::And {
@@ -118,8 +126,12 @@ impl<H: HashFunction> BinaryEvaluator<H> {
                 } => (
                     out,
                     self.and(
-                        cache[xid].as_ref().ok_or("None")?,
-                        cache[yid].as_ref().ok_or("None")?,
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(EvaluatorError::CacheItemError(xid))?,
+                        cache[yid]
+                            .as_ref()
+                            .ok_or(EvaluatorError::CacheItemError(yid))?,
                     )?,
                 ),
             };
@@ -127,7 +139,9 @@ impl<H: HashFunction> BinaryEvaluator<H> {
         }
         let mut garbled_output: HashMap<usize, Block> = HashMap::new();
         for r in circ.get_output_gate_ids().iter() {
-            let x = cache[*r].as_ref().ok_or("None")?;
+            let x = cache[*r]
+                .as_ref()
+                .ok_or(EvaluatorError::CacheItemError(*r))?;
             let dec = self.output(x)?.unwrap();
             garbled_output.insert(*r, dec);
         }
@@ -138,15 +152,19 @@ impl<H: HashFunction> BinaryEvaluator<H> {
 impl<H: HashFunction> ExecutionPrimitives for BinaryEvaluator<H> {
     type Item = Block;
 
-    fn constant(&mut self, _x: u16) -> Result<Self::Item, String> {
+    fn constant(&mut self, _x: u16) -> Result<Self::Item, ExecutionPrimitiveError> {
         Ok(self.get_next_cache_value())
     }
 
-    fn output(&mut self, x: &Self::Item) -> Result<Option<Self::Item>, String> {
+    fn output(&mut self, x: &Self::Item) -> Result<Option<Self::Item>, ExecutionPrimitiveError> {
         Ok(Some(*x))
     }
 
-    fn process_evaluator_input(&mut self, id: usize, x: bool) -> Result<Self::Item, String> {
+    fn process_evaluator_input(
+        &mut self,
+        id: usize,
+        x: bool,
+    ) -> Result<Self::Item, ExecutionPrimitiveError> {
         let mut val = self.evaluator_encoding.get(&id).unwrap().to_owned();
         if x {
             val = xor_blocks(val, self.delta);
@@ -154,7 +172,11 @@ impl<H: HashFunction> ExecutionPrimitives for BinaryEvaluator<H> {
         Ok(val)
     }
 
-    fn process_garbler_input(&mut self, id: usize, x: bool) -> Result<Self::Item, String> {
+    fn process_garbler_input(
+        &mut self,
+        id: usize,
+        x: bool,
+    ) -> Result<Self::Item, ExecutionPrimitiveError> {
         let mut val = self.garbler_encoding.get(&id).unwrap().to_owned();
         if x {
             val = xor_blocks(val, self.delta);
@@ -164,12 +186,12 @@ impl<H: HashFunction> ExecutionPrimitives for BinaryEvaluator<H> {
 }
 
 impl<H: HashFunction> BinaryOperations for BinaryEvaluator<H> {
-    fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, String> {
+    fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, BinaryOperationsError> {
         let output = xor_blocks(*x, *y);
         Ok(output)
     }
 
-    fn and(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, String> {
+    fn and(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, BinaryOperationsError> {
         let s_a = Self::lsb(*x);
         let s_b = Self::lsb(*y);
 
@@ -195,7 +217,7 @@ impl<H: HashFunction> BinaryOperations for BinaryEvaluator<H> {
         Ok(out)
     }
 
-    fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, String> {
+    fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, BinaryOperationsError> {
         Ok(*x)
     }
 }
@@ -421,7 +443,7 @@ mod tests {
 
     #[test]
     fn test_aes_garbled() {
-        let circuit = BinaryCircuit::parse("circuits/aes128.txt");
+        let circuit = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
         let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble(circuit.clone()).unwrap();

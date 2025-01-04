@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 use crate::circuitop::gate::BinaryGate;
+use crate::config::errors::FileParsingError;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BinaryCircuit {
@@ -15,8 +16,8 @@ pub struct BinaryCircuit {
 }
 
 impl BinaryCircuit {
-    pub fn parse(file_name: &str) -> Self {
-        let file = File::open(file_name).expect("Failed to open the circuit file");
+    pub fn parse(file_name: &str) -> Result<Self, FileParsingError> {
+        let file = File::open(file_name)?;
         let mut reader = BufReader::new(file).lines();
 
         let mut num_gates: usize = 0;
@@ -45,22 +46,22 @@ impl BinaryCircuit {
                                         num_garbler_inputs = _num_garbl_inputs;
                                         num_evaluator_inputs = _num_eval_inputs;
                                     } else {
-                                        println!("Failed to parse number of inputs");
+                                        return Err(FileParsingError::InputNoParsingError());
                                     }
                                 } else {
-                                    println!("Failed to parse number of inputs");
+                                    return Err(FileParsingError::InputNoParsingError());
                                 }
                             } else {
-                                println!("Failed to parse number of inputs");
+                                return Err(FileParsingError::InputNoParsingError());
                             }
                         } else {
-                            println!("Failed to parse number of inputs");
+                            return Err(FileParsingError::InputNoParsingError());
                         }
                     } else {
-                        println!("Number of input wires is not 2. Please define two inputs for garbler and evaluator respectively!!!");
+                        return Err(FileParsingError::InputCountError());
                     }
                 } else {
-                    println!("Failed to parse number of inputs");
+                    return Err(FileParsingError::InputNoParsingError());
                 }
             }
         }
@@ -76,10 +77,10 @@ impl BinaryCircuit {
                             }
                         }
                     } else {
-                        println!("Number of input wires is not 1");
+                        return Err(FileParsingError::OutputCountError());
                     }
                 } else {
-                    println!("Failed to parse number of outputs");
+                    return Err(FileParsingError::OutputNoParsingError());
                 }
             }
         }
@@ -102,7 +103,7 @@ impl BinaryCircuit {
             output_circuit.push_output_gate(num_wires - num_outputs + i)
         }
 
-        for _i in 0..num_gates {
+        for i in 0..num_gates {
             let num_input: usize;
             let mut _num_output = 0;
             let mut input0: usize = 0;
@@ -148,10 +149,10 @@ impl BinaryCircuit {
                     out: Some(output),
                 });
             } else {
-                println!("Incorrect file format. gate number: {} from the top", _i);
+                return Err(FileParsingError::FileFormatError(i));
             }
         }
-        output_circuit
+        Ok(output_circuit)
     }
 
     pub fn new(ngates: usize) -> Self {
@@ -310,6 +311,6 @@ mod tests {
             num_wires: 10,
         };
 
-        assert_eq!(required_circuit, circuit);
+        assert_eq!(required_circuit, circuit.unwrap());
     }
 }

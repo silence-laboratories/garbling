@@ -2,13 +2,14 @@ use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
 use aes::Aes128;
 
 use crate::config::constants::Block;
+use crate::config::errors::HashError;
 
 pub trait HashFunction: Clone {
     fn initialize(&mut self, key: Block);
     fn cr_hash(&self, x: Block) -> Block;
     fn ccr_hash(&self, x: Block) -> Block;
     fn tccr_hash(&self, x: Block, i: Block) -> Block;
-    fn get_hash(&self, x: &[u8]) -> Block;
+    fn get_hash(&self, x: &[u8]) -> Result<Block, HashError>;
 }
 
 #[derive(Clone)]
@@ -60,13 +61,12 @@ impl HashFunction for AesHash {
         block
     }
 
-    fn get_hash(&self, input: &[u8]) -> Block {
+    fn get_hash(&self, input: &[u8]) -> Result<Block, HashError> {
         let mut previous_block = GenericArray::from([0u8; 16]); // Initialize to zero for CBC
         let mut output_block = GenericArray::from([0u8; 16]);
 
         if input.len() % 16 != 0 {
-            println!("Invalid length input!!!!");
-            return [0u8; 16];
+            return Err(HashError::InvalidInputLengthError(16, input.len()));
         }
 
         for chunk in input.chunks_exact(16) {
@@ -90,7 +90,7 @@ impl HashFunction for AesHash {
         let mut result = [0u8; 16];
         result.copy_from_slice(&output_block);
 
-        result
+        Ok(result)
     }
 
     fn initialize(&mut self, key: Block) {
@@ -110,8 +110,8 @@ mod tests {
         let input2 = [0u8; 32];
         let function = AesHash::new(AES_KEY);
 
-        let output1 = function.get_hash(&input1);
-        let output2 = function.get_hash(&input2);
+        let output1 = function.get_hash(&input1).unwrap();
+        let output2 = function.get_hash(&input2).unwrap();
 
         let required_output1 = [
             102, 233, 75, 212, 239, 138, 44, 59, 136, 76, 250, 89, 202, 52, 43, 46,

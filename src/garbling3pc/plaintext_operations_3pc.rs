@@ -1,7 +1,6 @@
-use std::fmt::Error;
-
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
+    config::errors::BinaryPlaintextError,
     garbling2pc::{
         exec::{BinaryOperations, ExecutionPrimitives},
         plaintext_operations::BinaryPlaintext,
@@ -16,66 +15,64 @@ impl ThreePartyBinaryPlaintext for BinaryPlaintext {
         circ: BinaryCircuit,
         garbler_inputs: &[bool],
         evaluator_inputs: [&[bool]; 2],
-    ) -> Vec<bool> {
-        if garbler_inputs.len() != circ.num_garbler_inputs() {
-            println!("Number of Garbler inputs are inconsistent!!!");
-            return Vec::new();
-        }
-
-        if evaluator_inputs[0].len() + evaluator_inputs[1].len() != circ.num_evaluator_inputs() {
-            println!("Number of Evlauator inputs are inconsistent!!!");
-            return Vec::new();
-        }
-
+    ) -> Result<Vec<bool>, BinaryPlaintextError> {
         let mut cache: Vec<Option<bool>> = vec![None; circ.gates.len()];
         for (i, gate) in circ.gates.iter().enumerate() {
             let (z_ref, value) = match *gate {
                 BinaryGate::GarblerInput { id } => {
-                    assert!(
-                        id < garbler_inputs.len(),
-                        "id={} gb_inps.len()={}",
-                        id,
-                        garbler_inputs.len()
-                    );
-                    (
-                        None,
-                        self.process_garbler_input(id, garbler_inputs[id]).unwrap(),
-                    )
+                    if id >= garbler_inputs.len() {
+                        return Err(BinaryPlaintextError::GarblerIpLenError(
+                            id,
+                            garbler_inputs.len(),
+                        ));
+                    }
+                    (None, self.process_garbler_input(id, garbler_inputs[id])?)
                 }
                 BinaryGate::EvaluatorInput { id } => {
-                    assert!(
-                        id / 2 < evaluator_inputs[0].len() && id / 2 < evaluator_inputs[1].len(),
-                        "id={} ev_inps.len()={}",
-                        id,
-                        evaluator_inputs.len()
-                    );
+                    if id / 2 >= evaluator_inputs[0].len() {
+                        return Err(BinaryPlaintextError::GarblerIpLenError(
+                            id,
+                            evaluator_inputs[0].len(),
+                        ));
+                    }
+
+                    if id / 2 >= evaluator_inputs[1].len() {
+                        return Err(BinaryPlaintextError::GarblerIpLenError(
+                            id,
+                            evaluator_inputs[1].len(),
+                        ));
+                    }
                     if id % 2 == 0 {
                         (
                             None,
-                            self.process_evaluator_input(id, evaluator_inputs[0][id / 2])
-                                .unwrap(),
+                            self.process_evaluator_input(id, evaluator_inputs[0][id / 2])?,
                         )
                     } else {
                         (
                             None,
-                            self.process_evaluator_input(id, evaluator_inputs[1][id / 2])
-                                .unwrap(),
+                            self.process_evaluator_input(id, evaluator_inputs[1][id / 2])?,
                         )
                     }
                 }
-                BinaryGate::Constant { val } => (None, self.constant(val).unwrap()),
+                BinaryGate::Constant { val } => (None, self.constant(val)?),
                 BinaryGate::Inv { xid, out } => (
                     out,
-                    self.negate(cache[xid].as_ref().ok_or(Error).unwrap())
-                        .unwrap(),
+                    self.negate(
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(BinaryPlaintextError::CacheItemError(xid))?,
+                    )?,
                 ),
                 BinaryGate::Xor { xid, yid, out } => (
                     out,
                     self.xor(
-                        cache[xid].as_ref().ok_or(Error).unwrap(),
-                        cache[yid].as_ref().ok_or(Error).unwrap(),
-                    )
-                    .unwrap(),
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(BinaryPlaintextError::CacheItemError(xid))?,
+                        cache[yid]
+                            .as_ref()
+                            .ok_or(BinaryPlaintextError::CacheItemError(yid))?,
+                    )?,
                 ),
                 BinaryGate::And {
                     xid,
@@ -85,21 +82,26 @@ impl ThreePartyBinaryPlaintext for BinaryPlaintext {
                 } => (
                     out,
                     self.and(
-                        cache[xid].as_ref().ok_or(Error).unwrap(),
-                        cache[yid].as_ref().ok_or(Error).unwrap(),
-                    )
-                    .unwrap(),
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(BinaryPlaintextError::CacheItemError(xid))?,
+                        cache[yid]
+                            .as_ref()
+                            .ok_or(BinaryPlaintextError::CacheItemError(yid))?,
+                    )?,
                 ),
             };
             cache[z_ref.unwrap_or(i)] = Some(value)
         }
         let mut outputs = Vec::with_capacity(circ.output_gate_ids.len());
         for r in circ.get_output_gate_ids().iter() {
-            let r = cache[*r].as_ref().ok_or(Error).unwrap();
-            let out = self.output(r).unwrap();
+            let r = cache[*r]
+                .as_ref()
+                .ok_or(BinaryPlaintextError::CacheItemError(*r))?;
+            let out = self.output(r)?;
             outputs.push(out.unwrap())
         }
-        outputs
+        Ok(outputs)
     }
 }
 
@@ -133,11 +135,13 @@ mod tests {
             for j in 0..2 {
                 let jinp = rng.gen_bool(0.5);
                 let mut plaintexteval = BinaryPlaintext::new();
-                let output = plaintexteval.evaluate_threeparty(
-                    circuit.clone(),
-                    [i != 0].as_slice(),
-                    [[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
-                );
+                let output = plaintexteval
+                    .evaluate_threeparty(
+                        circuit.clone(),
+                        [i != 0].as_slice(),
+                        [[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
+                    )
+                    .unwrap();
                 let z = i ^ j;
                 assert!((z == 1) == output[0], "z: {} output: {:?}", z, output[0])
             }
@@ -160,11 +164,13 @@ mod tests {
             for j in 0..2 {
                 let jinp = rng.gen_bool(0.5);
                 let mut plaintexteval = BinaryPlaintext::new();
-                let output = plaintexteval.evaluate_threeparty(
-                    circuit.clone(),
-                    [i != 0].as_slice(),
-                    [[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
-                );
+                let output = plaintexteval
+                    .evaluate_threeparty(
+                        circuit.clone(),
+                        [i != 0].as_slice(),
+                        [[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
+                    )
+                    .unwrap();
                 let z = i & j;
                 assert!(
                     (z == 1) == output[0],
@@ -192,11 +198,13 @@ mod tests {
         for j in 0..2 {
             let jinp = rng.gen_bool(0.5);
             let mut plaintexteval = BinaryPlaintext::new();
-            let output = plaintexteval.evaluate_threeparty(
-                circuit.clone(),
-                [].as_slice(),
-                [[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
-            );
+            let output = plaintexteval
+                .evaluate_threeparty(
+                    circuit.clone(),
+                    [].as_slice(),
+                    [[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
+                )
+                .unwrap();
             let z = 1 - j;
             assert!((z == 1) == output[0], "z: {} output: {:?}", z, output[0])
         }
@@ -216,14 +224,16 @@ mod tests {
                 let jinp2 = rng.gen_bool(0.5);
 
                 let mut plaintexteval = BinaryPlaintext::new();
-                let output = plaintexteval.evaluate_threeparty(
-                    comparison_circuit.clone(),
-                    [ibit1, ibit2].as_slice(),
-                    [
-                        [jinp1, jinp2].as_slice(),
-                        [jbit1 ^ jinp1, jbit2 ^ jinp2].as_slice(),
-                    ],
-                );
+                let output = plaintexteval
+                    .evaluate_threeparty(
+                        comparison_circuit.clone(),
+                        [ibit1, ibit2].as_slice(),
+                        [
+                            [jinp1, jinp2].as_slice(),
+                            [jbit1 ^ jinp1, jbit2 ^ jinp2].as_slice(),
+                        ],
+                    )
+                    .unwrap();
                 assert!(
                     (i == j) == output[0],
                     "i: {}, j: {} output: {:?}",
@@ -237,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_aes_plain_3pc() {
-        let circuit = BinaryCircuit::parse_threeparty("circuits/aes128.txt");
+        let circuit = BinaryCircuit::parse_threeparty("circuits/aes128.txt").unwrap();
         let mut rng = rand::thread_rng();
         for i in 0..2 {
             for j in 0..2 {
@@ -250,11 +260,9 @@ mod tests {
                     j1[k] = bit;
                     j2[k] = val ^ bit;
                 }
-                let output = plaintexteval.evaluate_threeparty(
-                    circuit.clone(),
-                    [i != 0; 128].as_slice(),
-                    [&j1, &j2],
-                );
+                let output = plaintexteval
+                    .evaluate_threeparty(circuit.clone(), [i != 0; 128].as_slice(), [&j1, &j2])
+                    .unwrap();
                 let count = 2 * i + j;
                 let hexout = bool_vec_to_hex(output);
                 if count == 0 {

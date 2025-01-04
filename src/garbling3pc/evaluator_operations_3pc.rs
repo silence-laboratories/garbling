@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::constants::Block,
+    config::{constants::Block, errors::ThreePartyEvaluatorError},
     garbling2pc::{
         evaluator_operations::BinaryEvaluator,
         exec::{BinaryOperations, ExecutionPrimitives},
@@ -18,50 +18,64 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
         circ: BinaryCircuit,
         garbler_inputs: &[bool],
         evaluator_inputs: [&[bool]; 2],
-    ) -> Result<HashMap<usize, Block>, String> {
+    ) -> Result<HashMap<usize, Block>, ThreePartyEvaluatorError> {
         let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
         for (i, gate) in circ.gates.iter().enumerate() {
             let (z_ref, value) = match *gate {
                 BinaryGate::GarblerInput { id } => {
-                    assert!(
-                        id < garbler_inputs.len(),
-                        "id={} gb_inps.len()={}",
-                        id,
-                        garbler_inputs.len()
-                    );
+                    if id >= garbler_inputs.len() {
+                        return Err(ThreePartyEvaluatorError::GarblerIpLenError(
+                            id,
+                            garbler_inputs.len(),
+                        ));
+                    }
                     let input_hash = self.process_garbler_input(id, garbler_inputs[id])?;
                     (None, input_hash)
                 }
                 BinaryGate::EvaluatorInput { id } => {
-                    assert!(
-                        id / 2 < evaluator_inputs[0].len() && id / 2 < evaluator_inputs[1].len(),
-                        "id={} ev_inps.len()={}",
-                        id,
-                        evaluator_inputs.len()
-                    );
+                    if id / 2 >= evaluator_inputs[0].len() {
+                        return Err(ThreePartyEvaluatorError::GarblerIpLenError(
+                            id,
+                            evaluator_inputs[0].len(),
+                        ));
+                    }
+
+                    if id / 2 >= evaluator_inputs[1].len() {
+                        return Err(ThreePartyEvaluatorError::GarblerIpLenError(
+                            id,
+                            evaluator_inputs[1].len(),
+                        ));
+                    }
                     if id % 2 == 0 {
                         (
                             None,
-                            self.process_evaluator_input(id, evaluator_inputs[0][id / 2])
-                                .unwrap(),
+                            self.process_evaluator_input(id, evaluator_inputs[0][id / 2])?,
                         )
                     } else {
                         (
                             None,
-                            self.process_evaluator_input(id, evaluator_inputs[1][id / 2])
-                                .unwrap(),
+                            self.process_evaluator_input(id, evaluator_inputs[1][id / 2])?,
                         )
                     }
                 }
                 BinaryGate::Constant { val } => (None, self.constant(val)?),
-                BinaryGate::Inv { xid, out } => {
-                    (out, self.negate(cache[xid].as_ref().ok_or("None")?)?)
-                }
+                BinaryGate::Inv { xid, out } => (
+                    out,
+                    self.negate(
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(ThreePartyEvaluatorError::CacheItemError(xid))?,
+                    )?,
+                ),
                 BinaryGate::Xor { xid, yid, out } => (
                     out,
                     self.xor(
-                        cache[xid].as_ref().ok_or("None")?,
-                        cache[yid].as_ref().ok_or("None")?,
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(ThreePartyEvaluatorError::CacheItemError(xid))?,
+                        cache[yid]
+                            .as_ref()
+                            .ok_or(ThreePartyEvaluatorError::CacheItemError(yid))?,
                     )?,
                 ),
                 BinaryGate::And {
@@ -72,8 +86,12 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
                 } => (
                     out,
                     self.and(
-                        cache[xid].as_ref().ok_or("None")?,
-                        cache[yid].as_ref().ok_or("None")?,
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(ThreePartyEvaluatorError::CacheItemError(xid))?,
+                        cache[yid]
+                            .as_ref()
+                            .ok_or(ThreePartyEvaluatorError::CacheItemError(yid))?,
                     )?,
                 ),
             };
@@ -81,7 +99,9 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
         }
         let mut garbled_output: HashMap<usize, Block> = HashMap::new();
         for r in circ.get_output_gate_ids().iter() {
-            let x = cache[*r].as_ref().ok_or("None")?;
+            let x = cache[*r]
+                .as_ref()
+                .ok_or(ThreePartyEvaluatorError::CacheItemError(*r))?;
             let dec = self.output(x)?.unwrap();
             garbled_output.insert(*r, dec);
         }
@@ -93,28 +113,35 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
         circ: BinaryCircuit,
         garbled_garbler_inputs: HashMap<usize, Block>,
         garbled_evaluator_inputs: [HashMap<usize, Block>; 2],
-    ) -> Result<HashMap<usize, Block>, String> {
+    ) -> Result<HashMap<usize, Block>, ThreePartyEvaluatorError> {
         let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
         // let eval_len = circ.num_evaluator_inputs() / 2;
         for (i, gate) in circ.gates.iter().enumerate() {
             let (z_ref, value) = match *gate {
                 BinaryGate::GarblerInput { id } => {
-                    // assert!(
-                    //     id < garbler_inputs.len(),
-                    //     "id={} gb_inps.len()={}",
-                    //     id,
-                    //     garbler_inputs.len()
-                    // );
+                    if id >= garbled_garbler_inputs.len() {
+                        return Err(ThreePartyEvaluatorError::GarblerIpLenError(
+                            id,
+                            garbled_garbler_inputs.len(),
+                        ));
+                    }
                     let input_hash = *garbled_garbler_inputs.get(&id).unwrap();
                     (None, input_hash)
                 }
                 BinaryGate::EvaluatorInput { id } => {
-                    // assert!(
-                    //     id/2 < evaluator_inputs[0].len() && id/2 < evaluator_inputs[1].len(),
-                    //     "id={} ev_inps.len()={}",
-                    //     id,
-                    //     evaluator_inputs.len()
-                    // );
+                    if id / 2 >= garbled_evaluator_inputs[0].len() {
+                        return Err(ThreePartyEvaluatorError::GarblerIpLenError(
+                            id,
+                            garbled_evaluator_inputs[0].len(),
+                        ));
+                    }
+
+                    if id / 2 >= garbled_evaluator_inputs[1].len() {
+                        return Err(ThreePartyEvaluatorError::GarblerIpLenError(
+                            id,
+                            garbled_evaluator_inputs[1].len(),
+                        ));
+                    }
                     if id % 2 == 0 {
                         (None, *garbled_evaluator_inputs[0].get(&(id / 2)).unwrap())
                     } else {
@@ -122,14 +149,23 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
                     }
                 }
                 BinaryGate::Constant { val } => (None, self.constant(val)?),
-                BinaryGate::Inv { xid, out } => {
-                    (out, self.negate(cache[xid].as_ref().ok_or("None")?)?)
-                }
+                BinaryGate::Inv { xid, out } => (
+                    out,
+                    self.negate(
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(ThreePartyEvaluatorError::CacheItemError(xid))?,
+                    )?,
+                ),
                 BinaryGate::Xor { xid, yid, out } => (
                     out,
                     self.xor(
-                        cache[xid].as_ref().ok_or("None")?,
-                        cache[yid].as_ref().ok_or("None")?,
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(ThreePartyEvaluatorError::CacheItemError(xid))?,
+                        cache[yid]
+                            .as_ref()
+                            .ok_or(ThreePartyEvaluatorError::CacheItemError(yid))?,
                     )?,
                 ),
                 BinaryGate::And {
@@ -140,8 +176,12 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
                 } => (
                     out,
                     self.and(
-                        cache[xid].as_ref().ok_or("None")?,
-                        cache[yid].as_ref().ok_or("None")?,
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(ThreePartyEvaluatorError::CacheItemError(xid))?,
+                        cache[yid]
+                            .as_ref()
+                            .ok_or(ThreePartyEvaluatorError::CacheItemError(yid))?,
                     )?,
                 ),
             };
@@ -149,7 +189,9 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
         }
         let mut garbled_output: HashMap<usize, Block> = HashMap::new();
         for r in circ.get_output_gate_ids().iter() {
-            let x = cache[*r].as_ref().ok_or("None")?;
+            let x = cache[*r]
+                .as_ref()
+                .ok_or(ThreePartyEvaluatorError::CacheItemError(*r))?;
             let dec = self.output(x)?.unwrap();
             garbled_output.insert(*r, dec);
         }
@@ -370,7 +412,7 @@ mod tests {
 
     #[test]
     fn test_aes_garbled_3pc() {
-        let circuit = BinaryCircuit::parse_threeparty("circuits/aes128.txt");
+        let circuit = BinaryCircuit::parse_threeparty("circuits/aes128.txt").unwrap();
         let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
         let mut rng = rand::thread_rng();

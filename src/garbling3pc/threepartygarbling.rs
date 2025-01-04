@@ -319,7 +319,7 @@ pub fn threepg_create_msg3_p2(
         return Err("Evaluator Input Size inconsistent".to_string());
     }
 
-    println!("1 {}\n", p3_ip_nos);
+    // println!("1 {}\n", p3_ip_nos);
     let mut rng = ChaCha8Rng::from_seed(rng_key);
     let mut garbler = BinaryGarbler::new(hash.clone(), &mut rng);
     let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
@@ -505,7 +505,7 @@ pub fn threepg_create_msg4_p3(
     let p2_ip_nos = msg3_recv_p1.com_vals.p2_commitments.len() / 2;
     let p3_ip_nos = msg3_recv_p1.com_vals.p3_commitments.len() / 4;
 
-    println!("2 {}\n", p3_ip_nos);
+    // println!("2 {}\n", p3_ip_nos);
     let mut garbled_garbler_inputs: HashMap<usize, Block> =
         HashMap::with_capacity(p1_ip_nos + p2_ip_nos);
     let mut garbled_evaluator_inputs: HashMap<usize, Block> = HashMap::with_capacity(p3_ip_nos);
@@ -630,7 +630,7 @@ pub fn threepg_process_msg4_p12(
     msg3: &ThreePGMsg3,
     circuit: &BinaryCircuit,
     int_r3: &ThreePGPartyIntStateR3,
-) {
+) -> Vec<bool> {
     let hash = AesHash::new(HASH_KEY);
     let eval = BinaryEvaluator::new(
         int_r3.garbling_encoding.clone(),
@@ -645,9 +645,7 @@ pub fn threepg_process_msg4_p12(
         msg4_recv.garbled_op.clone(),
     );
 
-    println!("output: {:?}", op);
-
-    assert!(op[0]);
+    op
 }
 
 // pub fn threepg_soft_decode(msg4: &ThreePGMsg4, circuit: &BinaryCircuit) {
@@ -666,7 +664,7 @@ pub fn test_run_3party_garbling(
     input_p1: &[bool],
     input_p2: &[bool],
     input_p3: &[bool],
-) {
+) -> (Vec<bool>, Vec<bool>, Vec<bool>) {
     let mut rng_comm = rand::thread_rng();
 
     let inputlen_p1 = input_p1.len();
@@ -719,25 +717,38 @@ pub fn test_run_3party_garbling(
     // Round 4
 
     // P3 sends msg4_p3 to P1 and P2
-    threepg_process_msg4_p12(&msg4_p3, &msg3_p1, circuit, &int_r3_p1);
-    threepg_process_msg4_p12(&msg4_p3, &msg3_p2, circuit, &int_r3_p2);
+    let op_p1 = threepg_process_msg4_p12(&msg4_p3, &msg3_p1, circuit, &int_r3_p1);
+    let op_p2 = threepg_process_msg4_p12(&msg4_p3, &msg3_p2, circuit, &int_r3_p2);
 
-    // P3 decodes to get the output
-    // threepg_soft_decode(&msg4_p3, &circuit);
+    // P1 and P2 sends op_p1 and op_p2 respectively to P3 which compares them and outputs it
+    assert_eq!(op_p1, op_p2);
+    let op_p3 = op_p2.clone();
 
     // println!("{:?}", int_r3_p1.decoding_info.clone());
+    (op_p1, op_p2, op_p3)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::customcircuits::comparison::build_comparison_circuit_threeparty;
+    use crate::{
+        circuitop::circuit::BinaryCircuit,
+        customcircuits::comparison::build_comparison_circuit_threeparty,
+        garbling3pc::threepartytraits::ThreePartyBinaryCircuit, utilities::utils::bool_vec_to_hex,
+    };
 
     use super::test_run_3party_garbling;
 
     #[test]
-    pub fn test_three_party_garbling() {
-        for _ in 0..1000 {
+    pub fn test_three_party_garbling_comparison() {
+        for _ in 0..50 {
             test_3pgarbling_comparison();
+        }
+    }
+
+    #[test]
+    pub fn test_three_party_garbling_aes() {
+        for _ in 0..50 {
+            test_3pgarbling_aes();
         }
     }
 
@@ -747,6 +758,62 @@ mod tests {
         let input_p3 = vec![false, false];
         let circuit = build_comparison_circuit_threeparty();
 
-        test_run_3party_garbling(&circuit, &input_p1, &input_p2, &input_p3);
+        let (op_p1, op_p2, op_p3) =
+            test_run_3party_garbling(&circuit, &input_p1, &input_p2, &input_p3);
+
+        assert!(op_p1[0]);
+        assert!(op_p2[0]);
+        assert!(op_p3[0]);
+    }
+
+    fn test_3pgarbling_aes() {
+        let circuit = BinaryCircuit::parse_threeparty("circuits/aes128.txt").unwrap();
+
+        for i in 0..2 {
+            for j in 0..2 {
+                let input_p1 = vec![i != 0; 64];
+                let input_p2 = vec![i != 0; 64];
+                let input_p3 = vec![j != 0; 128];
+
+                let (op_p1, op_p2, op_p3) =
+                    test_run_3party_garbling(&circuit, &input_p1, &input_p2, &input_p3);
+
+                assert_eq!(op_p1, op_p2);
+                assert_eq!(op_p3, op_p2);
+
+                let hexout_p1 = bool_vec_to_hex(op_p1);
+
+                let count = 2 * i + j;
+                if count == 0 {
+                    assert_eq!(
+                        hexout_p1,
+                        "74d42c539a5f3211dc3451f72bd29766".to_string(),
+                        "outval: {} realval: 74d42c539a5f3211dc3451f72bd29766",
+                        hexout_p1
+                    );
+                } else if count == 2 {
+                    assert_eq!(
+                        hexout_p1,
+                        "3493fd1ca2122691b3fabee131a46f85".to_string(),
+                        "outval: {} realval: 3493fd1ca2122691b3fabee131a46f85",
+                        hexout_p1
+                    );
+                } else if count == 1 {
+                    assert_eq!(
+                        hexout_p1,
+                        "7266b17c4be2ce5f505aa1579331dafc".to_string(),
+                        "outval: {} realval: 7266b17c4be2ce5f505aa1579331dafc",
+                        hexout_p1
+                    );
+                } else if count == 3 {
+                    assert_eq!(
+                        hexout_p1,
+                        "9e9d5c984a0e8a4d0cf3014d3e84fd3d".to_string(),
+                        "outval: {} realval: 9e9d5c984a0e8a4d0cf3014d3e84fd3d",
+                        hexout_p1
+                    );
+                }
+            }
+        }
     }
 }

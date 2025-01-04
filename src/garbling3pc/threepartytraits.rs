@@ -1,12 +1,21 @@
 use std::collections::HashMap;
 
 use crate::{
-    circuitop::circuit::BinaryCircuit, config::constants::Block,
+    circuitop::circuit::BinaryCircuit,
+    config::{
+        constants::Block,
+        errors::{
+            BinaryPlaintextError, FileParsingError, ThreePartyEvaluatorError,
+            ThreePartyGarblerError,
+        },
+    },
     garbling2pc::garbler_operations::GarbleOutput,
 };
 
 pub trait ThreePartyBinaryCircuit {
-    fn parse_threeparty(file_name: &str) -> Self;
+    fn parse_threeparty(file_name: &str) -> Result<Self, FileParsingError>
+    where
+        Self: Sized;
 }
 
 pub trait ThreePartyBinaryCircuitBuilder {
@@ -21,11 +30,14 @@ pub trait ThreePartyBinaryPlaintext {
         circ: BinaryCircuit,
         garbler_inputs: &[bool],
         evaluator_inputs: [&[bool]; 2],
-    ) -> Vec<bool>;
+    ) -> Result<Vec<bool>, BinaryPlaintextError>;
 }
 
 pub trait ThreePartyBinaryGarbler {
-    fn garble_threeparty(&mut self, circ: BinaryCircuit) -> Result<GarbleOutput, String>;
+    fn garble_threeparty(
+        &mut self,
+        circ: BinaryCircuit,
+    ) -> Result<GarbleOutput, ThreePartyGarblerError>;
 }
 
 pub trait ThreePartyBinaryEvaluator {
@@ -34,11 +46,11 @@ pub trait ThreePartyBinaryEvaluator {
         circ: BinaryCircuit,
         garbler_inputs: &[bool],
         evaluator_inputs: [&[bool]; 2],
-    ) -> Result<HashMap<usize, Block>, String>;
+    ) -> Result<HashMap<usize, Block>, ThreePartyEvaluatorError>;
     fn garbled_evaluate_threeparty(
         &mut self,
         circ: BinaryCircuit,
         garbled_garbler_inputs: HashMap<usize, Block>,
         garbled_evaluator_inputs: [HashMap<usize, Block>; 2],
-    ) -> Result<HashMap<usize, Block>, String>;
+    ) -> Result<HashMap<usize, Block>, ThreePartyEvaluatorError>;
 }

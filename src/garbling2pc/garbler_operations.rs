@@ -4,10 +4,12 @@ use rand::{CryptoRng, RngCore};
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::constants::Block,
+    config::{
+        constants::Block,
+        errors::{BinaryOperationsError, ExecutionPrimitiveError, GarblerError},
+    },
     garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
-    utilities::hash_function::HashFunction,
-    utilities::utils::xor_blocks,
+    utilities::{hash_function::HashFunction, utils::xor_blocks},
 };
 
 pub struct BinaryGarbler<'a, H: HashFunction, R: RngCore + CryptoRng> {
@@ -145,7 +147,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         self.cache.clone()
     }
 
-    pub fn garble(&mut self, circ: BinaryCircuit) -> Result<GarbleOutput, String> {
+    pub fn garble(&mut self, circ: BinaryCircuit) -> Result<GarbleOutput, GarblerError> {
         let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
         let mut garbler_input_encodings: HashMap<usize, Block> = HashMap::new();
         let mut evaluator_input_encodings: HashMap<usize, Block> = HashMap::new();
@@ -162,14 +164,23 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
                     (None, input_hash)
                 }
                 BinaryGate::Constant { val } => (None, self.constant(val)?),
-                BinaryGate::Inv { xid, out } => {
-                    (out, self.negate(cache[xid].as_ref().ok_or("None")?)?)
-                }
+                BinaryGate::Inv { xid, out } => (
+                    out,
+                    self.negate(
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(GarblerError::CacheItemError(xid))?,
+                    )?,
+                ),
                 BinaryGate::Xor { xid, yid, out } => (
                     out,
                     self.xor(
-                        cache[xid].as_ref().ok_or("None")?,
-                        cache[yid].as_ref().ok_or("None")?,
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(GarblerError::CacheItemError(xid))?,
+                        cache[yid]
+                            .as_ref()
+                            .ok_or(GarblerError::CacheItemError(yid))?,
                     )?,
                 ),
                 BinaryGate::And {
@@ -180,8 +191,12 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
                 } => (
                     out,
                     self.and(
-                        cache[xid].as_ref().ok_or("None")?,
-                        cache[yid].as_ref().ok_or("None")?,
+                        cache[xid]
+                            .as_ref()
+                            .ok_or(GarblerError::CacheItemError(xid))?,
+                        cache[yid]
+                            .as_ref()
+                            .ok_or(GarblerError::CacheItemError(yid))?,
                     )?,
                 ),
             };
@@ -189,7 +204,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         }
         let mut decoding_infos: HashMap<usize, u8> = HashMap::new();
         for r in circ.get_output_gate_ids().iter() {
-            let x = cache[*r].as_ref().ok_or("None")?;
+            let x = cache[*r].as_ref().ok_or(GarblerError::CacheItemError(*r))?;
             let dec = self.get_decoding(*x);
             decoding_infos.insert(*r, dec);
         }
@@ -205,7 +220,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
 impl<'a, H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for BinaryGarbler<'a, H, R> {
     type Item = Block;
 
-    fn constant(&mut self, x: u16) -> Result<Self::Item, String> {
+    fn constant(&mut self, x: u16) -> Result<Self::Item, ExecutionPrimitiveError> {
         let zerowire = self.zero();
         let mut newwire = zerowire;
         if x == 1 {
@@ -215,7 +230,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for Binary
         Ok(zerowire)
     }
 
-    fn output(&mut self, x: &Self::Item) -> Result<Option<Self::Item>, String> {
+    fn output(&mut self, x: &Self::Item) -> Result<Option<Self::Item>, ExecutionPrimitiveError> {
         let i = self.get_next_output_index().to_le_bytes();
         let delta = self.delta;
         let xhash = self.hash.tccr_hash(*x, i);
@@ -225,13 +240,21 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for Binary
         Ok(Some(xhash))
     }
 
-    fn process_garbler_input(&mut self, _id: usize, _x: bool) -> Result<Self::Item, String> {
+    fn process_garbler_input(
+        &mut self,
+        _id: usize,
+        _x: bool,
+    ) -> Result<Self::Item, ExecutionPrimitiveError> {
         let mut randval = [0u8; 16];
         self.rng.fill_bytes(&mut randval);
         Ok(randval)
     }
 
-    fn process_evaluator_input(&mut self, _id: usize, _x: bool) -> Result<Self::Item, String> {
+    fn process_evaluator_input(
+        &mut self,
+        _id: usize,
+        _x: bool,
+    ) -> Result<Self::Item, ExecutionPrimitiveError> {
         let mut randval = [0u8; 16];
         self.rng.fill_bytes(&mut randval);
         Ok(randval)
@@ -239,19 +262,19 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for Binary
 }
 
 impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryOperations for BinaryGarbler<'a, H, R> {
-    fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, String> {
+    fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, BinaryOperationsError> {
         let output = xor_blocks(*x, *y);
         Ok(output)
     }
 
-    fn and(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, String> {
+    fn and(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, BinaryOperationsError> {
         let garble_and_gate_op = self.garble_and_gate(*x, *y);
         self.cache.push(garble_and_gate_op.t_gen);
         self.cache.push(garble_and_gate_op.t_eval);
         Ok(garble_and_gate_op.out)
     }
 
-    fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, String> {
+    fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, BinaryOperationsError> {
         let d = self.delta;
         self.xor(&d, x)
     }
