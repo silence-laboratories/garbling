@@ -1,27 +1,57 @@
+/// Represents a binary gate in a Boolean circuit.
+///
+/// Each variant corresponds to a different type of gate that
+/// can appear in a circuit.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BinaryGate {
-    GarblerInput {
-        id: usize,
-    },
-    EvaluatorInput {
-        id: usize,
-    },
-    Constant {
-        val: u16,
-    },
+    /// Represents an input gate for the garbler (party 1).
+    ///
+    /// # Fields
+    /// * `id` - The unique identifier of the garbler's input gate.
+    GarblerInput { id: usize },
+
+    /// Represents an input gate for the evaluator (party 2).
+    ///
+    /// # Fields
+    /// * `id` - The unique identifier of the evaluator's input gate.
+    EvaluatorInput { id: usize },
+
+    /// Represents a constant value gate.
+    ///
+    /// # Fields
+    /// * `val` - The constant value stored in the gate.
+    Constant { val: u16 },
+
+    /// Represents an XOR gate, which performs a bitwise XOR operation.
+    ///
+    /// # Fields
+    /// * `xid` - The ID of the first input wire.
+    /// * `yid` - The ID of the second input wire.
+    /// * `out` - The optional ID of the output wire.
     Xor {
         xid: usize,
         yid: usize,
         out: Option<usize>,
     },
+
+    /// Represents an AND gate, which performs a bitwise AND operation.
+    ///
+    /// # Fields
+    /// * `xid` - The ID of the first input wire.
+    /// * `yid` - The ID of the second input wire.
+    /// * `id` - The unique identifier for this AND gate (used for garbling).
+    /// * `out` - The optional ID of the output wire.
     And {
         xid: usize,
         yid: usize,
         id: usize,
         out: Option<usize>,
     },
-    Inv {
-        xid: usize,
-        out: Option<usize>,
-    },
+
+    /// Represents an inverter (NOT gate), which negates a bit.
+    ///
+    /// # Fields
+    /// * `xid` - The ID of the input wire.
+    /// * `out` - The optional ID of the output wire.
+    Inv { xid: usize, out: Option<usize> },
 }

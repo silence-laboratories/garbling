@@ -10,6 +10,13 @@ use crate::{
     utilities::{hash_function::HashFunction, utils::xor_blocks},
 };
 
+/// Represents the evaluator's state in a binary garbled circuit protocol.
+///
+/// This struct implements the evaluator's side of the protocol described in
+/// Figure 2 of <https://eprint.iacr.org/2014/756.pdf>.
+///
+/// # Type Parameters
+/// * `H` - A cryptographic hash function that implements the `HashFunction` trait.
 #[derive(Clone)]
 pub struct BinaryEvaluator<H: HashFunction> {
     garbler_encoding: HashMap<usize, Block>,
@@ -22,7 +29,19 @@ pub struct BinaryEvaluator<H: HashFunction> {
     pub currentcacheindex: usize,
 }
 
+/// Implementation of the `BinaryEvaluator` struct.
+/// This provides methods for evaluating garbled binary circuits and decoding garbled outputs.
 impl<H: HashFunction> BinaryEvaluator<H> {
+    /// Creates a new `BinaryEvaluator` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `hash` - A cryptographic hash function used for wire label generation.
+    /// * `rng` - A mutable reference to a random number generator that implements `RngCore` and `CryptoRng`.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `BinaryGarbler` with initialized values.
     pub fn new(
         garbler_encoding: HashMap<usize, Block>,
         evaluator_encoding: HashMap<usize, Block>,

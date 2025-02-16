@@ -4,13 +4,41 @@ use crate::{
     garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
 };
 
+/// A struct representing a plaintext simulation of a `BinaryCircuit`.
+///
+/// This is used to evaluate the circuit without any cryptographic operations,
+/// allowing for correctness testing and debugging.
 pub struct BinaryPlaintext;
 
+/// Implementation of the `BinaryPlaintext` struct.
+/// This provides methods for initializing and evaluating binary circuits on provided inputs.
 impl BinaryPlaintext {
+
+    /// Creates a new instance of `BinaryPlaintext`.
+    ///
+    /// # Returns
+    /// 
+    /// A new `BinaryPlaintext` instance.
     pub fn new() -> Self {
         BinaryPlaintext {}
     }
 
+    /// Evaluates a `BinaryCircuit` using plaintext values.
+    ///
+    /// This function takes a `BinaryCircuit` along with garbler and evaluator
+    /// inputs, processes the gates sequentially, and returns the output values.
+    ///
+    /// # Arguments
+    ///
+    /// * `circ` - The `BinaryCircuit` to evaluate.
+    /// * `garbler_inputs` - A slice of boolean values representing the garbler's input.
+    /// * `evaluator_inputs` - A slice of boolean values representing the evaluator's input.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing:
+    /// - `Ok(Vec<bool>)` - The evaluated output of the circuit as a vector of boolean values.
+    /// - `Err(BinaryPlaintextError)` - An error if the evaluation fails.
     pub fn evaluate(
         &mut self,
         circ: BinaryCircuit,
@@ -92,23 +120,58 @@ impl BinaryPlaintext {
     }
 }
 
+/// Implements the `Default` trait for `BinaryPlaintext`.
 impl Default for BinaryPlaintext {
     fn default() -> Self {
         Self::new()
     }
 }
 
+/// Implements the `ExecutionPrimitives` trait for `BinaryPlaintext`.
 impl ExecutionPrimitives for BinaryPlaintext {
+    /// The type of values used in the circuit. In this case, `bool` represents plaintext binary values.
     type Item = bool;
 
+    /// Processes a constant gate and coverts it to a boolean.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - A `u16` value representing the constant.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(true)` if `x` is nonzero.
+    /// * `Ok(false)` if `x` is zero.
+    /// * `Err(ExecutionPrimitiveError)` if an error occurs.
     fn constant(&mut self, x: u16) -> Result<Self::Item, ExecutionPrimitiveError> {
         Ok(x != 0)
     }
 
+    /// Outputs a value from the circuit.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - A reference to the boolean value to be output.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Some(x))` - The output value wrapped in an `Option<bool>`.
+    /// * `Err(ExecutionPrimitiveError)` if an error occurs.
     fn output(&mut self, x: &Self::Item) -> Result<Option<bool>, ExecutionPrimitiveError> {
         Ok(Some(*x))
     }
 
+    /// Processes an input value from the garbler.
+    ///
+    /// # Arguments
+    ///
+    /// * `_id` - The identifier for the garbler input (unused in plaintext simulation).
+    /// * `x` - The boolean value provided as input.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(x)` - The input value is passed through directly.
+    /// * `Err(ExecutionPrimitiveError)` if an error occurs.
     fn process_garbler_input(
         &mut self,
         _id: usize,
@@ -117,6 +180,17 @@ impl ExecutionPrimitives for BinaryPlaintext {
         Ok(x)
     }
 
+    /// Processes an input value from the evaluator.
+    ///
+    /// # Arguments
+    ///
+    /// * `_id` - The identifier for the evaluator input (unused in plaintext simulation).
+    /// * `x` - The boolean value provided as input.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(x)` - The input value is passed through directly.
+    /// * `Err(ExecutionPrimitiveError)` if an error occurs.
     fn process_evaluator_input(
         &mut self,
         _id: usize,
@@ -126,15 +200,48 @@ impl ExecutionPrimitives for BinaryPlaintext {
     }
 }
 
+/// Implements the `ExecutionPrimitives` trait for `BinaryPlaintext`.
 impl BinaryOperations for BinaryPlaintext {
+    /// Processes the XOR gate in plaintext given two boolean values.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - A reference to the first boolean operand.
+    /// * `y` - A reference to the second boolean operand.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(x ^ y)` - The result of `x XOR y`.
+    /// * `Err(BinaryOperationsError)` if an error occurs.
     fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, BinaryOperationsError> {
         Ok(x ^ y)
     }
 
+    /// Processes the AND gate in plaintext given two boolean values.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - A reference to the first boolean operand.
+    /// * `y` - A reference to the second boolean operand.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(x & y)` - The result of `x AND y`.
+    /// * `Err(BinaryOperationsError)` if an error occurs.
     fn and(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, BinaryOperationsError> {
         Ok(x & y)
     }
 
+    /// Processes the NOT (negation) gate in plaintext given a boolean value.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - A reference to the boolean operand.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(!x)` - The result of `NOT x`.
+    /// * `Err(BinaryOperationsError)` if an error occurs.
     fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, BinaryOperationsError> {
         Ok(!x)
     }

@@ -4,18 +4,51 @@ use std::io::{BufRead, BufReader};
 use crate::circuitop::gate::BinaryGate;
 use crate::config::errors::FileParsingError;
 
+/// Represents a binary circuit composed of various logic gates.
+/// This struct keeps track of gates, inputs, outputs, and metadata
+/// required for evaluation and is mainly used for garbling circuits.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BinaryCircuit {
+    /// A list of all gates in the circuit.
     pub gates: Vec<BinaryGate>,
+
+    /// A list of gate IDs corresponding to the garbler's input wires.
     pub garbler_input_ids: Vec<usize>,
+
+    /// A list of gate IDs corresponding to the evaluator's input wires.
     pub evaluator_input_ids: Vec<usize>,
+
+    /// A list of gate IDs corresponding to the circuit's output wires.
     pub output_gate_ids: Vec<usize>,
+
+    /// A list of gate IDs corresponding to constant values in the circuit.
     pub constant_gate_ids: Vec<usize>,
+
+    /// The number of non-free (i.e., AND) gates in the circuit.
+    /// This is used to track the complexity of garbled circuit evaluation.
     pub num_nonfree_gates: usize,
+
+    /// The total number of wires used in the circuit.
+    /// This includes inputs, outputs, and intermediate wires.
     pub num_wires: usize,
 }
 
+/// Implementation of the `BinaryCircuit` struct.
+/// This provides methods for constructing, modifying, and parsing binary circuits.
 impl BinaryCircuit {
+    /// Parses a circuit definition from a file in the Bristol Fashion format.
+    ///
+    /// The Bristol Fashion format is a standard plaintext representation of
+    /// boolean circuits, commonly used in secure computation protocols.
+    /// More details can be found at:  
+    /// <https://nigelsmart.github.io/MPC-Circuits/>
+    ///
+    /// # Arguments
+    /// * `file_name` - A string slice representing the path to the circuit file.
+    ///
+    /// # Returns
+    /// * `Ok(Self)` if the file is successfully parsed into a `BinaryCircuit`.
+    /// * `Err(FileParsingError)` if there is an issue reading or parsing the file.
     pub fn parse(file_name: &str) -> Result<Self, FileParsingError> {
         let file = File::open(file_name)?;
         let mut reader = BufReader::new(file).lines();
@@ -155,6 +188,13 @@ impl BinaryCircuit {
         Ok(output_circuit)
     }
 
+    /// Creates a new `BinaryCircuit` with a specified number of gates.
+    ///
+    /// # Arguments
+    /// * `ngates` - The expected number of gates in the circuit.
+    ///
+    /// # Returns
+    /// * A new `BinaryCircuit` instance with preallocated space for gates.
     pub fn new(ngates: usize) -> Self {
         let gates: Vec<BinaryGate> = Vec::with_capacity(ngates);
         Self {
@@ -168,54 +208,100 @@ impl BinaryCircuit {
         }
     }
 
+    /// Adds a new gate to the circuit.
+    ///
+    /// # Arguments
+    /// * `gate` - A `BinaryGate` representing the gate to be added.
     pub fn push_gate(&mut self, gate: BinaryGate) {
         self.gates.push(gate);
     }
 
+    /// Adds an output gate ID to the circuit.
+    ///
+    /// # Arguments
+    /// * `output_gate_id` - The ID of the output gate.
     pub fn push_output_gate(&mut self, output_gate_id: usize) {
         self.output_gate_ids.push(output_gate_id);
     }
 
+    /// Adds a constant gate ID to the circuit.
+    ///
+    /// # Arguments
+    /// * `constant_gate_id` - The ID of the constant gate.
     pub fn push_constant_gate(&mut self, constant_gate_id: usize) {
         self.constant_gate_ids.push(constant_gate_id);
     }
 
+    /// Adds a garbler input gate ID to the circuit.
+    ///
+    /// # Arguments
+    /// * `garbler_input_id` - The ID of the garbler input gate.
     pub fn push_garbler_input(&mut self, garbler_input_id: usize) {
         self.garbler_input_ids.push(garbler_input_id);
     }
 
+    /// Adds an evaluator input gate ID to the circuit.
+    ///
+    /// # Arguments
+    /// * `evaluator_input_id` - The ID of the evaluator input gate.
     pub fn push_evaluator_input(&mut self, evaluator_input_id: usize) {
         self.evaluator_input_ids.push(evaluator_input_id);
     }
 
+    /// Returns a reference to the list of output gate IDs.
+    ///
+    /// # Returns
+    /// * A slice containing the IDs of all output gates in the circuit.
     pub fn get_output_gate_ids(&self) -> &[usize] {
         &self.output_gate_ids
     }
 
+    /// Returns a reference to the list of garbler input gate IDs.
+    ///
+    /// # Returns
+    /// * A slice containing the IDs of all garbler input gates.
     pub fn get_garbler_input_ids(&self) -> &[usize] {
         &self.garbler_input_ids
     }
 
+    /// Returns a reference to the list of evaluator input gate IDs.
+    ///
+    /// # Returns
+    /// * A slice containing the IDs of all evaluator input gates.
     pub fn get_evaluator_input_ids(&self) -> &[usize] {
         &self.evaluator_input_ids
     }
 
+    /// Increments the count of non-free (AND) gates in the circuit.
     pub fn increment_nonfree_gates(&mut self) {
         self.num_nonfree_gates += 1;
     }
 
+    /// Returns the number of non-free (AND) gates in the circuit.
+    ///
+    /// # Returns
+    /// * The number of non-free gates.
     pub fn get_num_nonfree_gates(&self) -> usize {
         self.num_nonfree_gates
     }
 
+    /// Returns the number of garbler input gates in the circuit.
+    ///
+    /// # Returns
+    /// * The total count of garbler input gates.
     pub fn num_garbler_inputs(&self) -> usize {
         self.get_garbler_input_ids().len()
     }
 
+    /// Returns the number of evaluator input gates in the circuit.
+    ///
+    /// # Returns
+    /// * The total count of evaluator input gates.
     pub fn num_evaluator_inputs(&self) -> usize {
         self.get_evaluator_input_ids().len()
     }
 
+    /// Prints a textual representation of the circuit.
     pub fn print_circuit(&self) {
         for gate in self.gates.iter() {
             match *gate {
