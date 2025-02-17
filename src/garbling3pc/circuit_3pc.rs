@@ -10,7 +10,24 @@ use crate::{
 
 use super::threepartytraits::ThreePartyBinaryCircuit;
 
+/// Implements the `ThreePartyBinaryCircuit` trait for `BinaryCircuit`.
 impl ThreePartyBinaryCircuit for BinaryCircuit {
+    /// Parses a circuit definition from a file in the Bristol Fashion format
+    /// to the format required for the three-party garbled-circuit protocol.
+    /// Supports the fact that the evaluator's input is now doubled, and the xor 
+    /// of every pair of these inputs form the original evaluator's input. 
+    ///
+    /// The Bristol Fashion format is a standard plaintext representation of
+    /// boolean circuits, commonly used in secure computation protocols.
+    /// More details can be found at:  
+    /// <https://nigelsmart.github.io/MPC-Circuits/>
+    ///
+    /// # Arguments
+    /// * `file_name` - A string slice representing the path to the circuit file.
+    ///
+    /// # Returns
+    /// * `Ok(Self)` if the file is successfully parsed into a `BinaryCircuit`.
+    /// * `Err(FileParsingError)` if there is an issue reading or parsing the file.
     fn parse_threeparty(file_name: &str) -> Result<Self, FileParsingError> {
         let file = File::open(file_name)?;
         let mut reader = BufReader::new(file).lines();
@@ -100,10 +117,7 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
                 out: Some(num_garbler_inputs + 3 * i + 2),
             });
         }
-
-        // for i in 0..num_evaluator_inputs {
-        // }
-
+        
         num_wires += 2 * num_evaluator_inputs;
 
         for i in 0..num_outputs {

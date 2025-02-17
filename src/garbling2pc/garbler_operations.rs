@@ -30,7 +30,7 @@ pub struct BinaryGarbler<'a, H: HashFunction, R: RngCore + CryptoRng> {
     /// A reference to a random number generator providing cryptographic randomness.
     pub rng: &'a mut R,
 
-    /// A cache storing precomputed values while garbling.
+    /// A cache storing computed values while garbling.
     pub cache: Vec<Block>,
 
     /// A counter for uniquely indexing gates in the garbled circuit.
@@ -306,6 +306,20 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         self.cache.clone()
     }
 
+    /// Returns the garbled version of the garbler's inputs.
+    ///
+    /// # Arguments
+    ///
+    /// * `circ` - A `BinaryCircuit` whose garbled input gates are evaluated.
+    /// * `garbler_inputs` - A slice of `bool` containing the garbler's input values in 
+    ///   the order of the garbler's input ids. 
+    /// * `garbler_input_encodings` - A `HashMap<usize, Block>` which maps the garbler's input ids 
+    ///   to the correspoding encodings of `false` values, as per the Free-XOR technique.
+    /// 
+    /// # Returns
+    ///
+    /// A `HashMap<usize, Block>` which maps the garbler's input ids 
+    /// to the correspoding encoded garbler's inputs.
     pub fn get_garbled_inputs(
         &self,
         circ: BinaryCircuit,
@@ -418,7 +432,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
 
 /// Implements the `ExecutionPrimitives` trait for `BinaryGarbler`.
 impl<'a, H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for BinaryGarbler<'a, H, R> {
-    /// The type of values used in the circuit. In this case, `Block`
+    /// The type of values used in the garbled circuit. In this case, `Block`
     /// is used to represent the types used and stored in the garbled circuit.
     type Item = Block;
 
@@ -509,6 +523,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for Binary
     }
 }
 
+/// Implements the `BinaryOperations` trait for `BinaryGarbler`.
 impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryOperations for BinaryGarbler<'a, H, R> {
     /// Processes the XOR gate for the garbler.
     ///

@@ -2,13 +2,18 @@ use crate::circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder, 
 
 use super::threepartytraits::ThreePartyBinaryCircuitBuilder;
 
+/// Implements the `ThreePartyBinaryCircuitBuilder` trait for `CircuitBuilder<BinaryCircuit>`.
 impl ThreePartyBinaryCircuitBuilder for CircuitBuilder<BinaryCircuit> {
+    /// Retrieves the next available input ID for the evaluator
+    /// and increments the counter by 2.
     fn get_next_evaluator_input_id_threeparty(&mut self) -> usize {
         let current = self.next_evaluator_input_id;
         self.next_evaluator_input_id += 2;
         current
     }
 
+    /// Adds two new evaluator input gates and an xor gate between
+    /// them to the circuit. Returns the reference ID of the created xor gate.
     fn evaluator_input_threeparty(&mut self) -> usize {
         let id = self.get_next_evaluator_input_id_threeparty();
         let r = self.gate(BinaryGate::EvaluatorInput { id });
@@ -18,10 +23,11 @@ impl ThreePartyBinaryCircuitBuilder for CircuitBuilder<BinaryCircuit> {
         self.xor(r, s)
     }
 
+    /// Calls `evaluator_input_threeparty` `number_of_inputs` times.
     fn evaluator_inputs_threeparty(&mut self, number_of_inputs: u16) -> Vec<usize> {
         let mut output: Vec<usize> = Vec::new();
         for _i in 0..number_of_inputs {
-            output.push(self.evaluator_input());
+            output.push(self.evaluator_input_threeparty());
         }
         output
     }

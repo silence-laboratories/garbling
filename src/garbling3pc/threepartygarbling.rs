@@ -18,75 +18,179 @@ use crate::{
 
 use super::threepartytraits::ThreePartyBinaryGarbler;
 
+/// Type for the three-party garbled-circuit protocol's message 1
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThreePGMsg1 {
+    /// x3 for P1 and x4 for P3.
     pub x: Vec<bool>,
+
+    /// Common random string for instantiating commitments.
     pub comm_crs: Block,
 }
 
+/// Abstract type for the three-party garbled-circuit protocol's message 1
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThreePGMsg1Abs {
+    /// Msg1 to be sent from P3 to P1.
     pub p1_data: ThreePGMsg1,
+
+    /// Msg1 to be sent from P3 to P2.
     pub p2_data: ThreePGMsg1,
 }
 
+/// Type for the three-party garbled-circuit protocol's message 3
+/// which stores random pads, garbled circuits and commitments.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThreePGMsg3Coms {
+    /// Random pads for P3's inputs.
     pub b_values: Vec<bool>,
+
+    /// Garbled Circuit.
     pub gc: Vec<Block>,
+
+    /// Global delta value for the Free-XOR technique.
     pub delta: Block,
+
+    /// Commitments generated on P1's inputs.
     pub p1_commitments: HashMap<(usize, usize), Block>,
+
+    /// Commitments generated on P2's inputs.
     pub p2_commitments: HashMap<(usize, usize), Block>,
+
+    /// Commitments generated on P3's inputs.
     pub p3_commitments: HashMap<(usize, usize), Block>,
 }
 
+/// Type for the three-party garbled-circuit protocol's message 3
+/// which stores decommitments.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThreePGMsg3Decoms {
+    /// Decommitments generated on P1's inputs by
+    /// P1 and P2's inputs by P2.
     pub x12_decom: Vec<(Block, Block)>,
+
+    /// Decommitments generated on x3 by P1 and x4 by P2.
     pub x34_decom: Vec<(Block, Block)>,
 }
 
+/// Abstract type for the three-party garbled-circuit protocol's message 3.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThreePGMsg3 {
+    /// Commitments and random values.
     pub com_vals: ThreePGMsg3Coms,
+
+    /// Decommitments.
     pub decom_vals: ThreePGMsg3Decoms,
 }
 
+/// Type for the three-party garbled-circuit protocol's message 4.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThreePGMsg4 {
+    /// Garbled output.
     garbled_op: HashMap<usize, [u8; 16]>,
 }
 
+/// Type for the three-party garbled-circuit protocol's output.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ThreePGOutput {
+    /// Output vector.
+    output: Vec<bool>,
+}
+
+/// Type for the three-party garbled-circuit protocol's state after
+/// R1 maintained by P1 and P2.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThreePGParty12StateR1 {
+    /// x3 received by P1 and x4 received by P2
     x: Vec<bool>,
+
+    /// Common random string for instantiating commitments.
     comm_crs: Block,
 }
 
+/// Type for the three-party garbled-circuit protocol's state after
+/// R1 maintained by P3.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThreePGParty3StateR1 {
+    /// x3 generated.
     x3: Vec<bool>,
+
+    /// x4 generated.
     x4: Vec<bool>,
+
+    /// Common random string for instantiating commitments.
     comm_crs: Block,
 }
 
+/// Type for the three-party garbled-circuit protocol's state after
+/// R2 maintained by all parties.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThreePGPartyStateR2 {
+    /// prf_seed used for generating all random values.
     prf_seed: Block,
 }
 
+/// Type for the three-party garbled-circuit protocol's state after
+/// R2 maintained by parties P1 and P2.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ThreePGPartyIntStateR3 {
+pub struct ThreePGParty12StateR3 {
+    /// Global delta value for the Free-XOR technique.
     delta: Block,
+    
+    /// Random pads for all inputs.
     b_vec: [Vec<bool>; 3],
-    garbling_encoding: HashMap<usize, Block>,
+
+    /// Garbled Circuit.
+    gc: Vec<Block>,
+    
+    /// Encoding of garbler's input gates, corresponding to false values
+    garbler_encoding: HashMap<usize, Block>,
+    
+    /// Encoding of evaluator's input gates, corresponding to false values
     evaluator_encoding: HashMap<usize, Block>,
+    
+    /// Decoding information of the output gates
     decoding_info: HashMap<usize, u8>,
+
+    /// Commitments generated on P1's inputs.
+    pub p1_commitments: HashMap<(usize, usize), Block>,
+
+    /// Commitments generated on P2's inputs.
+    pub p2_commitments: HashMap<(usize, usize), Block>,
+
+    /// Commitments generated on P3's inputs.
+    pub p3_commitments: HashMap<(usize, usize), Block>,
+
+    /// Commitments generated on P1's inputs.
     p1_decommitments: HashMap<(usize, usize), (Block, Block)>,
+
+    /// Commitments generated on P2's inputs.
     p2_decommitments: HashMap<(usize, usize), (Block, Block)>,
+
+    /// Commitments generated on P3's inputs.
     p3_decommitments: HashMap<(usize, usize), (Block, Block)>,
 }
 
+/// Type for the three-party garbled-circuit protocol's state after
+/// R3 maintained by party P3.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ThreePGParty3StateR3 {
+    /// msg3 sent to P3 by P1.
+    msg3_p1: ThreePGMsg3,
+
+    /// msg3 sent to P3 by P2.
+    msg3_p2: ThreePGMsg3,
+}
+
+/// Type for the three-party garbled-circuit protocol's state after
+/// R3 maintained by all parties.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ThreePGPartyStateR4 {
+    /// msg4 generated by P3 and broadcasted to all parties.
+    msg4: ThreePGMsg4,
+}
+
+/// Generates msg1 of the three-party garbled-circuit protocol, and run by P3.
 pub fn threepg_create_msg1_p3(input: &[bool], rng: &mut ThreadRng) -> ThreePGMsg1Abs {
     let comm_crs: Block = rng.gen();
     let mut x3 = Vec::new();
@@ -97,13 +201,13 @@ pub fn threepg_create_msg1_p3(input: &[bool], rng: &mut ThreadRng) -> ThreePGMsg
     for i in 0..input.len() {
         x4.push(x3[i] ^ input[i]);
     }
-    // println!("x3: {:?} x4: {:?}", x3, x4);
     ThreePGMsg1Abs {
         p1_data: ThreePGMsg1 { x: x3, comm_crs },
         p2_data: ThreePGMsg1 { x: x4, comm_crs },
     }
 }
 
+/// Processes msg1 of the three-party garbled-circuit protocol, and run by P1 and P2.
 pub fn threepg_process_msg1_p12(msg1_recv: &ThreePGMsg1) -> ThreePGParty12StateR1 {
     ThreePGParty12StateR1 {
         comm_crs: msg1_recv.comm_crs,
@@ -111,6 +215,7 @@ pub fn threepg_process_msg1_p12(msg1_recv: &ThreePGMsg1) -> ThreePGParty12StateR
     }
 }
 
+/// Processes msg1 of the three-party garbled-circuit protocol, and run by P3.
 pub fn threepg_process_msg1_p3(msg1: &ThreePGMsg1Abs) -> ThreePGParty3StateR1 {
     ThreePGParty3StateR1 {
         comm_crs: msg1.p1_data.comm_crs,
@@ -119,17 +224,20 @@ pub fn threepg_process_msg1_p3(msg1: &ThreePGMsg1Abs) -> ThreePGParty3StateR1 {
     }
 }
 
+/// Generates msg2 of the three-party garbled-circuit protocol, and run by P1.
 pub fn threepg_create_msg2_p1(rng: &mut ThreadRng) -> Block {
     let prf_seed: Block = rng.gen();
     prf_seed
 }
 
+/// Processes msg2 of the three-party garbled-circuit protocol, and run by P1 and P2.
 pub fn threepg_process_msg2_p12(prf_seed: &Block) -> ThreePGPartyStateR2 {
     ThreePGPartyStateR2 {
         prf_seed: *prf_seed,
     }
 }
 
+/// Generates and processes msg3 of the three-party garbled-circuit protocol, and run by P1.
 pub fn threepg_create_msg3_p1(
     p1_ip_nos: usize,
     p2_ip_nos: usize,
@@ -138,7 +246,7 @@ pub fn threepg_create_msg3_p1(
     p1_state_r1: &ThreePGParty12StateR1,
     prf_seed: &Block,
     circuit: &BinaryCircuit,
-) -> Result<(ThreePGMsg3, ThreePGPartyIntStateR3), String> {
+) -> Result<(ThreePGMsg3, ThreePGParty12StateR3), String> {
     let hash = AesHash::new(HASH_KEY);
     let mut rng_key: [u8; 32] = [0u8; 32];
     rng_key[..16].copy_from_slice(prf_seed);
@@ -257,7 +365,6 @@ pub fn threepg_create_msg3_p1(
             x1_decom.push(*p1_decommitments.get(&(i, 0)).unwrap());
         }
     }
-    // println!("x1_decom: {:?}\n", x1_decom);
 
     for (i, b_i) in b_vec[2].iter().enumerate().take(p3_ip_nos) {
         let val = b_i ^ p1_state_r1.x[i];
@@ -267,29 +374,32 @@ pub fn threepg_create_msg3_p1(
             x3_decom.push(*p3_decommitments.get(&(i, 0)).unwrap());
         }
     }
-    // println!("x3_decom: {:?}\n", x3_decom);
 
     Ok((
         ThreePGMsg3 {
             com_vals: ThreePGMsg3Coms {
                 b_values: b_vec[2].clone(),
-                gc: garble_output.garbled_circuit,
+                gc: garble_output.garbled_circuit.clone(),
                 delta,
-                p1_commitments,
-                p2_commitments,
-                p3_commitments,
+                p1_commitments: p1_commitments.clone(),
+                p2_commitments: p2_commitments.clone(),
+                p3_commitments: p3_commitments.clone(),
             },
             decom_vals: ThreePGMsg3Decoms {
                 x12_decom: x1_decom,
                 x34_decom: x3_decom,
             },
         },
-        ThreePGPartyIntStateR3 {
+        ThreePGParty12StateR3 {
             delta,
             b_vec,
-            garbling_encoding: garble_output.garbler_input_encodings,
+            gc: garble_output.garbled_circuit,
+            garbler_encoding: garble_output.garbler_input_encodings,
             decoding_info: garble_output.decoding_infos,
             evaluator_encoding: garble_output.evaluator_input_encodings,
+            p1_commitments,
+            p2_commitments,
+            p3_commitments,
             p1_decommitments,
             p2_decommitments,
             p3_decommitments,
@@ -297,6 +407,7 @@ pub fn threepg_create_msg3_p1(
     ))
 }
 
+/// Generates and processes msg3 of the three-party garbled-circuit protocol, and run by P2.
 pub fn threepg_create_msg3_p2(
     p1_ip_nos: usize,
     p2_ip_nos: usize,
@@ -305,7 +416,7 @@ pub fn threepg_create_msg3_p2(
     p2_state_r1: &ThreePGParty12StateR1,
     prf_seed: &Block,
     circuit: &BinaryCircuit,
-) -> Result<(ThreePGMsg3, ThreePGPartyIntStateR3), String> {
+) -> Result<(ThreePGMsg3, ThreePGParty12StateR3), String> {
     let hash = AesHash::new(HASH_KEY);
 
     let mut rng_key: [u8; 32] = [0u8; 32];
@@ -319,7 +430,6 @@ pub fn threepg_create_msg3_p2(
         return Err("Evaluator Input Size inconsistent".to_string());
     }
 
-    // println!("1 {}\n", p3_ip_nos);
     let mut rng = ChaCha8Rng::from_seed(rng_key);
     let mut garbler = BinaryGarbler::new(hash.clone(), &mut rng);
     let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
@@ -339,7 +449,6 @@ pub fn threepg_create_msg3_p2(
         b_vec[2].push(rng.gen_bool(0.5));
     }
 
-    // println!("p2 b_vec {:?}", b_vec);
 
     let hash_commit = HashCommitment::new(AesHash::new(p2_state_r1.comm_crs));
 
@@ -350,8 +459,6 @@ pub fn threepg_create_msg3_p2(
     let mut p3_commitments: HashMap<(usize, usize), Block> = HashMap::new();
     let mut p3_decommitments: HashMap<(usize, usize), (Block, Block)> = HashMap::new();
 
-    // println!("garbler input encodings: {:?}\n", garble_output.garbler_input_encodings);
-    // println!("evaluator input encodings: {:?}\n", garble_output.evaluator_input_encodings);
 
     for j in 0..p1_ip_nos {
         let g_en_j_origin = *garble_output.garbler_input_encodings.get(&j).unwrap();
@@ -367,9 +474,6 @@ pub fn threepg_create_msg3_p2(
             p1_decommitments.insert((j, a), (g_en_j, witness));
         }
     }
-
-    // println!("p1 commitments: {:?}\n", p1_commitments);
-    // println!("p1 decommitments: {:?}\n", p1_decommitments);
 
     for j in 0..p2_ip_nos {
         let g_en_j_origin = *garble_output
@@ -389,9 +493,6 @@ pub fn threepg_create_msg3_p2(
         }
     }
 
-    // println!("p2 commitments: {:?}\n", p2_commitments);
-    // println!("p2 decommitments: {:?}\n", p2_decommitments);
-
     for j in 0..p3_ip_nos {
         let e_en_j_origin = *garble_output
             .evaluator_input_encodings
@@ -403,7 +504,6 @@ pub fn threepg_create_msg3_p2(
             } else {
                 e_en_j_origin
             };
-            // println!("{} {} {:?}", j, a, e_en_j);
             let witness: Block = rng.gen();
             let commitment = hash_commit.commit(e_en_j, witness);
             p3_commitments.insert((j, a), commitment);
@@ -422,16 +522,12 @@ pub fn threepg_create_msg3_p2(
             } else {
                 e_en_j_origin
             };
-            // println!("{} {} {:?}", p3_ip_nos + j, a, e_en_j);
             let witness: Block = rng.gen();
             let commitment = hash_commit.commit(e_en_j, witness);
             p3_commitments.insert((p3_ip_nos + j, a), commitment);
             p3_decommitments.insert((p3_ip_nos + j, a), (e_en_j, witness));
         }
     }
-
-    // println!("p3 commitments: {:?}\n", p3_commitments);
-    // println!("p3 decommitments: {:?}\n", p3_decommitments);
 
     let mut x2_decom: Vec<(Block, Block)> = Vec::new();
     let mut x4_decom: Vec<(Block, Block)> = Vec::new();
@@ -448,8 +544,6 @@ pub fn threepg_create_msg3_p2(
         }
     }
 
-    // println!("x2_decom {:?}\n", x2_decom);
-
     for i in 0..p3_ip_nos {
         let val = b_vec[2][p3_ip_nos + i] ^ p2_state_r1.x[i];
         if val {
@@ -459,29 +553,31 @@ pub fn threepg_create_msg3_p2(
         }
     }
 
-    // println!("x4_decom {:?}\n", x4_decom);
-
     Ok((
         ThreePGMsg3 {
             com_vals: ThreePGMsg3Coms {
                 b_values: b_vec[2].clone(),
-                gc: garble_output.garbled_circuit,
+                gc: garble_output.garbled_circuit.clone(),
                 delta,
-                p1_commitments,
-                p2_commitments,
-                p3_commitments,
+                p1_commitments: p1_commitments.clone(),
+                p2_commitments: p2_commitments.clone(),
+                p3_commitments: p3_commitments.clone(),
             },
             decom_vals: ThreePGMsg3Decoms {
                 x12_decom: x2_decom,
                 x34_decom: x4_decom,
             },
         },
-        ThreePGPartyIntStateR3 {
+        ThreePGParty12StateR3 {
             delta,
             b_vec,
-            garbling_encoding: garble_output.garbler_input_encodings,
+            gc: garble_output.garbled_circuit,
+            garbler_encoding: garble_output.garbler_input_encodings,
             decoding_info: garble_output.decoding_infos,
             evaluator_encoding: garble_output.evaluator_input_encodings,
+            p1_commitments,
+            p2_commitments,
+            p3_commitments,
             p1_decommitments,
             p2_decommitments,
             p3_decommitments,
@@ -489,75 +585,75 @@ pub fn threepg_create_msg3_p2(
     ))
 }
 
-pub fn threepg_create_msg4_p3(
-    state_r1: &ThreePGParty3StateR1,
+/// Processes msg3 of the three-party garbled-circuit protocol, and run by P3.
+pub fn threepg_process_msg3_p3(
     msg3_recv_p1: &ThreePGMsg3,
     msg3_recv_p2: &ThreePGMsg3,
+) -> ThreePGParty3StateR3 {
+    ThreePGParty3StateR3 {
+        msg3_p1: msg3_recv_p1.clone(),
+        msg3_p2: msg3_recv_p2.clone(),
+    }
+}
+
+/// Generates msg4 of the three-party garbled-circuit protocol, and run by P3.
+pub fn threepg_create_msg4_p3(
+    state_r1: &ThreePGParty3StateR1,
+    state_r3: &ThreePGParty3StateR3,
     circuit: &BinaryCircuit,
 ) -> Option<ThreePGMsg4> {
-    if msg3_recv_p1.com_vals != msg3_recv_p2.com_vals {
+    if state_r3.msg3_p1.com_vals != state_r3.msg3_p2.com_vals {
         return None;
     }
 
     let commitment = HashCommitment::new(AesHash::new(state_r1.comm_crs));
 
-    let p1_ip_nos = msg3_recv_p1.com_vals.p1_commitments.len() / 2;
-    let p2_ip_nos = msg3_recv_p1.com_vals.p2_commitments.len() / 2;
-    let p3_ip_nos = msg3_recv_p1.com_vals.p3_commitments.len() / 4;
+    let p1_ip_nos = state_r3.msg3_p1.com_vals.p1_commitments.len() / 2;
+    let p2_ip_nos = state_r3.msg3_p1.com_vals.p2_commitments.len() / 2;
+    let p3_ip_nos = state_r3.msg3_p1.com_vals.p3_commitments.len() / 4;
 
-    // println!("2 {}\n", p3_ip_nos);
     let mut garbled_garbler_inputs: HashMap<usize, Block> =
         HashMap::with_capacity(p1_ip_nos + p2_ip_nos);
     let mut garbled_evaluator_inputs: HashMap<usize, Block> = HashMap::with_capacity(p3_ip_nos);
     let mut garbled_evaluator_inputs_2: HashMap<usize, Block> = HashMap::with_capacity(p3_ip_nos);
 
-    let comm = &msg3_recv_p1.com_vals.p1_commitments;
-    let decom = &msg3_recv_p1.decom_vals.x12_decom;
+    let comm = &state_r3.msg3_p1.com_vals.p1_commitments;
+    let decom = &state_r3.msg3_p1.decom_vals.x12_decom;
     for (i, decom_i) in decom.iter().enumerate().take(p1_ip_nos) {
         let (message, witness) = decom_i;
         let mut comt = *comm.get(&(i, 0)).unwrap();
         if commitment.verify(*message, *witness, comt) {
             garbled_garbler_inputs.insert(i, *message);
-            // println!("1 0");
         } else {
             comt = *comm.get(&(i, 1)).unwrap();
             if commitment.verify(*message, *witness, comt) {
                 garbled_garbler_inputs.insert(i, *message);
-                // println!("1 1");
             } else {
                 return None;
             }
         }
     }
 
-    // println!("x2");
-    // println!("x2_decom {:?}\n", msg3_recv_p2.decom_vals.x12_decom);
-
-    let comm = &msg3_recv_p1.com_vals.p2_commitments;
-    let decom = &msg3_recv_p2.decom_vals.x12_decom;
+    let comm = &state_r3.msg3_p1.com_vals.p2_commitments;
+    let decom = &state_r3.msg3_p2.decom_vals.x12_decom;
     for (i, decom_i) in decom.iter().enumerate().take(p2_ip_nos) {
         let (message, witness) = decom_i;
         let mut comt = *comm.get(&(i, 0)).unwrap();
         if commitment.verify(*message, *witness, comt) {
             garbled_garbler_inputs.insert(p1_ip_nos + i, *message);
-            // println!("2 0");
         } else {
             comt = *comm.get(&(i, 1)).unwrap();
             if commitment.verify(*message, *witness, comt) {
                 garbled_garbler_inputs.insert(p1_ip_nos + i, *message);
-                // println!("2 1");
             } else {
                 return None;
             }
         }
     }
 
-    // println!("garbled garbler inputs: {:?}\n", garbled_garbler_inputs);
-    // println!("x3");
-
-    let comm = &msg3_recv_p1.com_vals.p3_commitments;
-    let decom = &msg3_recv_p1.decom_vals.x34_decom;
-    let bvals = &msg3_recv_p1.com_vals.b_values;
+    let comm = &state_r3.msg3_p1.com_vals.p3_commitments;
+    let decom = &state_r3.msg3_p1.decom_vals.x34_decom;
+    let bvals = &state_r3.msg3_p1.com_vals.b_values;
     let x3 = &state_r1.x3;
     for i in 0..p3_ip_nos {
         let aval = bvals[i] ^ x3[i];
@@ -568,16 +664,13 @@ pub fn threepg_create_msg4_p3(
         }
         if commitment.verify(message, witness, comt) {
             garbled_evaluator_inputs.insert(i, message);
-            // println!("3 0");
         } else {
             return None;
         }
     }
 
-    // println!("x4");
-
-    let comm = &msg3_recv_p2.com_vals.p3_commitments;
-    let decom = &msg3_recv_p2.decom_vals.x34_decom;
+    let comm = &state_r3.msg3_p2.com_vals.p3_commitments;
+    let decom = &state_r3.msg3_p2.decom_vals.x34_decom;
     let x4 = &state_r1.x4;
     for i in 0..p3_ip_nos {
         let aval = bvals[i + p3_ip_nos] ^ x4[i];
@@ -588,28 +681,20 @@ pub fn threepg_create_msg4_p3(
         }
         if commitment.verify(message, witness, comt) {
             garbled_evaluator_inputs_2.insert(i, message);
-            // println!("4 0");
         } else {
             return None;
         }
     }
 
-    // println!("garbled evaluator inputs: {:?}\n", garbled_evaluator_inputs);
-    // println!("garbled evaluator inputs 2: {:?}\n", garbled_evaluator_inputs_2);
-
     let hash = AesHash::new(HASH_KEY);
     let mut eval = BinaryEvaluator::new(
         HashMap::new(),
         HashMap::new(),
-        msg3_recv_p1.com_vals.delta,
+        state_r3.msg3_p1.com_vals.delta,
         hash,
-        msg3_recv_p1.com_vals.gc.clone(),
+        state_r3.msg3_p1.com_vals.gc.clone(),
     );
-
-    // println!(
-    //     "garb: {:?}\ngarb2: {:?}",
-    //     garbled_evaluator_inputs, garbled_evaluator_inputs_2
-    // );
+    
     let dec = eval
         .garbled_evaluate_threeparty(
             circuit.clone(),
@@ -617,45 +702,47 @@ pub fn threepg_create_msg4_p3(
             [garbled_evaluator_inputs, garbled_evaluator_inputs_2],
         )
         .unwrap();
-    // let op = eval.get_plaintext_output(circuit.get_output_gate_ids().to_vec(), dec.clone());
-
-    // // println!("op: {:?} ", op);
 
     Some(ThreePGMsg4 { garbled_op: dec })
 }
 
-pub fn threepg_process_msg4_p12(
-    msg4_recv: &ThreePGMsg4,
-    msg3: &ThreePGMsg3,
+/// Processes msg4 of the three-party garbled-circuit protocol, and run by all parties.
+pub fn threepg_process_msg4(msg4_recv: &ThreePGMsg4) -> ThreePGPartyStateR4 {
+    ThreePGPartyStateR4 {
+        msg4: msg4_recv.clone(),
+    }
+}
+
+/// Generates the output of the three-party garbled-circuit protocol, and run by P1 and P2.
+pub fn threepg_create_msg5_p12(
+    state_r4: &ThreePGPartyStateR4,
     circuit: &BinaryCircuit,
-    int_r3: &ThreePGPartyIntStateR3,
-) -> Vec<bool> {
+    state_r3: &ThreePGParty12StateR3,
+) -> ThreePGOutput {
     let hash = AesHash::new(HASH_KEY);
     let eval = BinaryEvaluator::new(
-        int_r3.evaluator_encoding.clone(),
-        int_r3.decoding_info.clone(),
-        int_r3.delta,
+        state_r3.evaluator_encoding.clone(),
+        state_r3.decoding_info.clone(),
+        state_r3.delta,
         hash,
-        msg3.com_vals.gc.clone(),
+        state_r3.gc.clone(),
     );
     let op = eval.get_plaintext_output(
         circuit.get_output_gate_ids().to_vec(),
-        msg4_recv.garbled_op.clone(),
+        state_r4.msg4.garbled_op.clone(),
     );
 
-    op
+    ThreePGOutput{ output: op}
 }
 
-// pub fn threepg_soft_decode(msg4: &ThreePGMsg4, circuit: &BinaryCircuit) {
-//     let mut output = Vec::new();
-//     for gate in circuit.get_output_gate_ids() {
-//         if let Some(x) = msg4.garbled_op.get(gate) {
-//             output.push(x[0] != 0);
-//         }
-//     }
-
-//     println!("output: {:?}", output);
-// }
+/// Processes and generates the output of the three-party garbled-circuit protocol, and run by P3.
+pub fn threepg_process_output_p3(
+    out_recv_p1: &ThreePGOutput,
+    out_recv_p2: &ThreePGOutput,
+) -> ThreePGOutput {
+    assert_eq!(out_recv_p1.output, out_recv_p2.output);
+    out_recv_p1.clone()
+}
 
 pub fn test_run_3party_garbling(
     circuit: &BinaryCircuit,
@@ -674,6 +761,7 @@ pub fn test_run_3party_garbling(
     let msg1_p3 = threepg_create_msg1_p3(input_p3, &mut rng_comm);
 
     // P3 sends msg1_p3.p1_data and msg1_p3.p2_data to P1 and P2 respectively
+
     let state_r1_p1 = threepg_process_msg1_p12(&msg1_p3.p1_data);
     let state_r1_p2 = threepg_process_msg1_p12(&msg1_p3.p2_data);
     let state_r1_p3 = threepg_process_msg1_p3(&msg1_p3);
@@ -683,12 +771,13 @@ pub fn test_run_3party_garbling(
     let prf_seed_p1 = threepg_create_msg2_p1(&mut rng_comm);
 
     // P1 sends prf_seed_p1 to P2
+
     let state_r2_p1 = threepg_process_msg2_p12(&prf_seed_p1);
     let state_r2_p2 = threepg_process_msg2_p12(&prf_seed_p1);
 
     // Round 3
 
-    let (msg3_p1, int_r3_p1) = threepg_create_msg3_p1(
+    let (msg3_p1, state_r3_p1) = threepg_create_msg3_p1(
         inputlen_p1,
         inputlen_p2,
         inputlen_p3,
@@ -698,7 +787,7 @@ pub fn test_run_3party_garbling(
         circuit,
     )
     .unwrap();
-    let (msg3_p2, int_r3_p2) = threepg_create_msg3_p2(
+    let (msg3_p2, state_r3_p2) = threepg_create_msg3_p2(
         inputlen_p1,
         inputlen_p2,
         inputlen_p3,
@@ -710,20 +799,27 @@ pub fn test_run_3party_garbling(
     .unwrap();
 
     // P1 sends msg3_p1 and P2 sends msg3_p2 respectively to P3
-    let msg4_p3 = threepg_create_msg4_p3(&state_r1_p3, &msg3_p1, &msg3_p2, circuit).unwrap();
+
+    let state_r3_p3 = threepg_process_msg3_p3(&msg3_p1, &msg3_p2);
 
     // Round 4
 
+    let msg4_p3 = threepg_create_msg4_p3(&state_r1_p3, &state_r3_p3, circuit).unwrap();
+
     // P3 sends msg4_p3 to P1 and P2
-    let op_p1 = threepg_process_msg4_p12(&msg4_p3, &msg3_p1, circuit, &int_r3_p1);
-    let op_p2 = threepg_process_msg4_p12(&msg4_p3, &msg3_p2, circuit, &int_r3_p2);
+
+    let state_r4_p1 = threepg_process_msg4(&msg4_p3);
+    let state_r4_p2 = threepg_process_msg4(&msg4_p3);
+
+    // Round 5
+
+    let op_p1 = threepg_create_msg5_p12(&state_r4_p1, circuit, &state_r3_p1);
+    let op_p2 = threepg_create_msg5_p12(&state_r4_p2, circuit, &state_r3_p2);
 
     // P1 and P2 sends op_p1 and op_p2 respectively to P3 which compares them and outputs it
-    assert_eq!(op_p1, op_p2);
-    let op_p3 = op_p2.clone();
+    let op_p3 = threepg_process_output_p3(&op_p1, &op_p2);
 
-    // println!("{:?}", int_r3_p1.decoding_info.clone());
-    (op_p1, op_p2, op_p3)
+    (op_p1.output, op_p2.output, op_p3.output)
 }
 
 #[cfg(test)]

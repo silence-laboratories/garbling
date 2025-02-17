@@ -9,7 +9,26 @@ use crate::{
 
 use super::threepartytraits::ThreePartyBinaryPlaintext;
 
+/// Implements the `ThreePartyBinaryPlaintext` trait for `BinaryPlaintext`.
 impl ThreePartyBinaryPlaintext for BinaryPlaintext {
+    /// Evaluates a `BinaryCircuit` using plaintext values.
+    ///
+    /// This function takes a `BinaryCircuit` along with garbler and evaluator
+    /// inputs (two inputs, whose xor gives the actual input), processes the 
+    /// gates sequentially, and returns the output values.
+    ///
+    /// # Arguments
+    ///
+    /// * `circ` - The `BinaryCircuit` to evaluate.
+    /// * `garbler_inputs` - A slice of boolean values representing the garbler's input.
+    /// * `evaluator_inputs` - A slice of pairs of boolean values 
+    ///   representing the evaluator's input.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing:
+    /// - `Ok(Vec<bool>)` - The evaluated output of the circuit as a vector of boolean values.
+    /// - `Err(BinaryPlaintextError)` - An error if the evaluation fails.
     fn evaluate_threeparty(
         &mut self,
         circ: BinaryCircuit,

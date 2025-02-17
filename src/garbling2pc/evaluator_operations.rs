@@ -19,12 +19,26 @@ use crate::{
 /// * `H` - A cryptographic hash function that implements the `HashFunction` trait.
 #[derive(Clone)]
 pub struct BinaryEvaluator<H: HashFunction> {
+    /// The evaluator's inputs' encoding received from the garbler
     evaluator_encoding: HashMap<usize, Block>,
+
+    /// The decoding information received from the garbler
     decoding_infos: HashMap<usize, u8>,
+
+    /// The global difference value (Delta) used for garbling 
+    /// using Free XOR technique received from the garbler
     pub delta: Block,
+
+    /// The cryptographic hash function used for hashing gate labels.
     pub hash: H,
+    
+    /// A garbled circuit received from the garbler.
     pub cache: Vec<Block>,
+
+    /// A counter for uniquely indexing gates in the garbled circuit.
     pub gateindex: u128,
+    
+    /// A counter for retreiving values from the cache.
     pub currentcacheindex: usize,
 }
 
@@ -35,8 +49,11 @@ impl<H: HashFunction> BinaryEvaluator<H> {
     ///
     /// # Arguments
     ///
-    /// * `hash` - A cryptographic hash function used for wire label generation.
-    /// * `rng` - A mutable reference to a random number generator that implements `RngCore` and `CryptoRng`.
+    /// * `evaluator_encoding` - A `HashMap` mapping evaluator input wire IDs to their encoded garbled values.
+    /// * `decoding_infos` - A `HashMap` containing metadata for decoding the final output values.
+    /// * `delta` - A `Block` representing the global offset used in garbled circuit evaluation for free-XOR.
+    /// * `hash` - A cryptographic hash function instance used for evaluating half-gates.
+    /// * `gc` - A `Vec<Block>` containing the garbled circuit representation.
     ///
     /// # Returns
     ///
@@ -59,21 +76,58 @@ impl<H: HashFunction> BinaryEvaluator<H> {
         }
     }
 
+    /// Extracts the least significant bit (LSB) of a given `Block`.
+    ///
+    /// This function retrieves the LSB from the first byte of the block.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - A 16-byte block representing a wire label.
+    ///
+    /// # Returns
+    ///
+    /// The least significant bit (0 or 1) of the first byte.
     pub fn lsb(value: Block) -> u8 {
         value[0] & 1
     }
 
+    /// Increments and retrieves the next available gate index.
+    ///
+    /// # Returns
+    ///
+    /// The updated gate index.
     fn get_next_gate_index(&mut self) -> u128 {
         self.gateindex += 1;
         self.gateindex
     }
 
+    /// Increments the `currentcacheindex` and retrieves the next `cache` entry.
+    ///
+    /// # Returns
+    ///
+    /// The next `cache` entry.
     fn get_next_cache_value(&mut self) -> Block {
         let op = self.cache[self.currentcacheindex];
         self.currentcacheindex += 1;
         op
     }
 
+    /// Retrieves the plaintext output of the garbled circuit evaluation.
+    ///
+    /// This function takes the output gate IDs and the corresponding garbled output values
+    /// and returns the final decrypted plaintext results.
+    ///
+    /// # Arguments
+    ///
+    /// * `output_gates` - A `Vec<usize>` containing the IDs of the circuit's output gates.
+    /// * `garbled_output` - A `HashMap<usize, Block>` mapping
+    ///   output gate IDs to their respective garbled values.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result<Vec<bool>, ExecutionPrimitiveError>` where:
+    /// - `Ok(Vec<bool>)` contains the final plaintext output values in the order of `output_gates`.
+    /// - `Err(ExecutionPrimitiveError)` is returned if an error occurs during decoding.
     pub fn get_plaintext_output(
         &self,
         output_gates: Vec<usize>,
@@ -88,6 +142,24 @@ impl<H: HashFunction> BinaryEvaluator<H> {
         output
     }
 
+    /// Evaluates a garbled binary circuit using the half-gate technique.
+    ///
+    /// This function takes a garbled `BinaryCircuit`, garbler's encoded inputs and
+    /// the evaluator's inputs in boolean form to return the encoded outputs.
+    ///
+    /// # Parameters
+    ///
+    /// * `circ` - The `BinaryCircuit` to be evaluated.
+    /// * `garbler_inputs`: A `HashMap<usize, Block>` which maps the garbler's input
+    ///   ids to its correspoding encoded garbler's inputs.
+    /// * `evaluator_inputs` - A slice of `bool` containing the evaluator's input values in 
+    ///   the order of the evaluator's input ids. 
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing:
+    /// * A `HashMap<usize, Block>` which maps the output gate ids to encoded output blocks.
+    /// * `Err(EvaluatorError)` - An error if the evaluation fails.
     pub fn evaluate(
         &mut self,
         circ: BinaryCircuit,
@@ -165,17 +237,55 @@ impl<H: HashFunction> BinaryEvaluator<H> {
     }
 }
 
+/// Implements the `ExecutionPrimitives` trait for `BinaryEvaluator`.
 impl<H: HashFunction> ExecutionPrimitives for BinaryEvaluator<H> {
+    /// The type of values used in the garbled circuit. In this case, `Block`
+    /// is used to represent the types used and stored in the garbled circuit.
     type Item = Block;
 
+    /// Processes a constant gate for a Binary Evaluator.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - A `u16` value representing `1` for `True` and `0` for `False`. 
+    ///   (unused for evaluator)
+    ///
+    /// # Returns
+    ///
+    /// A result containing
+    /// * The output `Block` value upon successful execution.
+    /// * `Err(ExecutionPrimitiveError)` if an error occurs.
     fn constant(&mut self, _x: u16) -> Result<Self::Item, ExecutionPrimitiveError> {
         Ok(self.get_next_cache_value())
     }
 
+    /// Processes a output gate for a Binary Evaluator.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - A reference to the `Block` value of the gate to be processed.
+    ///
+    /// # Returns
+    ///
+    /// A result containing
+    /// * The output `Block` value wrapped in `Some()` upon successful execution.
+    /// * `Err(ExecutionPrimitiveError)` if an error occurs.
     fn output(&mut self, x: &Self::Item) -> Result<Option<Self::Item>, ExecutionPrimitiveError> {
         Ok(Some(*x))
     }
 
+    /// Processes an input value from the evaluator.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The identifier for the evaluator input.
+    /// * `x` - The value provided as input.
+    ///
+    /// # Returns
+    ///
+    /// A result containing
+    /// * The output `Block` value upon successful execution.
+    /// * `Err(ExecutionPrimitiveError)` if an error occurs.
     fn process_evaluator_input(
         &mut self,
         id: usize,
@@ -188,6 +298,18 @@ impl<H: HashFunction> ExecutionPrimitives for BinaryEvaluator<H> {
         Ok(val)
     }
 
+    /// Processes an input value from the garbler.
+    ///
+    /// # Arguments
+    ///
+    /// * `_id` - The identifier for the garbler input (unused for evaluator).
+    /// * `_x` - The value provided as input (unused for evaluator).
+    ///
+    /// # Returns
+    ///
+    /// A result containing
+    /// * The output `Block` value upon successful execution.
+    /// * `Err(ExecutionPrimitiveError)` if an error occurs.
     fn process_garbler_input(
         &mut self,
         _id: usize,
@@ -197,12 +319,35 @@ impl<H: HashFunction> ExecutionPrimitives for BinaryEvaluator<H> {
     }
 }
 
+/// Implements the `BinaryOperations` trait for `BinaryEvaluator`.
 impl<H: HashFunction> BinaryOperations for BinaryEvaluator<H> {
+    /// Processes the XOR gate for the evaluator.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - A reference to the `Block` value of the first operand.
+    /// * `y` - A reference to the `Block` value of the second operand.
+    ///
+    /// # Returns
+    ///
+    /// * The output `Block` value upon successful execution.
+    /// * `Err(BinaryOperationsError)` if an error occurs.
     fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, BinaryOperationsError> {
         let output = xor_blocks(*x, *y);
         Ok(output)
     }
 
+    /// Processes the AND gate for the evaluator.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - A reference to the `Block` value of the first operand.
+    /// * `y` - A reference to the `Block` value of the second operand.
+    ///
+    /// # Returns
+    ///
+    /// * The output `Block` value upon successful execution.
+    /// * `Err(BinaryOperationsError)` if an error occurs.
     fn and(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, BinaryOperationsError> {
         let s_a = Self::lsb(*x);
         let s_b = Self::lsb(*y);
@@ -229,6 +374,16 @@ impl<H: HashFunction> BinaryOperations for BinaryEvaluator<H> {
         Ok(out)
     }
 
+    /// Processes the NOT (negation) gate for the evaluator.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - A reference to the `Block` value of the operand.
+    ///
+    /// # Returns
+    ///
+    /// * The output `Block` value upon successful execution.
+    /// * `Err(BinaryOperationsError)` if an error occurs.
     fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, BinaryOperationsError> {
         Ok(*x)
     }

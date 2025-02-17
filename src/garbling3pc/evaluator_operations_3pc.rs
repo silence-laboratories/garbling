@@ -12,7 +12,27 @@ use crate::{
 
 use super::threepartytraits::ThreePartyBinaryEvaluator;
 
+/// Implements the `ThreePartyBinaryEvaluator` trait for `BinaryEvaluator`.
 impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
+    /// Evaluates a garbled binary circuit using the half-gate technique for the
+    /// three-party garbled circuits protocol from <https://eprint.iacr.org/2015/931.pdf>.
+    ///
+    /// This function takes a garbled `BinaryCircuit`, garbler's encoded inputs and
+    /// the evaluator's inputs in boolean form to return the encoded outputs.
+    ///
+    /// # Parameters
+    ///
+    /// * `circ` - The `BinaryCircuit` to be evaluated.
+    /// * `garbler_inputs`: A `HashMap<usize, Block>` which maps the garbler's input
+    ///   ids to its correspoding encoded garbler's inputs.
+    /// * `evaluator_inputs` - A slice of `bool` containing the evaluator's input values in
+    ///   the order of the evaluator's input ids.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing:
+    /// * A `HashMap<usize, Block>` which maps the output gate ids to encoded output blocks.
+    /// * `Err(EvaluatorError)` - An error if the evaluation fails.
     fn evaluate_threeparty(
         &mut self,
         circ: BinaryCircuit,
@@ -108,6 +128,25 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
         Ok(garbled_output)
     }
 
+    /// Evaluates a garbled binary circuit using the half-gate technique for the
+    /// three-party garbled circuits protocol from <https://eprint.iacr.org/2015/931.pdf>.
+    ///
+    /// This function takes a garbled `BinaryCircuit`, garbler's and evaluator's encoded
+    /// inputs to return the encoded outputs.
+    ///
+    /// # Parameters
+    ///
+    /// * `circ` - The `BinaryCircuit` to be evaluated.
+    /// * `garbler_inputs`: A `HashMap<usize, Block>` which maps the garbler's input
+    ///   ids to its correspoding encoded garbler's inputs.
+    /// * `evaluator_inputs` - A pair of `HashMap<usize, Block>` which maps the 
+    ///   evaluator's input ids to its correspoding encoded evaluator's inputs.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing:
+    /// * A `HashMap<usize, Block>` which maps the output gate ids to encoded output blocks.
+    /// * `Err(EvaluatorError)` - An error if the evaluation fails.
     fn garbled_evaluate_threeparty(
         &mut self,
         circ: BinaryCircuit,
