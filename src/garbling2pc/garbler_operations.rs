@@ -40,9 +40,9 @@ pub struct BinaryGarbler<'a, H: HashFunction, R: RngCore + CryptoRng> {
     pub outputindex: u128,
 }
 
-/// Represents the values computed during the garbling of an AND gate 
+/// Represents the values computed during the garbling of an AND gate
 /// using the half-gate technique.
-/// 
+///
 /// # Type Parameters
 ///
 /// * `'a` - Lifetime tied to the `BinaryGarbler`.
@@ -54,7 +54,7 @@ pub struct GarbleAndGateOp<'a, H: HashFunction, R: RngCore + CryptoRng> {
 
     /// The value to be pushed to the cache for the evaluator's half-gate computation.
     pub t_eval: <BinaryGarbler<'a, H, R> as ExecutionPrimitives>::Item,
-    
+
     /// The processed output of the AND gate.
     pub out: <BinaryGarbler<'a, H, R> as ExecutionPrimitives>::Item,
 }
@@ -68,11 +68,11 @@ pub struct GarbleOutput {
     /// A mapping from the garbler's input wire IDs to their
     /// corresponding garbled wire labels
     pub garbler_input_encodings: HashMap<usize, Block>,
-    
+
     /// A mapping from the evaluator's input wire IDs to their
     /// corresponding garbled wire labels
     pub evaluator_input_encodings: HashMap<usize, Block>,
-    
+
     /// The list of encrypted values representing the garbled circuit's
     /// garbled truth tables.
     pub garbled_circuit: Vec<Block>,
@@ -108,7 +108,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
             outputindex: 0,
         }
     }
-    
+
     /// Extracts the least significant bit (LSB) of a given `Block`.
     ///
     /// This function retrieves the LSB from the first byte of the block.
@@ -199,7 +199,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
 
     /// Implements the generator half-gate evaluation for the half-gate
     /// technique.
-    /// 
+    ///
     /// # Parameters
     ///
     /// * `p_a` - The least significant bit (LSB) of the wire label `a`.
@@ -237,7 +237,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
 
     /// Implements the evaluator half-gate evaluation for the half-gate
     /// technique.
-    /// 
+    ///
     /// # Parameters
     ///
     /// * `p_b` - The least significant bit (LSB) of the wire label `b`.
@@ -273,9 +273,9 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
     }
 
     /// Returns a random vlaue to be used for evaluating a constant gate.
-    /// 
-    /// # Returns 
-    /// 
+    ///
+    /// # Returns
+    ///
     /// A randomly generated `Block` with it's least significant bit (LSB) set to 1.
     fn zero(&mut self) -> Block {
         let mut randval = [0u8; 16];
@@ -285,7 +285,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
     }
 
     /// Returns the least significant bit (LSB) of the input block.
-    /// 
+    ///
     /// # Parameters
     ///
     /// * `x` - The input `Block`.
@@ -306,6 +306,24 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         self.cache.clone()
     }
 
+    pub fn get_garbled_inputs(
+        &self,
+        circ: BinaryCircuit,
+        garbler_inputs: &[bool],
+        garbler_input_encodings: HashMap<usize, Block>,
+    ) -> HashMap<usize, [u8; 16]> {
+        let mut garbled_input_encodings = HashMap::new();
+        println!("{:?}\n{:?}", circ.garbler_input_ids, garbler_input_encodings);
+        for (count, ids) in circ.garbler_input_ids.into_iter().enumerate() {
+            let mut enc = garbler_input_encodings.get(&ids).unwrap().to_owned();
+            if garbler_inputs[count] {
+                enc = xor_blocks(enc, self.delta);
+            }
+            garbled_input_encodings.insert(ids, enc);
+        }
+        garbled_input_encodings
+    }
+
     /// Garbles a binary circuit using the half-gate technique.
     ///
     /// This function takes a `BinaryCircuit` and generates its garbled version,
@@ -320,13 +338,13 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
     ///
     /// A `Result` containing:
     /// * A `GarbleOutput` which contains:
-    ///     - `garbler_input_encodings`: A Hashmap of garbler 
+    ///     - `garbler_input_encodings`: A Hashmap of garbler
     ///         input wire IDs to their wire labels.
-    ///     - `evaluator_input_encodings`: A Hashmap of evaluator 
+    ///     - `evaluator_input_encodings`: A Hashmap of evaluator
     ///         input wire IDs to their wire labels.
     ///     - `garbled_circuit`: The list of `Block` values representing a garbled truth tables.
     ///     - `decoding_infos`: A Hashmap of output wire IDs to their decoding informations.
-    /// 
+    ///
     /// * `Err(GarblerError)` - An error if the evaluation fails.
     pub fn garble(&mut self, circ: BinaryCircuit) -> Result<GarbleOutput, GarblerError> {
         let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
@@ -400,7 +418,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
 
 /// Implements the `ExecutionPrimitives` trait for `BinaryGarbler`.
 impl<'a, H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for BinaryGarbler<'a, H, R> {
-    /// The type of values used in the circuit. In this case, `Block` 
+    /// The type of values used in the circuit. In this case, `Block`
     /// is used to represent the types used and stored in the garbled circuit.
     type Item = Block;
 

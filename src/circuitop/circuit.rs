@@ -58,8 +58,8 @@ impl BinaryCircuit {
 
         if let Some(Ok(line1)) = reader.next() {
             let mut parts = line1.split(' ');
-            num_gates = parts.next().unwrap().parse().unwrap();
-            num_wires = parts.next().unwrap().parse().unwrap();
+            num_gates = parts.next().unwrap().parse()?;
+            num_wires = parts.next().unwrap().parse()?;
         }
 
         let mut output_circuit = Self::new(num_gates);
@@ -149,12 +149,12 @@ impl BinaryCircuit {
                 if let Some(num_inputs_str) = parts.next() {
                     if let Ok(parsed_num_input) = num_inputs_str.parse::<usize>() {
                         num_input = parsed_num_input;
-                        _num_output = parts.next().unwrap().parse::<usize>().unwrap();
-                        input0 = parts.next().unwrap().parse::<usize>().unwrap();
+                        _num_output = parts.next().unwrap().parse::<usize>()?;
+                        input0 = parts.next().unwrap().parse::<usize>()?;
                         if num_input == 2 {
-                            input1 = parts.next().unwrap().parse::<usize>().unwrap()
+                            input1 = parts.next().unwrap().parse::<usize>()?
                         }
-                        output = parts.next().unwrap().parse::<usize>().unwrap();
+                        output = parts.next().unwrap().parse::<usize>()?;
                         if let Some(gate_str) = parts.next() {
                             gate = gate_str.to_string();
                         }

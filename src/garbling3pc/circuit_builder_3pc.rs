@@ -13,13 +13,12 @@ impl ThreePartyBinaryCircuitBuilder for CircuitBuilder<BinaryCircuit> {
         let id = self.get_next_evaluator_input_id_threeparty();
         let r = self.gate(BinaryGate::EvaluatorInput { id });
         let s = self.gate(BinaryGate::EvaluatorInput { id: id + 1 });
-        self.circ.push_evaluator_input(r);
-        self.circ.push_evaluator_input(s);
+        self.circ.push_evaluator_input(id);
+        self.circ.push_evaluator_input(id + 1);
         self.xor(r, s)
     }
 
     fn evaluator_inputs_threeparty(&mut self, number_of_inputs: u16) -> Vec<usize> {
-        // 0..number_of_inputs.iter().map(|q| self.evaluator_input()).collect()
         let mut output: Vec<usize> = Vec::new();
         for _i in 0..number_of_inputs {
             output.push(self.evaluator_input());
@@ -92,8 +91,8 @@ mod tests {
                     out: None,
                 },
             ],
-            garbler_input_ids: vec![3, 7],
-            evaluator_input_ids: vec![0, 1, 4, 5],
+            garbler_input_ids: vec![0, 1],
+            evaluator_input_ids: vec![0, 1, 2, 3],
             output_gate_ids: vec![14],
             constant_gate_ids: vec![10],
             num_nonfree_gates: 1,

@@ -601,7 +601,6 @@ pub fn threepg_create_msg4_p3(
     let mut eval = BinaryEvaluator::new(
         HashMap::new(),
         HashMap::new(),
-        HashMap::new(),
         msg3_recv_p1.com_vals.delta,
         hash,
         msg3_recv_p1.com_vals.gc.clone(),
@@ -633,7 +632,6 @@ pub fn threepg_process_msg4_p12(
 ) -> Vec<bool> {
     let hash = AesHash::new(HASH_KEY);
     let eval = BinaryEvaluator::new(
-        int_r3.garbling_encoding.clone(),
         int_r3.evaluator_encoding.clone(),
         int_r3.decoding_info.clone(),
         int_r3.delta,

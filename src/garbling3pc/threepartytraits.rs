@@ -44,7 +44,7 @@ pub trait ThreePartyBinaryEvaluator {
     fn evaluate_threeparty(
         &mut self,
         circ: BinaryCircuit,
-        garbler_inputs: &[bool],
+        garbler_inputs: HashMap<usize, Block>,
         evaluator_inputs: [&[bool]; 2],
     ) -> Result<HashMap<usize, Block>, ThreePartyEvaluatorError>;
     fn garbled_evaluate_threeparty(

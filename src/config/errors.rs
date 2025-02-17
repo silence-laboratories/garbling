@@ -1,3 +1,5 @@
+use std::num::ParseIntError;
+
 /// Represents errors that can occur during hashing operations.
 #[derive(Debug)]
 pub enum HashError {
@@ -31,6 +33,8 @@ pub enum FileParsingError {
     /// Error indicating that the number of inputs could not be parsed.
     InputNoParsingError(),
 
+    ParseIntError(ParseIntError),
+
     /// Error indicating an invalid number of input wires.
     ///
     /// The circuit must define exactly two input wires: one for the garbler and one for the evaluator.
@@ -61,9 +65,19 @@ impl std::fmt::Display for FileParsingError {
             FileParsingError::OutputNoParsingError() => write!(f, "Failed to parse number of outputs"),
             FileParsingError::OutputCountError() => write!(f, "Number of output wires is not 1"),
             FileParsingError::FileFormatError(line_no) => write!(f, "Incorrect file format. gate number: {} from the top", line_no),
+            FileParsingError::ParseIntError(e) => write!(f, "ParseInt error: {}", e),
         }
     }
 }
+
+/// Implements conversion from `std::io::Error` to `FileParsingError`,
+/// allowing automatic conversion when using `?` in functions returning `FileParsingError`.
+impl From<ParseIntError> for FileParsingError {
+    fn from(error: ParseIntError) -> Self {
+        FileParsingError::ParseIntError(error)
+    }
+}
+
 
 /// Implements conversion from `std::io::Error` to `FileParsingError`,
 /// allowing automatic conversion when using `?` in functions returning `FileParsingError`.
@@ -124,12 +138,12 @@ pub enum BinaryOperationsError {
     ///
     /// The provided `String` contains additional details about the failure.
     XorError(String),
-    
+
     /// Error occurring during an AND operation.
     ///
     /// The provided `String` contains additional details about the failure.
     AndError(String),
-    
+
     /// Error occurring during a NOT (negation) operation.
     ///
     /// The provided `String` contains additional details about the failure.

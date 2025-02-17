@@ -22,7 +22,7 @@ pub struct CircuitBuilder<BinaryCircuit> {
     pub const_map: HashMap<u16, usize>,
 
     /// The binary circuit being constructed.
-    /// This is incrementally updated as new gates and inputs are added. 
+    /// This is incrementally updated as new gates and inputs are added.
     /// Once the construction is complete, the circuit can be extracted from the builder.
     pub circ: BinaryCircuit,
 }
@@ -87,7 +87,7 @@ impl CircuitBuilder<BinaryCircuit> {
     pub fn garbler_input(&mut self) -> usize {
         let id = self.get_next_garbler_input_id();
         let r = self.gate(BinaryGate::GarblerInput { id });
-        self.circ.push_garbler_input(r);
+        self.circ.push_garbler_input(id);
         r
     }
 
@@ -96,7 +96,7 @@ impl CircuitBuilder<BinaryCircuit> {
     pub fn evaluator_input(&mut self) -> usize {
         let id = self.get_next_evaluator_input_id();
         let r = self.gate(BinaryGate::EvaluatorInput { id });
-        self.circ.push_evaluator_input(r);
+        self.circ.push_evaluator_input(id);
         r
     }
 
@@ -233,8 +233,8 @@ mod tests {
                     out: None,
                 },
             ],
-            garbler_input_ids: [1, 3].to_vec(),
-            evaluator_input_ids: vec![0, 2],
+            garbler_input_ids: [0, 1].to_vec(),
+            evaluator_input_ids: vec![0, 1],
             output_gate_ids: vec![10],
             constant_gate_ids: vec![6],
             num_nonfree_gates: 1,

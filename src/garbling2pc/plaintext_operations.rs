@@ -13,11 +13,10 @@ pub struct BinaryPlaintext;
 /// Implementation of the `BinaryPlaintext` struct.
 /// This provides methods for initializing and evaluating binary circuits on provided inputs.
 impl BinaryPlaintext {
-
     /// Creates a new instance of `BinaryPlaintext`.
     ///
     /// # Returns
-    /// 
+    ///
     /// A new `BinaryPlaintext` instance.
     pub fn new() -> Self {
         BinaryPlaintext {}
