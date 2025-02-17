@@ -1,5 +1,6 @@
 use crate::config::constants::Block;
 
+/// Returns the bitwise xor, given two 128-bit blocks
 pub fn xor_blocks(array1: Block, array2: Block) -> Block {
     let mut output = [0u8; 16];
     for i in 0..16 {
@@ -8,6 +9,7 @@ pub fn xor_blocks(array1: Block, array2: Block) -> Block {
     output
 }
 
+/// Converts a vector of boolean values to a hexadecimal string.
 pub fn bool_vec_to_hex(vec: Vec<bool>) -> String {
     let mut hex_string = String::new();
 

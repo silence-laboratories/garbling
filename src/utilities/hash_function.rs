@@ -4,20 +4,37 @@ use aes::Aes128;
 use crate::config::constants::Block;
 use crate::config::util_errors::HashError;
 
+/// Trait for any hash function which implements a secure hash function for
+/// garbled circuits.
 pub trait HashFunction: Clone {
+    /// Initializes a hash function with a key.
     fn initialize(&mut self, key: Block);
+
+    /// Returns a correlation robust hash given an input `Block`.
     fn cr_hash(&self, x: Block) -> Block;
+
+    /// Returns a circular correlation robust hash given an
+    /// input `Block`.
     fn ccr_hash(&self, x: Block) -> Block;
+
+    /// Returns a tweakable circular correlation robust hash
+    /// given an input `Block`.
     fn tccr_hash(&self, x: Block, i: Block) -> Block;
+
+    /// Returns a hash given an input `Block`.
     fn get_hash(&self, x: &[u8]) -> Result<Block, HashError>;
 }
 
+/// Represents a structure of hash function based on AES-128 encryption.
 #[derive(Clone)]
 pub struct AesHash {
+    /// `Aes128` object used for hashing.
     aes: Aes128,
 }
 
+/// Implementation for `AesHash`.
 impl AesHash {
+    /// Takes a key `Block` as input to return a new `AesHash` object.
     pub fn new(key: Block) -> AesHash {
         let aes = Aes128::new(&GenericArray::from(key));
         let mut rngkey = [0u8; 32];
@@ -27,7 +44,9 @@ impl AesHash {
     }
 }
 
+/// Implements the `HashFunction` trait for `AesHash`.
 impl HashFunction for AesHash {
+    /// Implementation of the `cr_hash` function for a `AesHash`
     fn cr_hash(&self, x: Block) -> Block {
         let mut output = GenericArray::from(x);
         self.aes.encrypt_block(&mut output);
@@ -35,6 +54,7 @@ impl HashFunction for AesHash {
         output_needed
     }
 
+    /// Implementation of the `ccr_hash` function for a `AesHash`.
     fn ccr_hash(&self, x: Block) -> Block {
         let mut y = [0u8; 16];
         for i in 0..8 {
@@ -44,6 +64,7 @@ impl HashFunction for AesHash {
         self.cr_hash(y)
     }
 
+    /// Implementation of the `tccr_hash` function for a `AesHash`.
     fn tccr_hash(&self, x: Block, i: Block) -> Block {
         let mut y = GenericArray::from(x);
         self.aes.encrypt_block(&mut y);
@@ -61,6 +82,7 @@ impl HashFunction for AesHash {
         block
     }
 
+    /// Implementation of the `get_hash` function for a `AesHash`.
     fn get_hash(&self, input: &[u8]) -> Result<Block, HashError> {
         let mut previous_block = GenericArray::from([0u8; 16]); // Initialize to zero for CBC
         let mut output_block = GenericArray::from([0u8; 16]);
@@ -93,6 +115,7 @@ impl HashFunction for AesHash {
         Ok(result)
     }
 
+    /// Implementation of the `initialize` function for a `AesHash`.
     fn initialize(&mut self, key: Block) {
         self.aes = Aes128::new(&GenericArray::from(key));
     }
