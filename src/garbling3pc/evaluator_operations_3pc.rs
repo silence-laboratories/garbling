@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::{constants::Block, errors::ThreePartyEvaluatorError},
+    config::{constants::Block, garbling3pc_errors::ThreePartyEvaluatorError},
     garbling2pc::{
         evaluator_operations::BinaryEvaluator,
         exec::{BinaryOperations, ExecutionPrimitives},
@@ -139,7 +139,7 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
     /// * `circ` - The `BinaryCircuit` to be evaluated.
     /// * `garbler_inputs`: A `HashMap<usize, Block>` which maps the garbler's input
     ///   ids to its correspoding encoded garbler's inputs.
-    /// * `evaluator_inputs` - A pair of `HashMap<usize, Block>` which maps the 
+    /// * `evaluator_inputs` - A pair of `HashMap<usize, Block>` which maps the
     ///   evaluator's input ids to its correspoding encoded evaluator's inputs.
     ///
     /// # Returns

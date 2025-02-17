@@ -6,7 +6,7 @@ use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
     config::{
         constants::Block,
-        errors::{BinaryOperationsError, ExecutionPrimitiveError, GarblerError},
+        garbling2pc_errors::{BinaryOperationsError, ExecutionPrimitiveError, GarblerError},
     },
     garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
     utilities::{hash_function::HashFunction, utils::xor_blocks},
@@ -311,14 +311,14 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
     /// # Arguments
     ///
     /// * `circ` - A `BinaryCircuit` whose garbled input gates are evaluated.
-    /// * `garbler_inputs` - A slice of `bool` containing the garbler's input values in 
-    ///   the order of the garbler's input ids. 
-    /// * `garbler_input_encodings` - A `HashMap<usize, Block>` which maps the garbler's input ids 
+    /// * `garbler_inputs` - A slice of `bool` containing the garbler's input values in
+    ///   the order of the garbler's input ids.
+    /// * `garbler_input_encodings` - A `HashMap<usize, Block>` which maps the garbler's input ids
     ///   to the correspoding encodings of `false` values, as per the Free-XOR technique.
-    /// 
+    ///
     /// # Returns
     ///
-    /// A `HashMap<usize, Block>` which maps the garbler's input ids 
+    /// A `HashMap<usize, Block>` which maps the garbler's input ids
     /// to the correspoding encoded garbler's inputs.
     pub fn get_garbled_inputs(
         &self,
@@ -327,7 +327,10 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         garbler_input_encodings: HashMap<usize, Block>,
     ) -> HashMap<usize, [u8; 16]> {
         let mut garbled_input_encodings = HashMap::new();
-        println!("{:?}\n{:?}", circ.garbler_input_ids, garbler_input_encodings);
+        println!(
+            "{:?}\n{:?}",
+            circ.garbler_input_ids, garbler_input_encodings
+        );
         for (count, ids) in circ.garbler_input_ids.into_iter().enumerate() {
             let mut enc = garbler_input_encodings.get(&ids).unwrap().to_owned();
             if garbler_inputs[count] {

@@ -2,7 +2,7 @@ use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
 use aes::Aes128;
 
 use crate::config::constants::Block;
-use crate::config::errors::HashError;
+use crate::config::util_errors::HashError;
 
 pub trait HashFunction: Clone {
     fn initialize(&mut self, key: Block);

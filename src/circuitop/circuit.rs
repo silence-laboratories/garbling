@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 use crate::circuitop::gate::BinaryGate;
-use crate::config::errors::FileParsingError;
+use crate::config::garbling2pc_errors::FileParsingError;
 
 /// Represents a binary circuit composed of various logic gates.
 /// This struct keeps track of gates, inputs, outputs, and metadata

@@ -1,29 +1,5 @@
 use std::num::ParseIntError;
 
-/// Represents errors that can occur during hashing operations.
-#[derive(Debug)]
-pub enum HashError {
-    /// Error indicating that the input length is invalid.
-    ///
-    /// # Fields
-    /// - `0`: The expected input length.
-    /// - `1`: The actual input length received.
-    InvalidInputLengthError(usize, usize),
-}
-
-/// Implements the `std::fmt::Display` trait for `HashError`.
-impl std::fmt::Display for HashError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            HashError::InvalidInputLengthError(ideal, real) => write!(
-                f,
-                "InvalidInputLengthError: required=%{} obtained={}",
-                ideal, real
-            ),
-        }
-    }
-}
-
 /// Represents errors that can occur while parsing a circuit file.
 #[derive(Debug)]
 pub enum FileParsingError {
@@ -77,7 +53,6 @@ impl From<ParseIntError> for FileParsingError {
         FileParsingError::ParseIntError(error)
     }
 }
-
 
 /// Implements conversion from `std::io::Error` to `FileParsingError`,
 /// allowing automatic conversion when using `?` in functions returning `FileParsingError`.
@@ -161,12 +136,38 @@ impl std::fmt::Display for BinaryOperationsError {
     }
 }
 
+/// Represents errors that can occur while evaluating a garbled `BinaryCircuit`.
 #[derive(Debug)]
 pub enum EvaluatorError {
+    /// Represents an error that occurs while running a function that
+    /// causes an `ExecutionPrimitiveError`
     ExecPrimError(ExecutionPrimitiveError),
+
+    /// Represents an error that occurs while running a function that
+    /// causes a `BinaryOperationsError`
     BinOpError(BinaryOperationsError),
+
+    /// Represents an error that occurs when garbler input length is
+    /// exceeding the expected threshold.
+    ///
+    /// # Fields
+    /// - `0`: The actual input length received.
+    /// - `1`: The expected input length.
     GarblerIpLenError(usize, usize),
+
+    /// Represents an error that occurs when evaluator input length is
+    /// exceeding the expected threshold.
+    ///
+    /// # Fields
+    /// - `0`: The actual input length received.
+    /// - `1`: The expected input length.
     EvaluatorIpLenError(usize, usize),
+
+    /// Represents an error that occurs when an item being accessed from the
+    /// cache does not exist yet.
+    ///
+    /// # Fields
+    /// - `0`: index of the accessed item.
     CacheItemError(usize),
 }
 
@@ -211,10 +212,22 @@ impl From<BinaryOperationsError> for EvaluatorError {
     }
 }
 
+/// Represents errors that can occur while garbling a `BinaryCircuit`.
 #[derive(Debug)]
 pub enum GarblerError {
+    /// Represents an error that occurs while running a function that
+    /// causes an `ExecutionPrimitiveError`
     ExecPrimError(ExecutionPrimitiveError),
+
+    /// Represents an error that occurs while running a function that
+    /// causes a `BinaryOperationsError`
     BinOpError(BinaryOperationsError),
+
+    /// Represents an error that occurs when an item being accessed from the
+    /// cache does not exist yet.
+    ///
+    /// # Fields
+    /// - `0`: index of the accessed item.
     CacheItemError(usize),
 }
 
@@ -242,131 +255,5 @@ impl From<ExecutionPrimitiveError> for GarblerError {
 impl From<BinaryOperationsError> for GarblerError {
     fn from(error: BinaryOperationsError) -> Self {
         GarblerError::BinOpError(error)
-    }
-}
-
-#[derive(Debug)]
-pub enum ThreePartyEvaluatorError {
-    ExecPrimError(ExecutionPrimitiveError),
-    BinOpError(BinaryOperationsError),
-    GarblerIpLenError(usize, usize),
-    EvaluatorIpLenError(usize, usize),
-    CacheItemError(usize),
-}
-
-/// Implements the `std::fmt::Display` trait for `ThreePartyEvaluatorError`.
-impl std::fmt::Display for ThreePartyEvaluatorError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ThreePartyEvaluatorError::GarblerIpLenError(id, ip_len) => {
-                write!(
-                    f,
-                    "Inconsistent Garbler Input length: id={} garbler input length={}",
-                    id, ip_len
-                )
-            }
-            ThreePartyEvaluatorError::EvaluatorIpLenError(id, ip_len) => {
-                write!(
-                    f,
-                    "Inconsistent Evaluator Input length: id={} garbler input length={}",
-                    id, ip_len
-                )
-            }
-            ThreePartyEvaluatorError::CacheItemError(ind) => {
-                write!(f, "Cache Item not found: index={}", ind)
-            }
-            ThreePartyEvaluatorError::ExecPrimError(e) => write!(f, "ExecPrimError: {}", e),
-            ThreePartyEvaluatorError::BinOpError(e) => write!(f, "BinOpError: {}", e),
-        }
-    }
-}
-
-/// Implements conversion from `ExecutionPrimitiveError` to `ThreePartyEvaluatorError`,
-/// allowing automatic conversion when using `?` in functions returning `ThreePartyEvaluatorError`.
-impl From<ExecutionPrimitiveError> for ThreePartyEvaluatorError {
-    fn from(error: ExecutionPrimitiveError) -> Self {
-        ThreePartyEvaluatorError::ExecPrimError(error)
-    }
-}
-
-/// Implements conversion from `BinaryOperationsError` to `ThreePartyEvaluatorError`,
-/// allowing automatic conversion when using `?` in functions returning `ThreePartyEvaluatorError`.
-impl From<BinaryOperationsError> for ThreePartyEvaluatorError {
-    fn from(error: BinaryOperationsError) -> Self {
-        ThreePartyEvaluatorError::BinOpError(error)
-    }
-}
-
-#[derive(Debug)]
-pub enum ThreePartyGarblerError {
-    GarblerError(GarblerError),
-}
-
-/// Implements the `std::fmt::Display` trait for `ThreePartyGarblerError`.
-impl std::fmt::Display for ThreePartyGarblerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ThreePartyGarblerError::GarblerError(e) => write!(f, "Garbler Error: {}", e),
-        }
-    }
-}
-
-/// Implements conversion from `GarblerError` to `ThreePartyGarblerError`,
-/// allowing automatic conversion when using `?` in functions returning `ThreePartyGarblerError`.
-impl From<GarblerError> for ThreePartyGarblerError {
-    fn from(value: GarblerError) -> Self {
-        ThreePartyGarblerError::GarblerError(value)
-    }
-}
-
-#[derive(Debug)]
-pub enum BinaryPlaintextError {
-    ExecPrimError(ExecutionPrimitiveError),
-    BinOpError(BinaryOperationsError),
-    GarblerIpLenError(usize, usize),
-    EvaluatorIpLenError(usize, usize),
-    CacheItemError(usize),
-}
-
-/// Implements the `std::fmt::Display` trait for `BinaryPlaintextError`.
-impl std::fmt::Display for BinaryPlaintextError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BinaryPlaintextError::GarblerIpLenError(id, ip_len) => {
-                write!(
-                    f,
-                    "Inconsistent Garbler Input length: id={} garbler input length={}",
-                    id, ip_len
-                )
-            }
-            BinaryPlaintextError::EvaluatorIpLenError(id, ip_len) => {
-                write!(
-                    f,
-                    "Inconsistent Evaluator Input length: id={} garbler input length={}",
-                    id, ip_len
-                )
-            }
-            BinaryPlaintextError::CacheItemError(ind) => {
-                write!(f, "Cache Item not found: index={}", ind)
-            }
-            BinaryPlaintextError::ExecPrimError(e) => write!(f, "ExecPrimError: {}", e),
-            BinaryPlaintextError::BinOpError(e) => write!(f, "BinOpError: {}", e),
-        }
-    }
-}
-
-/// Implements conversion from `ExecutionPrimitiveError` to `BinaryPlaintextError`,
-/// allowing automatic conversion when using `?` in functions returning `BinaryPlaintextError`.
-impl From<ExecutionPrimitiveError> for BinaryPlaintextError {
-    fn from(error: ExecutionPrimitiveError) -> Self {
-        BinaryPlaintextError::ExecPrimError(error)
-    }
-}
-
-/// Implements conversion from `BinaryOperationsError` to `BinaryPlaintextError`,
-/// allowing automatic conversion when using `?` in functions returning `BinaryPlaintextError`.
-impl From<BinaryOperationsError> for BinaryPlaintextError {
-    fn from(error: BinaryOperationsError) -> Self {
-        BinaryPlaintextError::BinOpError(error)
     }
 }

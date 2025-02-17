@@ -4,9 +4,9 @@ use crate::{
     circuitop::circuit::BinaryCircuit,
     config::{
         constants::Block,
-        errors::{
-            BinaryPlaintextError, FileParsingError, ThreePartyEvaluatorError,
-            ThreePartyGarblerError,
+        garbling2pc_errors::FileParsingError,
+        garbling3pc_errors::{
+            BinaryPlaintextError, ThreePartyEvaluatorError, ThreePartyGarblerError,
         },
     },
     garbling2pc::garbler_operations::GarbleOutput,
@@ -28,7 +28,7 @@ pub trait ThreePartyBinaryCircuitBuilder {
     fn evaluator_inputs_threeparty(&mut self, number_of_inputs: u16) -> Vec<usize>;
 }
 
-/// Trait for any `BinaryPlaintext` which simulates the working of garbled circuit methods from 
+/// Trait for any `BinaryPlaintext` which simulates the working of garbled circuit methods from
 /// <https://eprint.iacr.org/2015/931.pdf> in plaintext.
 pub trait ThreePartyBinaryPlaintext {
     fn evaluate_threeparty(
@@ -57,7 +57,7 @@ pub trait ThreePartyBinaryEvaluator {
         garbler_inputs: HashMap<usize, Block>,
         evaluator_inputs: [&[bool]; 2],
     ) -> Result<HashMap<usize, Block>, ThreePartyEvaluatorError>;
-    
+
     fn garbled_evaluate_threeparty(
         &mut self,
         circ: BinaryCircuit,

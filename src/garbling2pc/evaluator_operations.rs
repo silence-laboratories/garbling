@@ -4,7 +4,7 @@ use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
     config::{
         constants::Block,
-        errors::{BinaryOperationsError, EvaluatorError, ExecutionPrimitiveError},
+        garbling2pc_errors::{BinaryOperationsError, EvaluatorError, ExecutionPrimitiveError},
     },
     garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
     utilities::{hash_function::HashFunction, utils::xor_blocks},
@@ -25,19 +25,19 @@ pub struct BinaryEvaluator<H: HashFunction> {
     /// The decoding information received from the garbler
     decoding_infos: HashMap<usize, u8>,
 
-    /// The global difference value (Delta) used for garbling 
+    /// The global difference value (Delta) used for garbling
     /// using Free XOR technique received from the garbler
     pub delta: Block,
 
     /// The cryptographic hash function used for hashing gate labels.
     pub hash: H,
-    
+
     /// A garbled circuit received from the garbler.
     pub cache: Vec<Block>,
 
     /// A counter for uniquely indexing gates in the garbled circuit.
     pub gateindex: u128,
-    
+
     /// A counter for retreiving values from the cache.
     pub currentcacheindex: usize,
 }
@@ -152,8 +152,8 @@ impl<H: HashFunction> BinaryEvaluator<H> {
     /// * `circ` - The `BinaryCircuit` to be evaluated.
     /// * `garbler_inputs`: A `HashMap<usize, Block>` which maps the garbler's input
     ///   ids to its correspoding encoded garbler's inputs.
-    /// * `evaluator_inputs` - A slice of `bool` containing the evaluator's input values in 
-    ///   the order of the evaluator's input ids. 
+    /// * `evaluator_inputs` - A slice of `bool` containing the evaluator's input values in
+    ///   the order of the evaluator's input ids.
     ///
     /// # Returns
     ///
@@ -247,7 +247,7 @@ impl<H: HashFunction> ExecutionPrimitives for BinaryEvaluator<H> {
     ///
     /// # Arguments
     ///
-    /// * `x` - A `u16` value representing `1` for `True` and `0` for `False`. 
+    /// * `x` - A `u16` value representing `1` for `True` and `0` for `False`.
     ///   (unused for evaluator)
     ///
     /// # Returns

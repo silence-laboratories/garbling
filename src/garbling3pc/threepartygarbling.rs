@@ -136,19 +136,19 @@ pub struct ThreePGPartyStateR2 {
 pub struct ThreePGParty12StateR3 {
     /// Global delta value for the Free-XOR technique.
     delta: Block,
-    
+
     /// Random pads for all inputs.
     b_vec: [Vec<bool>; 3],
 
     /// Garbled Circuit.
     gc: Vec<Block>,
-    
+
     /// Encoding of garbler's input gates, corresponding to false values
     garbler_encoding: HashMap<usize, Block>,
-    
+
     /// Encoding of evaluator's input gates, corresponding to false values
     evaluator_encoding: HashMap<usize, Block>,
-    
+
     /// Decoding information of the output gates
     decoding_info: HashMap<usize, u8>,
 
@@ -449,7 +449,6 @@ pub fn threepg_create_msg3_p2(
         b_vec[2].push(rng.gen_bool(0.5));
     }
 
-
     let hash_commit = HashCommitment::new(AesHash::new(p2_state_r1.comm_crs));
 
     let mut p1_commitments: HashMap<(usize, usize), Block> = HashMap::new();
@@ -458,7 +457,6 @@ pub fn threepg_create_msg3_p2(
     let mut p2_decommitments: HashMap<(usize, usize), (Block, Block)> = HashMap::new();
     let mut p3_commitments: HashMap<(usize, usize), Block> = HashMap::new();
     let mut p3_decommitments: HashMap<(usize, usize), (Block, Block)> = HashMap::new();
-
 
     for j in 0..p1_ip_nos {
         let g_en_j_origin = *garble_output.garbler_input_encodings.get(&j).unwrap();
@@ -694,7 +692,7 @@ pub fn threepg_create_msg4_p3(
         hash,
         state_r3.msg3_p1.com_vals.gc.clone(),
     );
-    
+
     let dec = eval
         .garbled_evaluate_threeparty(
             circuit.clone(),
@@ -732,7 +730,7 @@ pub fn threepg_create_msg5_p12(
         state_r4.msg4.garbled_op.clone(),
     );
 
-    ThreePGOutput{ output: op}
+    ThreePGOutput { output: op }
 }
 
 /// Processes and generates the output of the three-party garbled-circuit protocol, and run by P3.

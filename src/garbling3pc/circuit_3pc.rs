@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::errors::FileParsingError,
+    config::garbling2pc_errors::FileParsingError,
 };
 
 use super::threepartytraits::ThreePartyBinaryCircuit;
@@ -14,8 +14,8 @@ use super::threepartytraits::ThreePartyBinaryCircuit;
 impl ThreePartyBinaryCircuit for BinaryCircuit {
     /// Parses a circuit definition from a file in the Bristol Fashion format
     /// to the format required for the three-party garbled-circuit protocol.
-    /// Supports the fact that the evaluator's input is now doubled, and the xor 
-    /// of every pair of these inputs form the original evaluator's input. 
+    /// Supports the fact that the evaluator's input is now doubled, and the xor
+    /// of every pair of these inputs form the original evaluator's input.
     ///
     /// The Bristol Fashion format is a standard plaintext representation of
     /// boolean circuits, commonly used in secure computation protocols.
@@ -117,7 +117,7 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
                 out: Some(num_garbler_inputs + 3 * i + 2),
             });
         }
-        
+
         num_wires += 2 * num_evaluator_inputs;
 
         for i in 0..num_outputs {

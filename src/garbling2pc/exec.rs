@@ -1,4 +1,4 @@
-use crate::config::errors::{BinaryOperationsError, ExecutionPrimitiveError};
+use crate::config::garbling2pc_errors::{BinaryOperationsError, ExecutionPrimitiveError};
 
 /// Defines the core execution primitives required for implementing a garbled circuit protocol.
 ///

@@ -1,6 +1,6 @@
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::errors::BinaryPlaintextError,
+    config::garbling3pc_errors::BinaryPlaintextError,
     garbling2pc::{
         exec::{BinaryOperations, ExecutionPrimitives},
         plaintext_operations::BinaryPlaintext,
@@ -14,14 +14,14 @@ impl ThreePartyBinaryPlaintext for BinaryPlaintext {
     /// Evaluates a `BinaryCircuit` using plaintext values.
     ///
     /// This function takes a `BinaryCircuit` along with garbler and evaluator
-    /// inputs (two inputs, whose xor gives the actual input), processes the 
+    /// inputs (two inputs, whose xor gives the actual input), processes the
     /// gates sequentially, and returns the output values.
     ///
     /// # Arguments
     ///
     /// * `circ` - The `BinaryCircuit` to evaluate.
     /// * `garbler_inputs` - A slice of boolean values representing the garbler's input.
-    /// * `evaluator_inputs` - A slice of pairs of boolean values 
+    /// * `evaluator_inputs` - A slice of pairs of boolean values
     ///   representing the evaluator's input.
     ///
     /// # Returns

@@ -1,3 +1,7 @@
 pub mod constants;
 
-pub mod errors;
+pub mod util_errors;
+
+pub mod garbling2pc_errors;
+
+pub mod garbling3pc_errors;

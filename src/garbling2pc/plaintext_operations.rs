@@ -1,6 +1,9 @@
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::errors::{BinaryOperationsError, BinaryPlaintextError, ExecutionPrimitiveError},
+    config::{
+        garbling2pc_errors::{BinaryOperationsError, ExecutionPrimitiveError},
+        garbling3pc_errors::BinaryPlaintextError,
+    },
     garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
 };
 

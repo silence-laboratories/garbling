@@ -2,7 +2,7 @@ use rand::{CryptoRng, RngCore};
 
 use crate::{
     circuitop::circuit::BinaryCircuit,
-    config::errors::ThreePartyGarblerError,
+    config::garbling3pc_errors::ThreePartyGarblerError,
     garbling2pc::garbler_operations::{BinaryGarbler, GarbleOutput},
     utilities::hash_function::HashFunction,
 };
