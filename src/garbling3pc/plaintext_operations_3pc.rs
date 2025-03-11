@@ -148,11 +148,11 @@ mod tests {
         let result = builder.xor(eval_input_1, garb_input_1);
         builder.output(result);
         let circuit = builder.finish();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         for i in 0..2 {
             for j in 0..2 {
-                let jinp = rng.gen_bool(0.5);
+                let jinp = rng.random_bool(0.5);
                 let mut plaintexteval = BinaryPlaintext::new();
                 let output = plaintexteval
                     .evaluate_threeparty(
@@ -177,11 +177,11 @@ mod tests {
         let result = builder.and(eval_input_1, garb_input_1);
         builder.output(result);
         let circuit = builder.finish();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         for i in 0..2 {
             for j in 0..2 {
-                let jinp = rng.gen_bool(0.5);
+                let jinp = rng.random_bool(0.5);
                 let mut plaintexteval = BinaryPlaintext::new();
                 let output = plaintexteval
                     .evaluate_threeparty(
@@ -212,10 +212,10 @@ mod tests {
         let result = builder.negate(eval_input_1);
         builder.output(result);
         let circuit = builder.finish();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         for j in 0..2 {
-            let jinp = rng.gen_bool(0.5);
+            let jinp = rng.random_bool(0.5);
             let mut plaintexteval = BinaryPlaintext::new();
             let output = plaintexteval
                 .evaluate_threeparty(
@@ -232,15 +232,15 @@ mod tests {
     #[test]
     fn test_comparison_circuit_plain_3pc() {
         let comparison_circuit = build_comparison_circuit_threeparty();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for i in 0..3 {
             for j in 0..3 {
                 let ibit1 = i % 2 != 0;
                 let jbit1 = j % 2 != 0;
                 let ibit2 = (i / 2) % 2 != 0;
                 let jbit2 = (j / 2) % 2 != 0;
-                let jinp1 = rng.gen_bool(0.5);
-                let jinp2 = rng.gen_bool(0.5);
+                let jinp1 = rng.random_bool(0.5);
+                let jinp2 = rng.random_bool(0.5);
 
                 let mut plaintexteval = BinaryPlaintext::new();
                 let output = plaintexteval
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn test_aes_plain_3pc() {
         let circuit = BinaryCircuit::parse_threeparty("circuits/aes128.txt").unwrap();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for i in 0..2 {
             for j in 0..2 {
                 let val = j != 0;
@@ -275,7 +275,7 @@ mod tests {
                 let mut j1 = [false; 128];
                 let mut j2 = [false; 128];
                 for k in 0..128 {
-                    let bit = rng.gen_bool(0.5);
+                    let bit = rng.random_bool(0.5);
                     j1[k] = bit;
                     j2[k] = val ^ bit;
                 }

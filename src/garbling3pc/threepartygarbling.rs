@@ -192,10 +192,10 @@ pub struct ThreePGPartyStateR4 {
 
 /// Generates msg1 of the three-party garbled-circuit protocol, and run by P3.
 pub fn threepg_create_msg1_p3(input: &[bool], rng: &mut ThreadRng) -> ThreePGMsg1Abs {
-    let comm_crs: Block = rng.gen();
+    let comm_crs: Block = rng.random();
     let mut x3 = Vec::new();
     for _ in 0..input.len() {
-        x3.push(rng.gen_bool(0.5));
+        x3.push(rng.random_bool(0.5));
     }
     let mut x4 = Vec::new();
     for i in 0..input.len() {
@@ -226,7 +226,7 @@ pub fn threepg_process_msg1_p3(msg1: &ThreePGMsg1Abs) -> ThreePGParty3StateR1 {
 
 /// Generates msg2 of the three-party garbled-circuit protocol, and run by P1.
 pub fn threepg_create_msg2_p1(rng: &mut ThreadRng) -> Block {
-    let prf_seed: Block = rng.gen();
+    let prf_seed: Block = rng.random();
     prf_seed
 }
 
@@ -268,13 +268,13 @@ pub fn threepg_create_msg3_p1(
         Vec::with_capacity(2 * p3_ip_nos),
     ];
     for _ in 0..p1_ip_nos {
-        b_vec[0].push(rng.gen_bool(0.5));
+        b_vec[0].push(rng.random_bool(0.5));
     }
     for _ in 0..p2_ip_nos {
-        b_vec[1].push(rng.gen_bool(0.5));
+        b_vec[1].push(rng.random_bool(0.5));
     }
     for _ in 0..2 * p3_ip_nos {
-        b_vec[2].push(rng.gen_bool(0.5));
+        b_vec[2].push(rng.random_bool(0.5));
     }
 
     let hash_commit = HashCommitment::new(AesHash::new(p1_state_r1.comm_crs));
@@ -294,7 +294,7 @@ pub fn threepg_create_msg3_p1(
             } else {
                 g_en_j_origin
             };
-            let witness: Block = rng.gen();
+            let witness: Block = rng.random();
             let commitment = hash_commit.commit(g_en_j, witness);
             p1_commitments.insert((j, a), commitment);
             p1_decommitments.insert((j, a), (g_en_j, witness));
@@ -312,7 +312,7 @@ pub fn threepg_create_msg3_p1(
             } else {
                 g_en_j_origin
             };
-            let witness: Block = rng.gen();
+            let witness: Block = rng.random();
             let commitment = hash_commit.commit(g_en_j, witness);
             p2_commitments.insert((j, a), commitment);
             p2_decommitments.insert((j, a), (g_en_j, witness));
@@ -330,7 +330,7 @@ pub fn threepg_create_msg3_p1(
             } else {
                 e_en_j_origin
             };
-            let witness: Block = rng.gen();
+            let witness: Block = rng.random();
             let commitment = hash_commit.commit(e_en_j, witness);
             p3_commitments.insert((j, a), commitment);
             p3_decommitments.insert((j, a), (e_en_j, witness));
@@ -348,7 +348,7 @@ pub fn threepg_create_msg3_p1(
             } else {
                 e_en_j_origin
             };
-            let witness: Block = rng.gen();
+            let witness: Block = rng.random();
             let commitment = hash_commit.commit(e_en_j, witness);
             p3_commitments.insert((p3_ip_nos + j, a), commitment);
             p3_decommitments.insert((p3_ip_nos + j, a), (e_en_j, witness));
@@ -440,13 +440,13 @@ pub fn threepg_create_msg3_p2(
         Vec::with_capacity(2 * p3_ip_nos),
     ];
     for _ in 0..p1_ip_nos {
-        b_vec[0].push(rng.gen_bool(0.5));
+        b_vec[0].push(rng.random_bool(0.5));
     }
     for _ in 0..p2_ip_nos {
-        b_vec[1].push(rng.gen_bool(0.5));
+        b_vec[1].push(rng.random_bool(0.5));
     }
     for _ in 0..2 * p3_ip_nos {
-        b_vec[2].push(rng.gen_bool(0.5));
+        b_vec[2].push(rng.random_bool(0.5));
     }
 
     let hash_commit = HashCommitment::new(AesHash::new(p2_state_r1.comm_crs));
@@ -466,7 +466,7 @@ pub fn threepg_create_msg3_p2(
             } else {
                 g_en_j_origin
             };
-            let witness: Block = rng.gen();
+            let witness: Block = rng.random();
             let commitment = hash_commit.commit(g_en_j, witness);
             p1_commitments.insert((j, a), commitment);
             p1_decommitments.insert((j, a), (g_en_j, witness));
@@ -484,7 +484,7 @@ pub fn threepg_create_msg3_p2(
             } else {
                 g_en_j_origin
             };
-            let witness: Block = rng.gen();
+            let witness: Block = rng.random();
             let commitment = hash_commit.commit(g_en_j, witness);
             p2_commitments.insert((j, a), commitment);
             p2_decommitments.insert((j, a), (g_en_j, witness));
@@ -502,7 +502,7 @@ pub fn threepg_create_msg3_p2(
             } else {
                 e_en_j_origin
             };
-            let witness: Block = rng.gen();
+            let witness: Block = rng.random();
             let commitment = hash_commit.commit(e_en_j, witness);
             p3_commitments.insert((j, a), commitment);
             p3_decommitments.insert((j, a), (e_en_j, witness));
@@ -520,7 +520,7 @@ pub fn threepg_create_msg3_p2(
             } else {
                 e_en_j_origin
             };
-            let witness: Block = rng.gen();
+            let witness: Block = rng.random();
             let commitment = hash_commit.commit(e_en_j, witness);
             p3_commitments.insert((p3_ip_nos + j, a), commitment);
             p3_decommitments.insert((p3_ip_nos + j, a), (e_en_j, witness));
@@ -748,7 +748,7 @@ pub fn test_run_3party_garbling(
     input_p2: &[bool],
     input_p3: &[bool],
 ) -> (Vec<bool>, Vec<bool>, Vec<bool>) {
-    let mut rng_comm = rand::thread_rng();
+    let mut rng_comm = rand::rng();
 
     let inputlen_p1 = input_p1.len();
     let inputlen_p2 = input_p2.len();

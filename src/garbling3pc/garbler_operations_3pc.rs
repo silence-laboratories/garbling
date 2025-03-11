@@ -10,8 +10,8 @@ use crate::{
 use super::threepartytraits::ThreePartyBinaryGarbler;
 
 /// Implements the `ThreePartyBinaryGarbler` trait for `BinaryGarbler`.
-impl<'a, H: HashFunction, R: RngCore + CryptoRng> ThreePartyBinaryGarbler
-    for BinaryGarbler<'a, H, R>
+impl<H: HashFunction, R: RngCore + CryptoRng> ThreePartyBinaryGarbler
+    for BinaryGarbler<'_, H, R>
 {
     /// Garbles a binary circuit using the half-gate technique.
     ///

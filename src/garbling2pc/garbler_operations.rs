@@ -434,7 +434,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
 }
 
 /// Implements the `ExecutionPrimitives` trait for `BinaryGarbler`.
-impl<'a, H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for BinaryGarbler<'a, H, R> {
+impl<H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for BinaryGarbler<'_, H, R> {
     /// The type of values used in the garbled circuit. In this case, `Block`
     /// is used to represent the types used and stored in the garbled circuit.
     type Item = Block;
@@ -527,7 +527,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for Binary
 }
 
 /// Implements the `BinaryOperations` trait for `BinaryGarbler`.
-impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryOperations for BinaryGarbler<'a, H, R> {
+impl<H: HashFunction, R: RngCore + CryptoRng> BinaryOperations for BinaryGarbler<'_, H, R> {
     /// Processes the XOR gate for the garbler.
     ///
     /// # Arguments

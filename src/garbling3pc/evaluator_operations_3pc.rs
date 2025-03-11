@@ -270,11 +270,11 @@ mod tests {
         let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         for i in 0..2 {
             for j in 0..2 {
-                let jinp = rng.gen_bool(0.5);
+                let jinp = rng.random_bool(0.5);
                 let mut evaluator = BinaryEvaluator::new(
                     garble_output.evaluator_input_encodings.clone(),
                     garble_output.decoding_infos.clone(),
@@ -321,11 +321,11 @@ mod tests {
         let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         for i in 0..2 {
             for j in 0..2 {
-                let jinp = rng.gen_bool(0.5);
+                let jinp = rng.random_bool(0.5);
                 let mut evaluator = BinaryEvaluator::new(
                     garble_output.evaluator_input_encodings.clone(),
                     garble_output.decoding_infos.clone(),
@@ -373,10 +373,10 @@ mod tests {
         let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         for j in 0..2 {
-            let jinp = rng.gen_bool(0.5);
+            let jinp = rng.random_bool(0.5);
             let mut evaluator = BinaryEvaluator::new(
                 garble_output.evaluator_input_encodings.clone(),
                 garble_output.decoding_infos.clone(),
@@ -417,15 +417,15 @@ mod tests {
         let garble_output = garbler
             .garble_threeparty(comparison_circuit.clone())
             .unwrap();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for i in 0..3 {
             for j in 0..3 {
                 let ibit1 = i % 2 != 0;
                 let jbit1 = j % 2 != 0;
                 let ibit2 = (i / 2) % 2 != 0;
                 let jbit2 = (j / 2) % 2 != 0;
-                let jinp1 = rng.gen_bool(0.5);
-                let jinp2 = rng.gen_bool(0.5);
+                let jinp1 = rng.random_bool(0.5);
+                let jinp2 = rng.random_bool(0.5);
 
                 let mut evaluator = BinaryEvaluator::new(
                     garble_output.evaluator_input_encodings.clone(),
@@ -470,7 +470,7 @@ mod tests {
         let circuit = BinaryCircuit::parse_threeparty("circuits/aes128.txt").unwrap();
         let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
         for i in 0..2 {
             for j in 0..2 {
@@ -478,7 +478,7 @@ mod tests {
                 let mut j1 = [false; 128];
                 let mut j2 = [false; 128];
                 for k in 0..128 {
-                    let bit = rng.gen_bool(0.5);
+                    let bit = rng.random_bool(0.5);
                     j1[k] = bit;
                     j2[k] = val ^ bit;
                 }
