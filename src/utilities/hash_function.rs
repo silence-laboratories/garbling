@@ -18,7 +18,7 @@ pub trait HashFunction: Clone {
     fn ccr_hash(&self, x: Block) -> Block;
 
     /// Returns a tweakable circular correlation robust hash
-    /// given an input `Block`.
+    /// given an input `Block` and an integer encoded in a `Block`.
     fn tccr_hash(&self, x: Block, i: Block) -> Block;
 
     /// Returns a hash given an input `Block`.
