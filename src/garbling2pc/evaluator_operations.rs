@@ -162,8 +162,8 @@ impl<H: HashFunction> BinaryEvaluator<H> {
     /// * `Err(EvaluatorError)` - An error if the evaluation fails.
     pub fn evaluate(
         &mut self,
-        circ: BinaryCircuit,
-        garbler_inputs: HashMap<usize, Block>,
+        circ: &BinaryCircuit,
+        garbler_inputs: &HashMap<usize, Block>,
         evaluator_inputs: &[bool],
     ) -> Result<HashMap<usize, Block>, EvaluatorError> {
         let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
@@ -416,7 +416,7 @@ mod tests {
 
         let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
-        let garble_output = garbler.garble(circuit.clone()).unwrap();
+        let garble_output = garbler.garble(&circuit).unwrap();
 
         for i in 0..2 {
             for j in 0..2 {
@@ -433,7 +433,7 @@ mod tests {
                     garble_output.garbler_input_encodings.clone(),
                 );
                 let output = evaluator
-                    .evaluate(circuit.clone(), garbler_inputs, [j != 0].as_slice())
+                    .evaluate(&circuit, &garbler_inputs, [j != 0].as_slice())
                     .unwrap();
                 let decoutput = evaluator
                     .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
@@ -461,7 +461,7 @@ mod tests {
 
         let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
-        let garble_output = garbler.garble(circuit.clone()).unwrap();
+        let garble_output = garbler.garble(&circuit).unwrap();
 
         for i in 0..2 {
             for j in 0..2 {
@@ -478,7 +478,7 @@ mod tests {
                     garble_output.garbler_input_encodings.clone(),
                 );
                 let output = evaluator
-                    .evaluate(circuit.clone(), garbler_inputs, [j != 0].as_slice())
+                    .evaluate(&circuit, &garbler_inputs, [j != 0].as_slice())
                     .unwrap();
                 let decoutput = evaluator
                     .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
@@ -507,7 +507,7 @@ mod tests {
 
         let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
-        let garble_output = garbler.garble(circuit.clone()).unwrap();
+        let garble_output = garbler.garble(&circuit).unwrap();
 
         for j in 0..2 {
             let mut evaluator = BinaryEvaluator::new(
@@ -523,7 +523,7 @@ mod tests {
                 garble_output.garbler_input_encodings.clone(),
             );
             let output = evaluator
-                .evaluate(circuit.clone(), garbler_inputs, [j != 0].as_slice())
+                .evaluate(&circuit, &garbler_inputs, [j != 0].as_slice())
                 .unwrap();
             let decoutput = evaluator
                 .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
@@ -549,7 +549,7 @@ mod tests {
                 let circuit = builder.finish();
                 let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
                 let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
-                let garble_output = garbler.garble(circuit.clone()).unwrap();
+                let garble_output = garbler.garble(&circuit).unwrap();
                 let mut evaluator = BinaryEvaluator::new(
                     garble_output.evaluator_input_encodings.clone(),
                     garble_output.decoding_infos.clone(),
@@ -563,7 +563,7 @@ mod tests {
                     garble_output.garbler_input_encodings,
                 );
                 let output = evaluator
-                    .evaluate(circuit.clone(), garbler_inputs, [j != 0].as_slice())
+                    .evaluate(&circuit, &garbler_inputs, [j != 0].as_slice())
                     .unwrap();
                 let decoutput = evaluator
                     .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
@@ -583,7 +583,7 @@ mod tests {
         let comparison_circuit = build_comparison_circuit();
         let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
-        let garble_output = garbler.garble(comparison_circuit.clone()).unwrap();
+        let garble_output = garbler.garble(&comparison_circuit.clone()).unwrap();
         for i in 0..3 {
             for j in 0..3 {
                 let ibit1 = i % 2 != 0;
@@ -605,8 +605,8 @@ mod tests {
                 );
                 let output = evaluator
                     .evaluate(
-                        comparison_circuit.clone(),
-                        garbler_inputs,
+                        &comparison_circuit,
+                        &garbler_inputs,
                         [jbit1, jbit2].as_slice(),
                     )
                     .unwrap();
@@ -630,7 +630,7 @@ mod tests {
         let circuit = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
         let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
-        let garble_output = garbler.garble(circuit.clone()).unwrap();
+        let garble_output = garbler.garble(&circuit).unwrap();
         for i in 0..2 {
             for j in 0..2 {
                 let mut evaluator = BinaryEvaluator::new(
@@ -646,7 +646,7 @@ mod tests {
                     garble_output.garbler_input_encodings.clone(),
                 );
                 let output = evaluator
-                    .evaluate(circuit.clone(), garbler_inputs, [j != 0; 128].as_slice())
+                    .evaluate(&circuit, &garbler_inputs, [j != 0; 128].as_slice())
                     .unwrap();
                 let decoutput = evaluator
                     .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());

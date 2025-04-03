@@ -327,10 +327,6 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         garbler_input_encodings: HashMap<usize, Block>,
     ) -> HashMap<usize, [u8; 16]> {
         let mut garbled_input_encodings = HashMap::new();
-        println!(
-            "{:?}\n{:?}",
-            circ.garbler_input_ids, garbler_input_encodings
-        );
         for (count, ids) in circ.garbler_input_ids.into_iter().enumerate() {
             let mut enc = garbler_input_encodings.get(&ids).unwrap().to_owned();
             if garbler_inputs[count] {
@@ -363,7 +359,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
     ///     - `decoding_infos`: A Hashmap of output wire IDs to their decoding informations.
     ///
     /// * `Err(GarblerError)` - An error if the evaluation fails.
-    pub fn garble(&mut self, circ: BinaryCircuit) -> Result<GarbleOutput, GarblerError> {
+    pub fn garble(&mut self, circ: &BinaryCircuit) -> Result<GarbleOutput, GarblerError> {
         let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
         let mut garbler_input_encodings: HashMap<usize, Block> = HashMap::new();
         let mut evaluator_input_encodings: HashMap<usize, Block> = HashMap::new();

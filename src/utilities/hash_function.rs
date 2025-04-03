@@ -18,7 +18,7 @@ pub trait HashFunction: Clone {
     fn ccr_hash(&self, x: Block) -> Block;
 
     /// Returns a tweakable circular correlation robust hash
-    /// given an input `Block` and an integer encoded in a `Block`.
+    /// given an input `Block`.
     fn tccr_hash(&self, x: Block, i: Block) -> Block;
 
     /// Returns a hash given an input `Block`.
@@ -110,7 +110,7 @@ impl HashFunction for AesHash {
 
         // Return the final encrypted block as the CBC-MAC
         let mut result = [0u8; 16];
-        result.copy_from_slice(&output_block);
+        result.copy_from_slice(output_block.as_slice());
 
         Ok(result)
     }

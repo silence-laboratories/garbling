@@ -1,6 +1,13 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{BufRead, BufReader},
+};
 
-use crate::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
+use crate::{
+    circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
+    config::garbling2pc_errors::FileParsingError,
+};
 
 /// `CircuitBuilder` is a struct used to construct a `BinaryCircuit`.
 /// It maintains internal state during the circuit construction process.
@@ -172,6 +179,147 @@ impl CircuitBuilder<BinaryCircuit> {
     pub fn output(&mut self, id: usize) {
         self.circ.push_output_gate(id);
     }
+
+    pub fn parse(
+        &mut self,
+        file_name: &str,
+        garbler_input_ids: &[usize],
+        evaluator_input_ids: &[usize],
+    ) -> Result<Vec<usize>, FileParsingError> {
+        let file = File::open(file_name)?;
+        let mut reader = BufReader::new(file).lines();
+
+        let mut num_gates: usize = 0;
+        let mut num_wires: usize = 0;
+
+        if let Some(Ok(line1)) = reader.next() {
+            let mut parts = line1.split(' ');
+            num_gates = parts.next().unwrap().parse()?;
+            num_wires = parts.next().unwrap().parse()?;
+        }
+
+        let mut num_garbler_inputs = 0;
+        let mut num_evaluator_inputs = 0;
+        let mut num_outputs = 0;
+
+        if let Some(Ok(line1)) = reader.next() {
+            let mut parts = line1.split(' ');
+            if let Some(n_input_wires_str) = parts.next() {
+                if let Ok(_num_inp_wires) = n_input_wires_str.parse::<u64>() {
+                    if _num_inp_wires == 2 {
+                        if let Some(num_garbl_inputs) = parts.next() {
+                            if let Ok(_num_garbl_inputs) = num_garbl_inputs.parse::<usize>() {
+                                if let Some(num_eval_inputs) = parts.next() {
+                                    if let Ok(_num_eval_inputs) = num_eval_inputs.parse::<usize>() {
+                                        num_garbler_inputs = _num_garbl_inputs;
+                                        num_evaluator_inputs = _num_eval_inputs;
+                                    } else {
+                                        return Err(FileParsingError::InputNoParsingError());
+                                    }
+                                } else {
+                                    return Err(FileParsingError::InputNoParsingError());
+                                }
+                            } else {
+                                return Err(FileParsingError::InputNoParsingError());
+                            }
+                        } else {
+                            return Err(FileParsingError::InputNoParsingError());
+                        }
+                    } else {
+                        return Err(FileParsingError::InputCountError());
+                    }
+                } else {
+                    return Err(FileParsingError::InputNoParsingError());
+                }
+            }
+        }
+
+        assert_eq!(num_garbler_inputs, garbler_input_ids.len());
+        assert_eq!(num_evaluator_inputs, evaluator_input_ids.len());
+
+        if let Some(Ok(line1)) = reader.next() {
+            let mut parts = line1.split(' ');
+            if let Some(n_output_usizes_str) = parts.next() {
+                if let Ok(n_output_usizes) = n_output_usizes_str.parse::<usize>() {
+                    if n_output_usizes == 1 {
+                        if let Some(n_outputs) = parts.next() {
+                            if let Ok(n_output) = n_outputs.parse::<usize>() {
+                                num_outputs = n_output;
+                            }
+                        }
+                    } else {
+                        return Err(FileParsingError::OutputCountError());
+                    }
+                } else {
+                    return Err(FileParsingError::OutputNoParsingError());
+                }
+            }
+        }
+
+        let mut id: usize = 0;
+        let latest_ref = self.next_ref_id - num_garbler_inputs - num_evaluator_inputs;
+
+        /////// NEED TO HANDLE OUTPUT GATES PROPERLY.
+
+        for i in 0..num_gates {
+            let num_input: usize;
+            let mut _num_output = 0;
+            let mut input0: usize = 0;
+            let mut input1: usize = 0;
+            let mut output: usize = 0;
+            let mut gate = String::new();
+
+            if let Some(Ok(line1)) = reader.next() {
+                let mut parts = line1.split(' ');
+                if let Some(num_inputs_str) = parts.next() {
+                    if let Ok(parsed_num_input) = num_inputs_str.parse::<usize>() {
+                        num_input = parsed_num_input;
+                        _num_output = parts.next().unwrap().parse::<usize>()?;
+                        input0 = parts.next().unwrap().parse::<usize>()?;
+                        if num_input == 2 {
+                            input1 = parts.next().unwrap().parse::<usize>()?
+                        }
+                        output = parts.next().unwrap().parse::<usize>()?;
+                        if let Some(gate_str) = parts.next() {
+                            gate = gate_str.to_string();
+                        }
+                    }
+                }
+            }
+            if gate == "AND" {
+                self.circ.push_gate(BinaryGate::And {
+                    xid: input0 + latest_ref,
+                    yid: input1 + latest_ref,
+                    id,
+                    out: Some(output + latest_ref),
+                });
+                id += 1;
+            } else if gate == "XOR" {
+                self.circ.push_gate(BinaryGate::Xor {
+                    xid: input0 + latest_ref,
+                    yid: input1 + latest_ref,
+                    out: Some(output + latest_ref),
+                });
+            } else if gate == "INV" {
+                self.circ.push_gate(BinaryGate::Inv {
+                    xid: input0 + latest_ref,
+                    out: Some(output + latest_ref),
+                });
+            } else {
+                return Err(FileParsingError::FileFormatError(i));
+            }
+        }
+
+        let mut output_wire_ids = vec![];
+
+        for i in 0..num_outputs {
+            output_wire_ids.push(num_wires - num_outputs + latest_ref + i);
+        }
+
+        self.next_ref_id = num_wires + latest_ref;
+
+        Ok(output_wire_ids)
+    }
 }
 
 /// Implements the `Default` trait for `CircuitBuilder<BinaryCircuit>`.
@@ -188,7 +336,10 @@ mod tests {
     use crate::{
         circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
         customcircuits::comparison::build_comparison_circuit,
+        garbling2pc::plaintext_operations::BinaryPlaintext,
     };
+
+    use super::CircuitBuilder;
 
     #[test]
     fn test_circuit_builder() {
@@ -242,5 +393,148 @@ mod tests {
         };
 
         assert_eq!(required_circuit, circuit);
+    }
+
+    #[test]
+    fn test_circuit_builder_parse() {
+        let mut builder = CircuitBuilder::new();
+
+        let inputs_garb = builder.garbler_inputs(4);
+        let inputs_eval = builder.evaluator_inputs(4);
+
+        let xor_garb1 = builder.xor(inputs_garb[0], inputs_garb[1]);
+        let xor_garb2 = builder.xor(inputs_garb[2], inputs_garb[3]);
+        let xor_eval1 = builder.xor(inputs_eval[0], inputs_eval[1]);
+        let xor_eval2 = builder.xor(inputs_eval[2], inputs_eval[3]);
+
+        let outputs = builder
+            .parse(
+                "circuits/binmult.txt",
+                [xor_garb1, xor_garb2].as_slice(),
+                [xor_eval1, xor_eval2].as_slice(),
+            )
+            .unwrap();
+
+        let mut builder2 = builder.clone();
+
+        for i in outputs.clone() {
+            builder.output(i);
+        }
+
+        let circuit = builder.finish();
+
+        let circ2 = BinaryCircuit::parse("circuits/binmult.txt").unwrap();
+
+        let mut outfin = true;
+        for garb in 0..16 {
+            for eval in 0..16 {
+                let mut newgarb = garb;
+                let garb0 = (newgarb % 2) != 0;
+                newgarb /= 2;
+                let garb1 = (newgarb % 2) != 0;
+                newgarb /= 2;
+                let garb2 = (newgarb % 2) != 0;
+                newgarb /= 2;
+                let garb3 = (newgarb % 2) != 0;
+
+                let mut neweval = eval;
+                let eval0 = (neweval % 2) != 0;
+                neweval /= 2;
+                let eval1 = (neweval % 2) != 0;
+                neweval /= 2;
+                let eval2 = (neweval % 2) != 0;
+                neweval /= 2;
+                let eval3 = (neweval % 2) != 0;
+
+                let actgarb0 = garb0 ^ garb1;
+                let actgarb1 = garb2 ^ garb3;
+
+                let acteval0 = eval0 ^ eval1;
+                let acteval1 = eval2 ^ eval3;
+
+                let mut pl = BinaryPlaintext::new();
+
+                let outs = pl
+                    .evaluate(
+                        circuit.clone(),
+                        &[garb0, garb1, garb2, garb3],
+                        &[eval0, eval1, eval2, eval3],
+                    )
+                    .unwrap();
+
+                let mut pl2 = BinaryPlaintext::new();
+
+                let outs2 = pl2
+                    .evaluate(circ2.clone(), &[actgarb0, actgarb1], &[acteval0, acteval1])
+                    .unwrap();
+
+                outfin &= outs == outs2;
+            }
+        }
+        assert!(outfin);
+
+        let gext0 = builder2.garbler_input();
+        let gext1 = builder2.garbler_input();
+
+        let actouts = builder2
+            .parse("circuits/binmult.txt", [gext0, gext1].as_slice(), &outputs)
+            .unwrap();
+
+        for i in actouts.clone() {
+            builder2.output(i);
+        }
+
+        let circuit = builder2.finish();
+
+        let mut outfin = true;
+        for garb in 0..16 {
+            for eval in 0..16 {
+                let mut newgarb = garb;
+                let garb0 = (newgarb % 2) != 0;
+                newgarb /= 2;
+                let garb1 = (newgarb % 2) != 0;
+                newgarb /= 2;
+                let garb2 = (newgarb % 2) != 0;
+                newgarb /= 2;
+                let garb3 = (newgarb % 2) != 0;
+
+                let mut neweval = eval;
+                let eval0 = (neweval % 2) != 0;
+                neweval /= 2;
+                let eval1 = (neweval % 2) != 0;
+                neweval /= 2;
+                let eval2 = (neweval % 2) != 0;
+                neweval /= 2;
+                let eval3 = (neweval % 2) != 0;
+
+                let actgarb0 = garb0 ^ garb1;
+                let actgarb1 = garb2 ^ garb3;
+
+                let acteval0 = eval0 ^ eval1;
+                let acteval1 = eval2 ^ eval3;
+
+                let mut pl = BinaryPlaintext::new();
+
+                let outs = pl
+                    .evaluate(
+                        circuit.clone(),
+                        &[garb0, garb1, garb2, garb3, true, false],
+                        &[eval0, eval1, eval2, eval3],
+                    )
+                    .unwrap();
+
+                let mut pl2 = BinaryPlaintext::new();
+                let mut pl3 = BinaryPlaintext::new();
+
+                let outs2 = pl2
+                    .evaluate(circ2.clone(), &[actgarb0, actgarb1], &[acteval0, acteval1])
+                    .unwrap();
+
+                let outs3 = pl3.evaluate(circ2.clone(), &[true, false], &outs2).unwrap();
+
+                outfin &= outs == outs3;
+            }
+        }
+        assert!(outfin);
     }
 }
