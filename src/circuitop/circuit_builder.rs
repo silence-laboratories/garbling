@@ -257,9 +257,8 @@ impl CircuitBuilder<BinaryCircuit> {
         }
 
         let mut id: usize = 0;
-        let latest_ref = self.next_ref_id - num_garbler_inputs - num_evaluator_inputs;
-
-        /////// NEED TO HANDLE OUTPUT GATES PROPERLY.
+        let latest_ref = self.next_ref_id;
+        let sub_val = num_garbler_inputs + num_evaluator_inputs;
 
         for i in 0..num_gates {
             let num_input: usize;
@@ -287,23 +286,66 @@ impl CircuitBuilder<BinaryCircuit> {
                 }
             }
             if gate == "AND" {
+                let newinput0: usize;
+                if input0 >= sub_val {
+                    newinput0 = input0 + latest_ref - sub_val;
+                } else if input0 >= num_garbler_inputs {
+                    newinput0 = evaluator_input_ids[input0 - num_garbler_inputs];
+                } else {
+                    newinput0 = garbler_input_ids[input0];
+                }
+
+                let newinput1: usize;
+                if input1 >= sub_val {
+                    newinput1 = input1 + latest_ref - sub_val;
+                } else if input1 >= num_garbler_inputs {
+                    newinput1 = evaluator_input_ids[input1 - num_garbler_inputs];
+                } else {
+                    newinput1 = garbler_input_ids[input1];
+                }
                 self.circ.push_gate(BinaryGate::And {
-                    xid: input0 + latest_ref,
-                    yid: input1 + latest_ref,
+                    xid: newinput0,
+                    yid: newinput1,
                     id,
-                    out: Some(output + latest_ref),
+                    out: Some(output + latest_ref - sub_val),
                 });
                 id += 1;
             } else if gate == "XOR" {
+                let newinput0: usize;
+                if input0 >= sub_val {
+                    newinput0 = input0 + latest_ref - sub_val;
+                } else if input0 >= num_garbler_inputs {
+                    newinput0 = evaluator_input_ids[input0 - num_garbler_inputs];
+                } else {
+                    newinput0 = garbler_input_ids[input0];
+                }
+
+                let newinput1: usize;
+                if input1 >= sub_val {
+                    newinput1 = input1 + latest_ref - sub_val;
+                } else if input1 >= num_garbler_inputs {
+                    newinput1 = evaluator_input_ids[input1 - num_garbler_inputs];
+                } else {
+                    newinput1 = garbler_input_ids[input1];
+                }
                 self.circ.push_gate(BinaryGate::Xor {
-                    xid: input0 + latest_ref,
-                    yid: input1 + latest_ref,
-                    out: Some(output + latest_ref),
+                    xid: newinput0,
+                    yid: newinput1,
+                    out: Some(output + latest_ref - sub_val),
                 });
             } else if gate == "INV" {
+                let newinput0: usize;
+                if input0 >= sub_val {
+                    newinput0 = input0 + latest_ref - sub_val;
+                } else if input0 >= num_garbler_inputs {
+                    newinput0 = evaluator_input_ids[input0 - num_garbler_inputs];
+                } else {
+                    newinput0 = garbler_input_ids[input0];
+                }
+
                 self.circ.push_gate(BinaryGate::Inv {
-                    xid: input0 + latest_ref,
-                    out: Some(output + latest_ref),
+                    xid: newinput0,
+                    out: Some(output + latest_ref - sub_val),
                 });
             } else {
                 return Err(FileParsingError::FileFormatError(i));
@@ -313,10 +355,10 @@ impl CircuitBuilder<BinaryCircuit> {
         let mut output_wire_ids = vec![];
 
         for i in 0..num_outputs {
-            output_wire_ids.push(num_wires - num_outputs + latest_ref + i);
+            output_wire_ids.push(num_wires - num_outputs + latest_ref - sub_val + i);
         }
 
-        self.next_ref_id = num_wires + latest_ref;
+        self.next_ref_id = num_wires + latest_ref - sub_val;
 
         Ok(output_wire_ids)
     }
