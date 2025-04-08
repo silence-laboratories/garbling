@@ -61,7 +61,7 @@ impl<H: HashFunction, R: RngCore + CryptoRng> ThreePartyBinaryGarbler for Binary
         &self,
         input_ids: &[usize],
         inputs: &[&[bool]; 2],
-        input_encodings: HashMap<usize, Block>,
+        input_encodings: &HashMap<usize, Block>,
     ) -> HashMap<usize, [u8; 16]> {
         let mut garbled_input_encodings = HashMap::new();
         for (count, ids) in input_ids.iter().enumerate() {

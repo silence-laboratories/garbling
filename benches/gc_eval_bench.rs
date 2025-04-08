@@ -18,12 +18,12 @@ pub fn eval_aes256_benchmark(c: &mut Criterion) {
     let garbler_inputs = garbler.get_garbled_inputs(
         &circuit.garbler_input_ids,
         [false; 256].as_slice(),
-        garble_out.garbler_input_encodings.clone(),
+        &garble_out.garbler_input_encodings.clone(),
     );
     let evaluator_inputs = garbler.get_garbled_inputs(
         &circuit.evaluator_input_ids,
         [false; 128].as_slice(),
-        garble_out.evaluator_input_encodings.clone(),
+        &garble_out.evaluator_input_encodings.clone(),
     );
     group.bench_function("aes256_eval", |b| {
         b.iter(|| {
@@ -50,12 +50,12 @@ pub fn eval_aes128_benchmark(c: &mut Criterion) {
     let garbler_inputs = garbler.get_garbled_inputs(
         &circuit.garbler_input_ids,
         [false; 128].as_slice(),
-        garble_out.garbler_input_encodings.clone(),
+        &garble_out.garbler_input_encodings.clone(),
     );
     let evaluator_inputs = garbler.get_garbled_inputs(
         &circuit.evaluator_input_ids,
         [false; 128].as_slice(),
-        garble_out.evaluator_input_encodings.clone(),
+        &garble_out.evaluator_input_encodings.clone(),
     );
     group.bench_function("aes128_eval", |b| {
         b.iter(|| {
@@ -82,12 +82,12 @@ pub fn eval_sha256_benchmark(c: &mut Criterion) {
     let garbler_inputs = garbler.get_garbled_inputs(
         &circuit.garbler_input_ids,
         [false; 512].as_slice(),
-        garble_out.garbler_input_encodings.clone(),
+        &garble_out.garbler_input_encodings.clone(),
     );
     let evaluator_inputs = garbler.get_garbled_inputs(
         &circuit.evaluator_input_ids,
         [false; 256].as_slice(),
-        garble_out.evaluator_input_encodings.clone(),
+        &garble_out.evaluator_input_encodings.clone(),
     );
     group.bench_function("sha256_eval", |b| {
         b.iter(|| {

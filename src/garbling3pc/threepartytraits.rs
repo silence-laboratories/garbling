@@ -51,7 +51,7 @@ pub trait ThreePartyBinaryGarbler {
         &self,
         input_ids: &[usize],
         inputs: &[&[bool]; 2],
-        input_encodings: HashMap<usize, Block>,
+        input_encodings: &HashMap<usize, Block>,
     ) -> HashMap<usize, [u8; 16]>;
 }
 

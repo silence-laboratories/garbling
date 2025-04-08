@@ -158,12 +158,12 @@ mod tests {
                 let garbler_inputs = garbler.get_garbled_inputs(
                     &circuit.garbler_input_ids,
                     [i != 0].as_slice(),
-                    garble_output.garbler_input_encodings.clone(),
+                    &garble_output.garbler_input_encodings,
                 );
                 let evaluator_inputs = garbler.get_garbled_inputs_threeparty(
                     &circuit.evaluator_input_ids,
                     &[[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
-                    garble_output.evaluator_input_encodings.clone(),
+                    &garble_output.evaluator_input_encodings.clone(),
                 );
                 let output = evaluator
                     .evaluate_threeparty(&circuit, &garbler_inputs, &evaluator_inputs)
@@ -208,12 +208,12 @@ mod tests {
                 let garbler_inputs = garbler.get_garbled_inputs(
                     &circuit.garbler_input_ids,
                     [i != 0].as_slice(),
-                    garble_output.garbler_input_encodings.clone(),
+                    &garble_output.garbler_input_encodings,
                 );
                 let evaluator_inputs = garbler.get_garbled_inputs_threeparty(
                     &circuit.evaluator_input_ids,
                     &[[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
-                    garble_output.evaluator_input_encodings.clone(),
+                    &garble_output.evaluator_input_encodings.clone(),
                 );
                 let output = evaluator
                     .evaluate_threeparty(&circuit, &garbler_inputs, &evaluator_inputs)
@@ -258,12 +258,12 @@ mod tests {
             let garbler_inputs = garbler.get_garbled_inputs(
                 &circuit.garbler_input_ids,
                 [].as_slice(),
-                garble_output.garbler_input_encodings.clone(),
+                &garble_output.garbler_input_encodings,
             );
             let evaluator_inputs = garbler.get_garbled_inputs_threeparty(
                 &circuit.evaluator_input_ids,
                 &[[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
-                garble_output.evaluator_input_encodings.clone(),
+                &garble_output.evaluator_input_encodings.clone(),
             );
             let output = evaluator
                 .evaluate_threeparty(&circuit, &garbler_inputs, &evaluator_inputs)
@@ -307,7 +307,7 @@ mod tests {
                 let garbler_inputs = garbler.get_garbled_inputs(
                     &comparison_circuit.garbler_input_ids,
                     [ibit1, ibit2].as_slice(),
-                    garble_output.garbler_input_encodings.clone(),
+                    &garble_output.garbler_input_encodings,
                 );
                 let evaluator_inputs = garbler.get_garbled_inputs_threeparty(
                     &comparison_circuit.evaluator_input_ids,
@@ -315,7 +315,7 @@ mod tests {
                         [jinp1, jinp2].as_slice(),
                         [jbit1 ^ jinp1, jbit2 ^ jinp2].as_slice(),
                     ],
-                    garble_output.evaluator_input_encodings.clone(),
+                    &garble_output.evaluator_input_encodings.clone(),
                 );
                 let output = evaluator
                     .evaluate_threeparty(&comparison_circuit, &garbler_inputs, &evaluator_inputs)
@@ -361,12 +361,12 @@ mod tests {
                 let garbler_inputs = garbler.get_garbled_inputs(
                     &circuit.garbler_input_ids,
                     [i != 0; 128].as_slice(),
-                    garble_output.garbler_input_encodings.clone(),
+                    &garble_output.garbler_input_encodings,
                 );
                 let evaluator_inputs = garbler.get_garbled_inputs_threeparty(
                     &circuit.evaluator_input_ids,
                     &[&j1, &j2],
-                    garble_output.evaluator_input_encodings.clone(),
+                    &garble_output.evaluator_input_encodings.clone(),
                 );
                 let output = evaluator
                     .evaluate_threeparty(&circuit, &garbler_inputs, &evaluator_inputs)

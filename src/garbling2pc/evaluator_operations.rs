@@ -409,12 +409,12 @@ mod tests {
                 let garbler_inputs = garbler.get_garbled_inputs(
                     &circuit.garbler_input_ids,
                     [i != 0].as_slice(),
-                    garble_output.garbler_input_encodings.clone(),
+                    &garble_output.garbler_input_encodings,
                 );
                 let evaluator_inputs = garbler.get_garbled_inputs(
                     &circuit.evaluator_input_ids,
                     [j != 0].as_slice(),
-                    garble_output.evaluator_input_encodings.clone(),
+                    &garble_output.evaluator_input_encodings,
                 );
                 let output = evaluator
                     .evaluate(&circuit, &garbler_inputs, &evaluator_inputs)
@@ -457,12 +457,12 @@ mod tests {
                 let garbler_inputs = garbler.get_garbled_inputs(
                     &circuit.garbler_input_ids,
                     [i != 0].as_slice(),
-                    garble_output.garbler_input_encodings.clone(),
+                    &garble_output.garbler_input_encodings,
                 );
                 let evaluator_inputs = garbler.get_garbled_inputs(
                     &circuit.evaluator_input_ids,
                     [j != 0].as_slice(),
-                    garble_output.evaluator_input_encodings.clone(),
+                    &garble_output.evaluator_input_encodings,
                 );
                 let output = evaluator
                     .evaluate(&circuit, &garbler_inputs, &evaluator_inputs)
@@ -505,12 +505,12 @@ mod tests {
             let garbler_inputs = garbler.get_garbled_inputs(
                 &circuit.garbler_input_ids,
                 [].as_slice(),
-                garble_output.garbler_input_encodings.clone(),
+                &garble_output.garbler_input_encodings,
             );
             let evaluator_inputs = garbler.get_garbled_inputs(
                 &circuit.evaluator_input_ids,
                 [j != 0].as_slice(),
-                garble_output.evaluator_input_encodings.clone(),
+                &garble_output.evaluator_input_encodings,
             );
             let output = evaluator
                 .evaluate(&circuit, &garbler_inputs, &evaluator_inputs)
@@ -548,12 +548,12 @@ mod tests {
                 let garbler_inputs = garbler.get_garbled_inputs(
                     &circuit.garbler_input_ids,
                     [].as_slice(),
-                    garble_output.garbler_input_encodings,
+                    &garble_output.garbler_input_encodings,
                 );
                 let evaluator_inputs = garbler.get_garbled_inputs(
                     &circuit.evaluator_input_ids,
                     [j != 0].as_slice(),
-                    garble_output.evaluator_input_encodings,
+                    &garble_output.evaluator_input_encodings,
                 );
                 let output = evaluator
                     .evaluate(&circuit, &garbler_inputs, &evaluator_inputs)
@@ -592,12 +592,12 @@ mod tests {
                 let garbler_inputs = garbler.get_garbled_inputs(
                     &comparison_circuit.garbler_input_ids,
                     [ibit1, ibit2].as_slice(),
-                    garble_output.garbler_input_encodings.clone(),
+                    &garble_output.garbler_input_encodings,
                 );
                 let evaluator_inputs = garbler.get_garbled_inputs(
                     &comparison_circuit.evaluator_input_ids,
                     [jbit1, jbit2].as_slice(),
-                    garble_output.evaluator_input_encodings.clone(),
+                    &garble_output.evaluator_input_encodings,
                 );
                 let output = evaluator
                     .evaluate(&comparison_circuit, &garbler_inputs, &evaluator_inputs)
@@ -633,12 +633,12 @@ mod tests {
                 let garbler_inputs = garbler.get_garbled_inputs(
                     &circuit.garbler_input_ids,
                     [i != 0; 128].as_slice(),
-                    garble_output.garbler_input_encodings.clone(),
+                    &garble_output.garbler_input_encodings,
                 );
                 let evaluator_inputs = garbler.get_garbled_inputs(
                     &circuit.evaluator_input_ids,
                     [j != 0; 128].as_slice(),
-                    garble_output.evaluator_input_encodings.clone(),
+                    &garble_output.evaluator_input_encodings,
                 );
                 let output = evaluator
                     .evaluate(&circuit, &garbler_inputs, &evaluator_inputs)
