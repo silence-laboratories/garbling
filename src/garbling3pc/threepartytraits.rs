@@ -46,6 +46,13 @@ pub trait ThreePartyBinaryGarbler {
         &mut self,
         circ: BinaryCircuit,
     ) -> Result<GarbleOutput, ThreePartyGarblerError>;
+
+    fn get_garbled_inputs_threeparty(
+        &self,
+        input_ids: &[usize],
+        inputs: &[&[bool]; 2],
+        input_encodings: HashMap<usize, Block>,
+    ) -> HashMap<usize, [u8; 16]>;
 }
 
 /// Trait for any `BinaryEvaluator` which implements the three-party secure garbled-circuit
@@ -53,15 +60,8 @@ pub trait ThreePartyBinaryGarbler {
 pub trait ThreePartyBinaryEvaluator {
     fn evaluate_threeparty(
         &mut self,
-        circ: BinaryCircuit,
-        garbler_inputs: HashMap<usize, Block>,
-        evaluator_inputs: [&[bool]; 2],
-    ) -> Result<HashMap<usize, Block>, ThreePartyEvaluatorError>;
-
-    fn garbled_evaluate_threeparty(
-        &mut self,
-        circ: BinaryCircuit,
-        garbled_garbler_inputs: HashMap<usize, Block>,
-        garbled_evaluator_inputs: [HashMap<usize, Block>; 2],
+        circ: &BinaryCircuit,
+        garbler_inputs: &HashMap<usize, Block>,
+        evaluator_inputs: &HashMap<usize, Block>,
     ) -> Result<HashMap<usize, Block>, ThreePartyEvaluatorError>;
 }

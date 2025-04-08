@@ -108,9 +108,9 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
 
         for i in 0..num_evaluator_inputs {
             output_circuit.push_gate(BinaryGate::EvaluatorInput { id: 2 * i });
-            output_circuit.push_evaluator_input(num_garbler_inputs + 3 * i);
+            output_circuit.push_evaluator_input(2 * i);
             output_circuit.push_gate(BinaryGate::EvaluatorInput { id: 2 * i + 1 });
-            output_circuit.push_evaluator_input(num_garbler_inputs + 3 * i + 1);
+            output_circuit.push_evaluator_input(2 * i + 1);
             output_circuit.push_gate(BinaryGate::Xor {
                 xid: num_garbler_inputs + 3 * i,
                 yid: num_garbler_inputs + 3 * i + 1,
@@ -269,7 +269,7 @@ mod tests {
                 },
             ],
             garbler_input_ids: vec![0, 1],
-            evaluator_input_ids: vec![2, 3, 5, 6],
+            evaluator_input_ids: vec![0, 1, 2, 3],
             output_gate_ids: vec![12, 13],
             constant_gate_ids: vec![],
             num_nonfree_gates: 0,

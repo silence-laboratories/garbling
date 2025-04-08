@@ -306,33 +306,33 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         self.cache.clone()
     }
 
-    /// Returns the garbled version of the garbler's inputs.
+    /// Returns the garbled version of the inputs.
     ///
     /// # Arguments
     ///
-    /// * `circ` - A `BinaryCircuit` whose garbled input gates are evaluated.
-    /// * `garbler_inputs` - A slice of `bool` containing the garbler's input values in
-    ///   the order of the garbler's input ids.
-    /// * `garbler_input_encodings` - A `HashMap<usize, Block>` which maps the garbler's input ids
+    /// * `input_ids` - A slice of `usize` containing the ids of the input wires.
+    /// * `inputs` - A slice of `bool` containing the input values in
+    ///   the order of the input ids.
+    /// * `input_encodings` - A `HashMap<usize, Block>` which maps the input ids
     ///   to the correspoding encodings of `false` values, as per the Free-XOR technique.
     ///
     /// # Returns
     ///
-    /// A `HashMap<usize, Block>` which maps the garbler's input ids
-    /// to the correspoding encoded garbler's inputs.
+    /// A `HashMap<usize, Block>` which maps the input ids
+    /// to the correspoding encoded inputs.
     pub fn get_garbled_inputs(
         &self,
-        circ: BinaryCircuit,
-        garbler_inputs: &[bool],
-        garbler_input_encodings: HashMap<usize, Block>,
+        input_ids: &[usize],
+        inputs: &[bool],
+        input_encodings: HashMap<usize, Block>,
     ) -> HashMap<usize, [u8; 16]> {
         let mut garbled_input_encodings = HashMap::new();
-        for (count, ids) in circ.garbler_input_ids.into_iter().enumerate() {
-            let mut enc = garbler_input_encodings.get(&ids).unwrap().to_owned();
-            if garbler_inputs[count] {
+        for (count, ids) in input_ids.iter().enumerate() {
+            let mut enc = input_encodings.get(ids).unwrap().to_owned();
+            if inputs[count] {
                 enc = xor_blocks(enc, self.delta);
             }
-            garbled_input_encodings.insert(ids, enc);
+            garbled_input_encodings.insert(*ids, enc);
         }
         garbled_input_encodings
     }

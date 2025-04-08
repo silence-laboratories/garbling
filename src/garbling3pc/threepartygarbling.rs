@@ -612,8 +612,8 @@ pub fn threepg_create_msg4_p3(
 
     let mut garbled_garbler_inputs: HashMap<usize, Block> =
         HashMap::with_capacity(p1_ip_nos + p2_ip_nos);
-    let mut garbled_evaluator_inputs: HashMap<usize, Block> = HashMap::with_capacity(p3_ip_nos);
-    let mut garbled_evaluator_inputs_2: HashMap<usize, Block> = HashMap::with_capacity(p3_ip_nos);
+    let mut garbled_evaluator_inputs: HashMap<usize, Block> = HashMap::with_capacity(2 * p3_ip_nos);
+    // let mut garbled_evaluator_inputs_2: HashMap<usize, Block> = HashMap::with_capacity(p3_ip_nos);
 
     let comm = &state_r3.msg3_p1.com_vals.p1_commitments;
     let decom = &state_r3.msg3_p1.decom_vals.x12_decom;
@@ -661,7 +661,7 @@ pub fn threepg_create_msg4_p3(
             comt = *comm.get(&(i, 1)).unwrap();
         }
         if commitment.verify(message, witness, comt) {
-            garbled_evaluator_inputs.insert(i, message);
+            garbled_evaluator_inputs.insert(2 * i, message);
         } else {
             return None;
         }
@@ -678,27 +678,17 @@ pub fn threepg_create_msg4_p3(
             comt = *comm.get(&(p3_ip_nos + i, 1)).unwrap();
         }
         if commitment.verify(message, witness, comt) {
-            garbled_evaluator_inputs_2.insert(i, message);
+            garbled_evaluator_inputs.insert(2 * i + 1, message);
         } else {
             return None;
         }
     }
 
     let hash = AesHash::new(HASH_KEY);
-    let mut eval = BinaryEvaluator::new(
-        HashMap::new(),
-        HashMap::new(),
-        state_r3.msg3_p1.com_vals.delta,
-        hash,
-        state_r3.msg3_p1.com_vals.gc.clone(),
-    );
+    let mut eval = BinaryEvaluator::new(HashMap::new(), hash, state_r3.msg3_p1.com_vals.gc.clone());
 
     let dec = eval
-        .garbled_evaluate_threeparty(
-            circuit.clone(),
-            garbled_garbler_inputs,
-            [garbled_evaluator_inputs, garbled_evaluator_inputs_2],
-        )
+        .evaluate_threeparty(circuit, &garbled_garbler_inputs, &garbled_evaluator_inputs)
         .unwrap();
 
     Some(ThreePGMsg4 { garbled_op: dec })
@@ -718,13 +708,7 @@ pub fn threepg_create_msg5_p12(
     state_r3: &ThreePGParty12StateR3,
 ) -> ThreePGOutput {
     let hash = AesHash::new(HASH_KEY);
-    let eval = BinaryEvaluator::new(
-        state_r3.evaluator_encoding.clone(),
-        state_r3.decoding_info.clone(),
-        state_r3.delta,
-        hash,
-        state_r3.gc.clone(),
-    );
+    let eval = BinaryEvaluator::new(state_r3.decoding_info.clone(), hash, state_r3.gc.clone());
     let op = eval.get_plaintext_output(
         circuit.get_output_gate_ids().to_vec(),
         state_r4.msg4.garbled_op.clone(),

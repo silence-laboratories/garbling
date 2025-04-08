@@ -129,7 +129,7 @@ impl BinaryCircuit {
 
         for i in 0..num_evaluator_inputs {
             output_circuit.push_gate(BinaryGate::EvaluatorInput { id: i });
-            output_circuit.push_evaluator_input(num_garbler_inputs + i);
+            output_circuit.push_evaluator_input(i);
         }
 
         for i in 0..num_outputs {
@@ -390,7 +390,7 @@ mod tests {
                 },
             ],
             garbler_input_ids: vec![0, 1],
-            evaluator_input_ids: vec![2, 3],
+            evaluator_input_ids: vec![0, 1],
             output_gate_ids: vec![8, 9],
             constant_gate_ids: vec![],
             num_nonfree_gates: 0,

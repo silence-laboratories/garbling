@@ -25,8 +25,8 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
     /// * `circ` - The `BinaryCircuit` to be evaluated.
     /// * `garbler_inputs`: A `HashMap<usize, Block>` which maps the garbler's input
     ///   ids to its correspoding encoded garbler's inputs.
-    /// * `evaluator_inputs` - A slice of `bool` containing the evaluator's input values in
-    ///   the order of the evaluator's input ids.
+    /// * `evaluator_inputs` - A `HashMap<usize, Block>` which maps the evaluator's input
+    ///   ids to its correspoding encoded evaluator's inputs.
     ///
     /// # Returns
     ///
@@ -35,9 +35,9 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
     /// * `Err(EvaluatorError)` - An error if the evaluation fails.
     fn evaluate_threeparty(
         &mut self,
-        circ: BinaryCircuit,
-        garbler_inputs: HashMap<usize, Block>,
-        evaluator_inputs: [&[bool]; 2],
+        circ: &BinaryCircuit,
+        garbler_inputs: &HashMap<usize, Block>,
+        evaluator_inputs: &HashMap<usize, Block>,
     ) -> Result<HashMap<usize, Block>, ThreePartyEvaluatorError> {
         let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
         for (i, gate) in circ.gates.iter().enumerate() {
@@ -53,30 +53,14 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
                     (None, input_hash)
                 }
                 BinaryGate::EvaluatorInput { id } => {
-                    if id / 2 >= evaluator_inputs[0].len() {
-                        return Err(ThreePartyEvaluatorError::GarblerIpLenError(
+                    if id >= evaluator_inputs.len() {
+                        return Err(ThreePartyEvaluatorError::EvaluatorIpLenError(
                             id,
-                            evaluator_inputs[0].len(),
+                            evaluator_inputs.len(),
                         ));
                     }
-
-                    if id / 2 >= evaluator_inputs[1].len() {
-                        return Err(ThreePartyEvaluatorError::GarblerIpLenError(
-                            id,
-                            evaluator_inputs[1].len(),
-                        ));
-                    }
-                    if id % 2 == 0 {
-                        (
-                            None,
-                            self.process_evaluator_input(id, evaluator_inputs[0][id / 2])?,
-                        )
-                    } else {
-                        (
-                            None,
-                            self.process_evaluator_input(id, evaluator_inputs[1][id / 2])?,
-                        )
-                    }
+                    let input_hash = evaluator_inputs.get(&id).unwrap().to_owned();
+                    (None, input_hash)
                 }
                 BinaryGate::Constant { val } => (None, self.constant(val)?),
                 BinaryGate::Inv { xid, out } => (
@@ -116,115 +100,6 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
                 ),
             };
             cache[z_ref.unwrap_or(i)] = Some(value)
-        }
-        let mut garbled_output: HashMap<usize, Block> = HashMap::new();
-        for r in circ.get_output_gate_ids().iter() {
-            let x = cache[*r]
-                .as_ref()
-                .ok_or(ThreePartyEvaluatorError::CacheItemError(*r))?;
-            let dec = self.output(x)?.unwrap();
-            garbled_output.insert(*r, dec);
-        }
-        Ok(garbled_output)
-    }
-
-    /// Evaluates a garbled binary circuit using the half-gate technique for the
-    /// three-party garbled circuits protocol from <https://eprint.iacr.org/2015/931.pdf>.
-    ///
-    /// This function takes a garbled `BinaryCircuit`, garbler's and evaluator's encoded
-    /// inputs to return the encoded outputs.
-    ///
-    /// # Parameters
-    ///
-    /// * `circ` - The `BinaryCircuit` to be evaluated.
-    /// * `garbler_inputs`: A `HashMap<usize, Block>` which maps the garbler's input
-    ///   ids to its correspoding encoded garbler's inputs.
-    /// * `evaluator_inputs` - A pair of `HashMap<usize, Block>` which maps the
-    ///   evaluator's input ids to its correspoding encoded evaluator's inputs.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing:
-    /// * A `HashMap<usize, Block>` which maps the output gate ids to encoded output blocks.
-    /// * `Err(EvaluatorError)` - An error if the evaluation fails.
-    fn garbled_evaluate_threeparty(
-        &mut self,
-        circ: BinaryCircuit,
-        garbled_garbler_inputs: HashMap<usize, Block>,
-        garbled_evaluator_inputs: [HashMap<usize, Block>; 2],
-    ) -> Result<HashMap<usize, Block>, ThreePartyEvaluatorError> {
-        let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
-        // let eval_len = circ.num_evaluator_inputs() / 2;
-        for (i, gate) in circ.gates.iter().enumerate() {
-            let (z_ref, value) = match *gate {
-                BinaryGate::GarblerInput { id } => {
-                    if id >= garbled_garbler_inputs.len() {
-                        return Err(ThreePartyEvaluatorError::GarblerIpLenError(
-                            id,
-                            garbled_garbler_inputs.len(),
-                        ));
-                    }
-                    let input_hash = *garbled_garbler_inputs.get(&id).unwrap();
-                    (None, input_hash)
-                }
-                BinaryGate::EvaluatorInput { id } => {
-                    if id / 2 >= garbled_evaluator_inputs[0].len() {
-                        return Err(ThreePartyEvaluatorError::GarblerIpLenError(
-                            id,
-                            garbled_evaluator_inputs[0].len(),
-                        ));
-                    }
-
-                    if id / 2 >= garbled_evaluator_inputs[1].len() {
-                        return Err(ThreePartyEvaluatorError::GarblerIpLenError(
-                            id,
-                            garbled_evaluator_inputs[1].len(),
-                        ));
-                    }
-                    if id % 2 == 0 {
-                        (None, *garbled_evaluator_inputs[0].get(&(id / 2)).unwrap())
-                    } else {
-                        (None, *garbled_evaluator_inputs[1].get(&(id / 2)).unwrap())
-                    }
-                }
-                BinaryGate::Constant { val } => (None, self.constant(val)?),
-                BinaryGate::Inv { xid, out } => (
-                    out,
-                    self.negate(
-                        cache[xid]
-                            .as_ref()
-                            .ok_or(ThreePartyEvaluatorError::CacheItemError(xid))?,
-                    )?,
-                ),
-                BinaryGate::Xor { xid, yid, out } => (
-                    out,
-                    self.xor(
-                        cache[xid]
-                            .as_ref()
-                            .ok_or(ThreePartyEvaluatorError::CacheItemError(xid))?,
-                        cache[yid]
-                            .as_ref()
-                            .ok_or(ThreePartyEvaluatorError::CacheItemError(yid))?,
-                    )?,
-                ),
-                BinaryGate::And {
-                    xid,
-                    yid,
-                    id: _,
-                    out,
-                } => (
-                    out,
-                    self.and(
-                        cache[xid]
-                            .as_ref()
-                            .ok_or(ThreePartyEvaluatorError::CacheItemError(xid))?,
-                        cache[yid]
-                            .as_ref()
-                            .ok_or(ThreePartyEvaluatorError::CacheItemError(yid))?,
-                    )?,
-                ),
-            };
-            cache[z_ref.unwrap_or(i)] = Some(value);
         }
         let mut garbled_output: HashMap<usize, Block> = HashMap::new();
         for r in circ.get_output_gate_ids().iter() {
@@ -276,23 +151,22 @@ mod tests {
             for j in 0..2 {
                 let jinp = rng.random_bool(0.5);
                 let mut evaluator = BinaryEvaluator::new(
-                    garble_output.evaluator_input_encodings.clone(),
                     garble_output.decoding_infos.clone(),
-                    garbler.delta,
                     AesHash::new(AES_KEY),
                     garble_output.garbled_circuit.clone(),
                 );
                 let garbler_inputs = garbler.get_garbled_inputs(
-                    circuit.clone(),
+                    &circuit.garbler_input_ids,
                     [i != 0].as_slice(),
                     garble_output.garbler_input_encodings.clone(),
                 );
+                let evaluator_inputs = garbler.get_garbled_inputs_threeparty(
+                    &circuit.evaluator_input_ids,
+                    &[[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
+                    garble_output.evaluator_input_encodings.clone(),
+                );
                 let output = evaluator
-                    .evaluate_threeparty(
-                        circuit.clone(),
-                        garbler_inputs,
-                        [[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
-                    )
+                    .evaluate_threeparty(&circuit, &garbler_inputs, &evaluator_inputs)
                     .unwrap();
                 let decoutput = evaluator
                     .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
@@ -327,23 +201,22 @@ mod tests {
             for j in 0..2 {
                 let jinp = rng.random_bool(0.5);
                 let mut evaluator = BinaryEvaluator::new(
-                    garble_output.evaluator_input_encodings.clone(),
                     garble_output.decoding_infos.clone(),
-                    garbler.delta,
                     AesHash::new(AES_KEY),
                     garble_output.garbled_circuit.clone(),
                 );
                 let garbler_inputs = garbler.get_garbled_inputs(
-                    circuit.clone(),
+                    &circuit.garbler_input_ids,
                     [i != 0].as_slice(),
                     garble_output.garbler_input_encodings.clone(),
                 );
+                let evaluator_inputs = garbler.get_garbled_inputs_threeparty(
+                    &circuit.evaluator_input_ids,
+                    &[[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
+                    garble_output.evaluator_input_encodings.clone(),
+                );
                 let output = evaluator
-                    .evaluate_threeparty(
-                        circuit.clone(),
-                        garbler_inputs,
-                        [[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
-                    )
+                    .evaluate_threeparty(&circuit, &garbler_inputs, &evaluator_inputs)
                     .unwrap();
                 let decoutput = evaluator
                     .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
@@ -378,23 +251,22 @@ mod tests {
         for j in 0..2 {
             let jinp = rng.random_bool(0.5);
             let mut evaluator = BinaryEvaluator::new(
-                garble_output.evaluator_input_encodings.clone(),
                 garble_output.decoding_infos.clone(),
-                garbler.delta,
                 AesHash::new(AES_KEY),
                 garble_output.garbled_circuit.clone(),
             );
             let garbler_inputs = garbler.get_garbled_inputs(
-                circuit.clone(),
+                &circuit.garbler_input_ids,
                 [].as_slice(),
                 garble_output.garbler_input_encodings.clone(),
             );
+            let evaluator_inputs = garbler.get_garbled_inputs_threeparty(
+                &circuit.evaluator_input_ids,
+                &[[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
+                garble_output.evaluator_input_encodings.clone(),
+            );
             let output = evaluator
-                .evaluate_threeparty(
-                    circuit.clone(),
-                    garbler_inputs,
-                    [[jinp].as_slice(), [(j != 0) ^ jinp].as_slice()],
-                )
+                .evaluate_threeparty(&circuit, &garbler_inputs, &evaluator_inputs)
                 .unwrap();
             let decoutput = evaluator
                 .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
@@ -428,26 +300,25 @@ mod tests {
                 let jinp2 = rng.random_bool(0.5);
 
                 let mut evaluator = BinaryEvaluator::new(
-                    garble_output.evaluator_input_encodings.clone(),
                     garble_output.decoding_infos.clone(),
-                    garbler.delta,
                     AesHash::new(AES_KEY),
                     garble_output.garbled_circuit.clone(),
                 );
                 let garbler_inputs = garbler.get_garbled_inputs(
-                    comparison_circuit.clone(),
+                    &comparison_circuit.garbler_input_ids,
                     [ibit1, ibit2].as_slice(),
                     garble_output.garbler_input_encodings.clone(),
                 );
+                let evaluator_inputs = garbler.get_garbled_inputs_threeparty(
+                    &comparison_circuit.evaluator_input_ids,
+                    &[
+                        [jinp1, jinp2].as_slice(),
+                        [jbit1 ^ jinp1, jbit2 ^ jinp2].as_slice(),
+                    ],
+                    garble_output.evaluator_input_encodings.clone(),
+                );
                 let output = evaluator
-                    .evaluate_threeparty(
-                        comparison_circuit.clone(),
-                        garbler_inputs,
-                        [
-                            [jinp1, jinp2].as_slice(),
-                            [jbit1 ^ jinp1, jbit2 ^ jinp2].as_slice(),
-                        ],
-                    )
+                    .evaluate_threeparty(&comparison_circuit, &garbler_inputs, &evaluator_inputs)
                     .unwrap();
                 let decoutput = evaluator.get_plaintext_output(
                     comparison_circuit.get_output_gate_ids().to_vec(),
@@ -483,19 +354,22 @@ mod tests {
                     j2[k] = val ^ bit;
                 }
                 let mut evaluator = BinaryEvaluator::new(
-                    garble_output.evaluator_input_encodings.clone(),
                     garble_output.decoding_infos.clone(),
-                    garbler.delta,
                     AesHash::new(AES_KEY),
                     garble_output.garbled_circuit.clone(),
                 );
                 let garbler_inputs = garbler.get_garbled_inputs(
-                    circuit.clone(),
+                    &circuit.garbler_input_ids,
                     [i != 0; 128].as_slice(),
                     garble_output.garbler_input_encodings.clone(),
                 );
+                let evaluator_inputs = garbler.get_garbled_inputs_threeparty(
+                    &circuit.evaluator_input_ids,
+                    &[&j1, &j2],
+                    garble_output.evaluator_input_encodings.clone(),
+                );
                 let output = evaluator
-                    .evaluate_threeparty(circuit.clone(), garbler_inputs, [&j1, &j2])
+                    .evaluate_threeparty(&circuit, &garbler_inputs, &evaluator_inputs)
                     .unwrap();
                 let decoutput = evaluator
                     .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());

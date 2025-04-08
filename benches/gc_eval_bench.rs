@@ -16,21 +16,24 @@ pub fn eval_aes256_benchmark(c: &mut Criterion) {
     let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
     let garble_out = garbler.garble(&circuit).unwrap();
     let garbler_inputs = garbler.get_garbled_inputs(
-        circuit.clone(),
+        &circuit.garbler_input_ids,
         [false; 256].as_slice(),
         garble_out.garbler_input_encodings.clone(),
+    );
+    let evaluator_inputs = garbler.get_garbled_inputs(
+        &circuit.evaluator_input_ids,
+        [false; 128].as_slice(),
+        garble_out.evaluator_input_encodings.clone(),
     );
     group.bench_function("aes256_eval", |b| {
         b.iter(|| {
             let mut evaluator = BinaryEvaluator::new(
-                garble_out.evaluator_input_encodings.clone(),
                 garble_out.decoding_infos.clone(),
-                garbler.delta,
                 AesHash::new(AES_KEY),
                 garble_out.garbled_circuit.clone(),
             );
             evaluator
-                .evaluate(&circuit, &garbler_inputs, [false; 128].as_slice())
+                .evaluate(&circuit, &garbler_inputs, &evaluator_inputs)
                 .unwrap();
         })
     });
@@ -45,21 +48,24 @@ pub fn eval_aes128_benchmark(c: &mut Criterion) {
     let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
     let garble_out = garbler.garble(&circuit).unwrap();
     let garbler_inputs = garbler.get_garbled_inputs(
-        circuit.clone(),
+        &circuit.garbler_input_ids,
         [false; 128].as_slice(),
         garble_out.garbler_input_encodings.clone(),
+    );
+    let evaluator_inputs = garbler.get_garbled_inputs(
+        &circuit.evaluator_input_ids,
+        [false; 128].as_slice(),
+        garble_out.evaluator_input_encodings.clone(),
     );
     group.bench_function("aes128_eval", |b| {
         b.iter(|| {
             let mut evaluator = BinaryEvaluator::new(
-                garble_out.evaluator_input_encodings.clone(),
                 garble_out.decoding_infos.clone(),
-                garbler.delta,
                 AesHash::new(AES_KEY),
                 garble_out.garbled_circuit.clone(),
             );
             evaluator
-                .evaluate(&circuit, &garbler_inputs, [false; 128].as_slice())
+                .evaluate(&circuit, &garbler_inputs, &evaluator_inputs)
                 .unwrap();
         })
     });
@@ -74,21 +80,24 @@ pub fn eval_sha256_benchmark(c: &mut Criterion) {
     let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
     let garble_out = garbler.garble(&circuit).unwrap();
     let garbler_inputs = garbler.get_garbled_inputs(
-        circuit.clone(),
+        &circuit.garbler_input_ids,
         [false; 512].as_slice(),
         garble_out.garbler_input_encodings.clone(),
+    );
+    let evaluator_inputs = garbler.get_garbled_inputs(
+        &circuit.evaluator_input_ids,
+        [false; 256].as_slice(),
+        garble_out.evaluator_input_encodings.clone(),
     );
     group.bench_function("sha256_eval", |b| {
         b.iter(|| {
             let mut evaluator = BinaryEvaluator::new(
-                garble_out.evaluator_input_encodings.clone(),
                 garble_out.decoding_infos.clone(),
-                garbler.delta,
                 AesHash::new(AES_KEY),
                 garble_out.garbled_circuit.clone(),
             );
             evaluator
-                .evaluate(&circuit, &garbler_inputs, [false; 256].as_slice())
+                .evaluate(&circuit, &garbler_inputs, &evaluator_inputs)
                 .unwrap();
         })
     });
