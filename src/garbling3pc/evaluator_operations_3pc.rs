@@ -168,6 +168,9 @@ mod tests {
                 let output = evaluator
                     .evaluate_threeparty(&circuit, &garbler_inputs, &evaluator_inputs)
                     .unwrap();
+                let auth = garbler
+                    .authenticate_garbled_output(&output, &garble_output.garbled_output_wires);
+                assert!(auth);
                 let decoutput = evaluator
                     .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
                 let z = i ^ j;
@@ -218,6 +221,9 @@ mod tests {
                 let output = evaluator
                     .evaluate_threeparty(&circuit, &garbler_inputs, &evaluator_inputs)
                     .unwrap();
+                let auth = garbler
+                    .authenticate_garbled_output(&output, &garble_output.garbled_output_wires);
+                assert!(auth);
                 let decoutput = evaluator
                     .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
                 let z = i & j;
@@ -268,6 +274,9 @@ mod tests {
             let output = evaluator
                 .evaluate_threeparty(&circuit, &garbler_inputs, &evaluator_inputs)
                 .unwrap();
+            let auth =
+                garbler.authenticate_garbled_output(&output, &garble_output.garbled_output_wires);
+            assert!(auth);
             let decoutput = evaluator
                 .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
 
@@ -320,6 +329,9 @@ mod tests {
                 let output = evaluator
                     .evaluate_threeparty(&comparison_circuit, &garbler_inputs, &evaluator_inputs)
                     .unwrap();
+                let auth = garbler
+                    .authenticate_garbled_output(&output, &garble_output.garbled_output_wires);
+                assert!(auth);
                 let decoutput = evaluator.get_plaintext_output(
                     comparison_circuit.get_output_gate_ids().to_vec(),
                     output.clone(),
@@ -371,6 +383,9 @@ mod tests {
                 let output = evaluator
                     .evaluate_threeparty(&circuit, &garbler_inputs, &evaluator_inputs)
                     .unwrap();
+                let auth = garbler
+                    .authenticate_garbled_output(&output, &garble_output.garbled_output_wires);
+                assert!(auth);
                 let decoutput = evaluator
                     .get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
                 let count = 2 * i + j;

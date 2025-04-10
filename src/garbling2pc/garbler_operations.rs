@@ -80,6 +80,10 @@ pub struct GarbleOutput {
     /// A mapping from output wire IDs to decoding information used
     /// to obtain the plaintext result from the garbled output.
     pub decoding_infos: HashMap<usize, u8>,
+
+    /// A mapping from output wire IDs to decoding information used
+    /// to obtain the plaintext result from the garbled output.
+    pub garbled_output_wires: HashMap<usize, Block>,
 }
 
 /// Implementation of the `BinaryGarbler` struct.
@@ -337,6 +341,20 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         garbled_input_encodings
     }
 
+    pub fn authenticate_garbled_output(
+        &self,
+        garbled_output: &HashMap<usize, Block>,
+        garbled_output_wires: &HashMap<usize, Block>,
+    ) -> bool {
+        let mut output = true;
+        for (key, op) in garbled_output.iter() {
+            let output_wire_ideal_false = garbled_output_wires.get(key).unwrap();
+            let output_wire_ideal_true = xor_blocks(*output_wire_ideal_false, self.delta);
+            output &= (*output_wire_ideal_false == *op) | (output_wire_ideal_true == *op);
+        }
+        output
+    }
+
     /// Garbles a binary circuit using the half-gate technique.
     ///
     /// This function takes a `BinaryCircuit` and generates its garbled version,
@@ -414,17 +432,20 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
             };
             cache[z_ref.unwrap_or(i)] = Some(value)
         }
+        let mut garbled_output_wires = HashMap::new();
         let mut decoding_infos: HashMap<usize, u8> = HashMap::new();
         for r in circ.get_output_gate_ids().iter() {
             let x = cache[*r].as_ref().ok_or(GarblerError::CacheItemError(*r))?;
             let dec = self.get_decoding(*x);
             decoding_infos.insert(*r, dec);
+            garbled_output_wires.insert(*r, *x);
         }
         Ok(GarbleOutput {
             garbler_input_encodings,
             evaluator_input_encodings,
             garbled_circuit: self.get_garbled_circuit(),
             decoding_infos,
+            garbled_output_wires,
         })
     }
 }
