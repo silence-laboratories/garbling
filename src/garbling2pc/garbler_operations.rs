@@ -225,9 +225,9 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         <Self as ExecutionPrimitives>::Item,
         <Self as ExecutionPrimitives>::Item,
     ) {
-        let temp1 = self.hash.tccr_hash(a, j);
+        let temp1 = self.hash.tccr_hash(&a, j);
         let adelta = xor_blocks(a, self.delta);
-        let temp2 = self.hash.tccr_hash(adelta, j);
+        let temp2 = self.hash.tccr_hash(&adelta, j);
         let mut t_gen = xor_blocks(temp1, temp2);
         let mut out_gen = temp1;
         if p_b == 1 {
@@ -263,9 +263,9 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         <Self as ExecutionPrimitives>::Item,
         <Self as ExecutionPrimitives>::Item,
     ) {
-        let temp1 = self.hash.tccr_hash(b, j2);
+        let temp1 = self.hash.tccr_hash(&b, j2);
         let bdelta = xor_blocks(b, self.delta);
-        let temp2 = self.hash.tccr_hash(bdelta, j2);
+        let temp2 = self.hash.tccr_hash(&bdelta, j2);
         let mut t_eval = xor_blocks(temp1, temp2);
         t_eval = xor_blocks(t_eval, a);
         let mut out_eval = temp1;
@@ -491,8 +491,8 @@ impl<H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for BinaryGarb
     fn output(&mut self, x: &Self::Item) -> Result<Option<Self::Item>, ExecutionPrimitiveError> {
         let i = self.get_next_output_index().to_le_bytes();
         let delta = self.delta;
-        let xhash = self.hash.tccr_hash(*x, i);
-        let xdhash = self.hash.tccr_hash(xor_blocks(*x, delta), i);
+        let xhash = self.hash.tccr_hash(x, i);
+        let xdhash = self.hash.tccr_hash(&xor_blocks(*x, delta), i);
         self.cache.push(xhash);
         self.cache.push(xdhash);
         Ok(Some(xhash))

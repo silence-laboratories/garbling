@@ -4,6 +4,8 @@ use aes::Aes128;
 use crate::config::constants::Block;
 use crate::config::util_errors::HashError;
 
+use super::utils::xor_blocks;
+
 /// Trait for any hash function which implements a secure hash function for
 /// garbled circuits.
 pub trait HashFunction: Clone {
@@ -11,113 +13,129 @@ pub trait HashFunction: Clone {
     fn initialize(&mut self, key: Block);
 
     /// Returns a correlation robust hash given an input `Block`.
-    fn cr_hash(&self, x: Block) -> Block;
+    fn cr_hash(&self, x: &Block) -> Block;
 
     /// Returns a circular correlation robust hash given an
     /// input `Block`.
-    fn ccr_hash(&self, x: Block) -> Block;
+    fn ccr_hash(&self, x: &Block) -> Block;
 
     /// Returns a tweakable circular correlation robust hash
     /// given an input `Block`.
-    fn tccr_hash(&self, x: Block, i: Block) -> Block;
+    fn tccr_hash(&self, x: &Block, i: Block) -> Block;
 
     /// Returns a hash given an input `Block`.
-    fn get_hash(&self, x: &[u8]) -> Result<Block, HashError>;
+    fn get_hash(&self, input: &[u8]) -> Result<Block, HashError>;
 }
 
 /// Represents a structure of hash function based on AES-128 encryption.
 #[derive(Clone)]
 pub struct AesHash {
     /// `Aes128` object used for hashing.
-    aes: Aes128,
+    key: Block,
 }
 
 /// Implementation for `AesHash`.
 impl AesHash {
     /// Takes a key `Block` as input to return a new `AesHash` object.
     pub fn new(key: Block) -> AesHash {
+        AesHash { key }
+    }
+
+    fn aes_call(key: Block, msg: Block) -> Block {
         let aes = Aes128::new(&GenericArray::from(key));
-        let mut rngkey = [0u8; 32];
-        rngkey[16..(16 + 16)].copy_from_slice(&key);
-        rngkey[..16].copy_from_slice(&key);
-        AesHash { aes }
+        let mut msgar = GenericArray::from(msg);
+        aes.encrypt_block(&mut msgar);
+        let output: Block = msgar.into();
+        output
+    }
+
+    /// Pads input using Merkle–Damgård-style padding
+    /// (msg + 0x80 + zero padding + length in 8 bytes) % 16 = 0
+    fn md_pad(input: &[u8]) -> Vec<Block> {
+        let input_len_bits = (input.len() as u64) * 8;
+
+        let mut padded = input.to_vec();
+
+        padded.push(0x80);
+
+        while (padded.len() + 8) % 16 != 0 {
+            padded.push(0x00);
+        }
+
+        padded.extend_from_slice(&input_len_bits.to_be_bytes());
+
+        // Convert to blocks
+        assert!(padded.len() % 16 == 0);
+        padded
+            .chunks(16)
+            .map(|chunk| {
+                let mut block = [0u8; 16];
+                block.copy_from_slice(chunk);
+                block
+            })
+            .collect()
+    }
+
+    /// Davies–Meyer hash: H_i = E(M_i, H_{i-1}) ⊕ H_{i-1}
+    pub fn hash(&self, input: &[u8]) -> Block {
+        let padded_blocks = AesHash::md_pad(input);
+
+        let mut h = self.key; // Initial value: all-zero block
+
+        for block in padded_blocks {
+            let cipher_output = AesHash::aes_call(block, h);
+            for i in 0..16 {
+                h[i] ^= cipher_output[i]; // XOR output with previous hash
+            }
+        }
+        h
     }
 }
 
 /// Implements the `HashFunction` trait for `AesHash`.
 impl HashFunction for AesHash {
-    /// Implementation of the `cr_hash` function for a `AesHash`
-    fn cr_hash(&self, x: Block) -> Block {
-        let mut output = GenericArray::from(x);
-        self.aes.encrypt_block(&mut output);
-        let output_needed: Block = output.into();
-        output_needed
+    /// Correlation-robust hash function for 128-bit inputs (cf.
+    /// <https://eprint.iacr.org/2019/074>, §7.2).
+    ///
+    /// The function computes `H(x) ⊕ x`.
+    fn cr_hash(&self, x: &Block) -> Block {
+        let hashval = self.get_hash(x).unwrap();
+        xor_blocks(hashval, x.to_owned())
     }
 
-    /// Implementation of the `ccr_hash` function for a `AesHash`.
-    fn ccr_hash(&self, x: Block) -> Block {
+    /// Circular Correlation-robust hash function for 128-bit inputs (cf.
+    /// <https://eprint.iacr.org/2019/074>, §7.3).
+    ///
+    /// The function computes `cr_hash(σ(x))` where `σ(xL || xR) = (xR ⊕ xL) || xL`
+    fn ccr_hash(&self, x: &Block) -> Block {
         let mut y = [0u8; 16];
         for i in 0..8 {
             y[i] = x[i] ^ x[i + 8];
         }
         y[8..16].copy_from_slice(&x[8..16]);
-        self.cr_hash(y)
+        self.cr_hash(&y)
     }
 
-    /// Implementation of the `tccr_hash` function for a `AesHash`.
-    fn tccr_hash(&self, x: Block, i: Block) -> Block {
-        let mut y = GenericArray::from(x);
-        self.aes.encrypt_block(&mut y);
-        let mut block: Block = y.into();
-        let mut t = [0u8; 16];
-        for m in 0..16 {
-            t[m] = block[m] ^ i[m];
-        }
-        let mut z = GenericArray::from(t);
-        self.aes.encrypt_block(&mut z);
-        let bz: Block = z.into();
-        for m in 0..16 {
-            block[m] ^= bz[m]
-        }
-        block
+    /// Tweakable circular correlation robust hash function (cf.
+    /// <https://eprint.iacr.org/2019/074>, §7.4).
+    ///
+    /// The function computes `H(H(x) ⊕ i) ⊕ H(x)`.
+    fn tccr_hash(&self, x: &Block, i: Block) -> Block {
+        let hash1 = self.get_hash(x).unwrap();
+        let y = xor_blocks(hash1, i.to_owned());
+        let hash2 = self.get_hash(&y).unwrap();
+        xor_blocks(hash1, hash2)
     }
 
     /// Implementation of the `get_hash` function for a `AesHash`.
     fn get_hash(&self, input: &[u8]) -> Result<Block, HashError> {
-        let mut previous_block = GenericArray::from([0u8; 16]); // Initialize to zero for CBC
-        let mut output_block = GenericArray::from([0u8; 16]);
-
-        if input.len() % 16 != 0 {
-            return Err(HashError::InvalidInputLengthError(16, input.len()));
-        }
-
-        for chunk in input.chunks_exact(16) {
-            let mut block = GenericArray::clone_from_slice(chunk);
-
-            // XOR with the previous block (CBC chaining)
-            for i in 0..16 {
-                block[i] ^= previous_block[i];
-            }
-
-            // Encrypt the block
-            self.aes.encrypt_block(&mut block);
-
-            // Update the previous block
-            previous_block = block;
-        }
-
-        output_block.copy_from_slice(&previous_block);
-
-        // Return the final encrypted block as the CBC-MAC
-        let mut result = [0u8; 16];
-        result.copy_from_slice(output_block.as_slice());
-
+        let result = self.hash(input);
         Ok(result)
     }
 
     /// Implementation of the `initialize` function for a `AesHash`.
     fn initialize(&mut self, key: Block) {
-        self.aes = Aes128::new(&GenericArray::from(key));
+        self.key = key;
     }
 }
 
