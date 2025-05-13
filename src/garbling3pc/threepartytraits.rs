@@ -52,7 +52,7 @@ pub trait ThreePartyBinaryGarbler {
         input_ids: &[usize],
         inputs: &[&[bool]; 2],
         input_encodings: &HashMap<usize, Block>,
-    ) -> HashMap<usize, [u8; 16]>;
+    ) -> HashMap<usize, Block>;
 }
 
 /// Trait for any `BinaryEvaluator` which implements the three-party secure garbled-circuit

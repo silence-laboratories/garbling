@@ -141,7 +141,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
     ///
     /// A randomly generated `Block` with the least significant bit set.
     fn get_random_delta(rng: &mut R) -> Block {
-        let mut temp = [0u8; 16];
+        let mut temp = Block::default();
         rng.fill_bytes(&mut temp);
         temp[0] |= 1;
         temp
@@ -191,8 +191,13 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         let p_a = Self::lsb(a);
         let p_b = Self::lsb(b);
 
-        let j = self.get_next_gate_index().to_le_bytes();
-        let j2 = self.get_next_gate_index().to_le_bytes();
+        let j_temp = self.get_next_gate_index().to_le_bytes();
+        let j2_temp = self.get_next_gate_index().to_le_bytes();
+
+        let mut j = Block::default();
+        j[16..32].copy_from_slice(&j_temp);
+        let mut j2 = Block::default();
+        j2[16..32].copy_from_slice(&j2_temp);
 
         let (t_gen, out_gen) = self.gen_half_gate(p_a, p_b, a, j);
         let (t_eval, out_eval) = self.eval_half_gate(p_b, a, b, j2);
@@ -282,7 +287,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
     ///
     /// A randomly generated `Block` with it's least significant bit (LSB) set to 1.
     fn zero(&mut self) -> Block {
-        let mut randval = [0u8; 16];
+        let mut randval = Block::default();
         self.rng.fill_bytes(&mut randval);
         randval[0] |= 1;
         randval
@@ -329,7 +334,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         input_ids: &[usize],
         inputs: &[bool],
         input_encodings: &HashMap<usize, Block>,
-    ) -> HashMap<usize, [u8; 16]> {
+    ) -> HashMap<usize, Block> {
         let mut garbled_input_encodings = HashMap::new();
         for (count, ids) in input_ids.iter().enumerate() {
             let mut enc = input_encodings.get(ids).unwrap().to_owned();
@@ -489,7 +494,9 @@ impl<H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for BinaryGarb
     /// * The output `Block` value wrapped in `Some()` upon successful execution.
     /// * `Err(ExecutionPrimitiveError)` if an error occurs.
     fn output(&mut self, x: &Self::Item) -> Result<Option<Self::Item>, ExecutionPrimitiveError> {
-        let i = self.get_next_output_index().to_le_bytes();
+        let i_temp = self.get_next_output_index().to_le_bytes();
+        let mut i = Block::default();
+        i[16..32].copy_from_slice(&i_temp);
         let delta = self.delta;
         let xhash = self.hash.tccr_hash(x, i);
         let xdhash = self.hash.tccr_hash(&xor_blocks(*x, delta), i);
@@ -515,7 +522,7 @@ impl<H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for BinaryGarb
         _id: usize,
         _x: bool,
     ) -> Result<Self::Item, ExecutionPrimitiveError> {
-        let mut randval = [0u8; 16];
+        let mut randval = Block::default();
         self.rng.fill_bytes(&mut randval);
         Ok(randval)
     }
@@ -537,7 +544,7 @@ impl<H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for BinaryGarb
         _id: usize,
         _x: bool,
     ) -> Result<Self::Item, ExecutionPrimitiveError> {
-        let mut randval = [0u8; 16];
+        let mut randval = Block::default();
         self.rng.fill_bytes(&mut randval);
         Ok(randval)
     }

@@ -1,7 +1,7 @@
-use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
-use aes::Aes128;
+use aes_gcm::aead::Aead;
+use aes_gcm::{aead::generic_array::GenericArray, Aes256Gcm, KeyInit};
 
-use crate::config::constants::Block;
+use crate::config::constants::{Block, AES_NONCE};
 use crate::config::util_errors::HashError;
 
 use super::utils::xor_blocks;
@@ -42,15 +42,17 @@ impl AesHash {
     }
 
     fn aes_call(key: Block, msg: Block) -> Block {
-        let aes = Aes128::new(&GenericArray::from(key));
-        let mut msgar = GenericArray::from(msg);
-        aes.encrypt_block(&mut msgar);
-        let output: Block = msgar.into();
+        let keyar = GenericArray::from(key);
+        let aes = Aes256Gcm::new(&keyar);
+        let noncear = GenericArray::from(AES_NONCE);
+        let ciphertext_with_tag = aes.encrypt(&noncear, msg.as_ref()).unwrap();
+        let ciphertext = &ciphertext_with_tag[..ciphertext_with_tag.len() - 16];
+        let output: Block = ciphertext.try_into().unwrap();
         output
     }
 
     /// Pads input using Merkle–Damgård-style padding
-    /// (msg + 0x80 + zero padding + length in 8 bytes) % 16 = 0
+    /// (msg + 0x80 + zero padding + length in 8 bytes) % 32 = 0
     fn md_pad(input: &[u8]) -> Vec<Block> {
         let input_len_bits = (input.len() as u64) * 8;
 
@@ -58,18 +60,18 @@ impl AesHash {
 
         padded.push(0x80);
 
-        while (padded.len() + 8) % 16 != 0 {
+        while (padded.len() + 8) % 32 != 0 {
             padded.push(0x00);
         }
 
         padded.extend_from_slice(&input_len_bits.to_be_bytes());
 
         // Convert to blocks
-        assert!(padded.len() % 16 == 0);
+        assert!(padded.len() % 32 == 0);
         padded
-            .chunks(16)
+            .chunks(32)
             .map(|chunk| {
-                let mut block = [0u8; 16];
+                let mut block = [0u8; 32];
                 block.copy_from_slice(chunk);
                 block
             })
@@ -84,7 +86,7 @@ impl AesHash {
 
         for block in padded_blocks {
             let cipher_output = AesHash::aes_call(block, h);
-            for i in 0..16 {
+            for i in 0..32 {
                 h[i] ^= cipher_output[i]; // XOR output with previous hash
             }
         }
@@ -108,11 +110,11 @@ impl HashFunction for AesHash {
     ///
     /// The function computes `cr_hash(σ(x))` where `σ(xL || xR) = (xR ⊕ xL) || xL`
     fn ccr_hash(&self, x: &Block) -> Block {
-        let mut y = [0u8; 16];
-        for i in 0..8 {
-            y[i] = x[i] ^ x[i + 8];
+        let mut y = [0u8; 32];
+        for i in 0..16 {
+            y[i] = x[i] ^ x[i + 16];
         }
-        y[8..16].copy_from_slice(&x[8..16]);
+        y[16..32].copy_from_slice(&x[16..32]);
         self.cr_hash(&y)
     }
 
@@ -155,10 +157,12 @@ mod tests {
         let output2 = function.get_hash(&input2).unwrap();
 
         let required_output1 = [
-            102, 233, 75, 212, 239, 138, 44, 59, 136, 76, 250, 89, 202, 52, 43, 46,
+            253, 30, 201, 134, 123, 192, 96, 252, 172, 151, 209, 103, 59, 101, 203, 233, 227, 100,
+            67, 110, 110, 146, 144, 85, 217, 59, 6, 118, 119, 182, 209, 188,
         ];
         let required_output2 = [
-            247, 149, 189, 74, 82, 226, 158, 215, 19, 211, 19, 250, 32, 233, 141, 188,
+            106, 127, 246, 29, 159, 172, 238, 129, 13, 40, 232, 134, 53, 201, 156, 189, 115, 157,
+            92, 224, 115, 121, 125, 184, 101, 20, 250, 17, 187, 179, 205, 114,
         ];
 
         assert_eq!(output1, required_output1);

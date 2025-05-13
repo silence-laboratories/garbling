@@ -2,8 +2,8 @@ use crate::config::constants::Block;
 
 /// Returns the bitwise xor, given two 128-bit blocks
 pub fn xor_blocks(array1: Block, array2: Block) -> Block {
-    let mut output = [0u8; 16];
-    for i in 0..16 {
+    let mut output = Block::default();
+    for i in 0..array1.len() {
         output[i] = array1[i] ^ array2[i];
     }
     output

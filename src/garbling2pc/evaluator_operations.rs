@@ -67,7 +67,7 @@ impl<H: HashFunction> BinaryEvaluator<H> {
     ///
     /// # Arguments
     ///
-    /// * `value` - A 16-byte block representing a wire label.
+    /// * `value` - A 32-byte block representing a wire label.
     ///
     /// # Returns
     ///
@@ -333,8 +333,13 @@ impl<H: HashFunction> BinaryOperations for BinaryEvaluator<H> {
         let s_a = Self::lsb(*x);
         let s_b = Self::lsb(*y);
 
-        let j = self.get_next_gate_index().to_le_bytes();
-        let j2 = self.get_next_gate_index().to_le_bytes();
+        let j_temp = self.get_next_gate_index().to_le_bytes();
+        let j2_temp = self.get_next_gate_index().to_le_bytes();
+
+        let mut j = Block::default();
+        j[16..32].copy_from_slice(&j_temp);
+        let mut j2 = Block::default();
+        j2[16..32].copy_from_slice(&j2_temp);
 
         let t_gen = self.get_next_cache_value();
         let t_eval = self.get_next_cache_value();

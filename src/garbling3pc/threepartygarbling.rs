@@ -87,7 +87,7 @@ pub struct ThreePGMsg3 {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThreePGMsg4 {
     /// Garbled output.
-    garbled_op: HashMap<usize, [u8; 16]>,
+    garbled_op: HashMap<usize, Block>,
 }
 
 /// Type for the three-party garbled-circuit protocol's output.
@@ -248,9 +248,7 @@ pub fn threepg_create_msg3_p1(
     circuit: &BinaryCircuit,
 ) -> Result<(ThreePGMsg3, ThreePGParty12StateR3), String> {
     let hash = AesHash::new(HASH_KEY);
-    let mut rng_key: [u8; 32] = [0u8; 32];
-    rng_key[..16].copy_from_slice(prf_seed);
-    rng_key[16..(16 + 16)].copy_from_slice(prf_seed);
+    let rng_key: [u8; 32] = *prf_seed;
     if p1_ip_nos + p2_ip_nos != circuit.num_garbler_inputs() {
         return Err("Garbler Input Size inconsistent".to_string());
     }
@@ -419,9 +417,7 @@ pub fn threepg_create_msg3_p2(
 ) -> Result<(ThreePGMsg3, ThreePGParty12StateR3), String> {
     let hash = AesHash::new(HASH_KEY);
 
-    let mut rng_key: [u8; 32] = [0u8; 32];
-    rng_key[..16].copy_from_slice(prf_seed);
-    rng_key[16..(16 + 16)].copy_from_slice(prf_seed);
+    let rng_key: [u8; 32] = *prf_seed;
     if p1_ip_nos + p2_ip_nos != circuit.num_garbler_inputs() {
         return Err("Garbler Input Size inconsistent".to_string());
     }
