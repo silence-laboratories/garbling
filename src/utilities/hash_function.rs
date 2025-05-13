@@ -21,7 +21,7 @@ pub trait HashFunction: Clone {
 
     /// Returns a tweakable circular correlation robust hash
     /// given an input `Block`.
-    fn tccr_hash(&self, x: &Block, i: Block) -> Block;
+    fn tccr_hash(&self, x: &Block, i: &Block) -> Block;
 
     /// Returns a hash given an input `Block`.
     fn get_hash(&self, input: &[u8]) -> Result<Block, HashError>;
@@ -122,7 +122,7 @@ impl HashFunction for AesHash {
     /// <https://eprint.iacr.org/2019/074>, §7.4).
     ///
     /// The function computes `H(H(x) ⊕ i) ⊕ H(x)`.
-    fn tccr_hash(&self, x: &Block, i: Block) -> Block {
+    fn tccr_hash(&self, x: &Block, i: &Block) -> Block {
         let hash1 = self.get_hash(x).unwrap();
         let y = xor_blocks(hash1, i.to_owned());
         let hash2 = self.get_hash(&y).unwrap();

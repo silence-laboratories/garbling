@@ -344,12 +344,12 @@ impl<H: HashFunction> BinaryOperations for BinaryEvaluator<H> {
         let t_gen = self.get_next_cache_value();
         let t_eval = self.get_next_cache_value();
 
-        let mut out_gen = self.hash.tccr_hash(x, j);
+        let mut out_gen = self.hash.tccr_hash(x, &j);
         if s_a == 1 {
             out_gen = xor_blocks(out_gen, t_gen);
         }
 
-        let mut out_eval = self.hash.tccr_hash(y, j2);
+        let mut out_eval = self.hash.tccr_hash(y, &j2);
         if s_b == 1 {
             out_eval = xor_blocks(out_eval, t_eval);
             out_eval = xor_blocks(out_eval, *x);
