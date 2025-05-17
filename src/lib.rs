@@ -9,3 +9,5 @@ pub mod garbling3pc;
 pub mod utilities;
 
 pub mod customcircuits;
+
+pub mod functionality;

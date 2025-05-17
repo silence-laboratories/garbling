@@ -6,12 +6,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     circuitop::circuit::BinaryCircuit,
-    config::constants::{Block, HASH_KEY},
+    config::constants::HASH_KEY,
     garbling2pc::{evaluator_operations::BinaryEvaluator, garbler_operations::BinaryGarbler},
     garbling3pc::threepartytraits::ThreePartyBinaryEvaluator,
     utilities::{
         commitments::{Commitment, HashCommitment},
         hash_function::AesHash,
+        types::Block,
         utils::xor_blocks,
     },
 };
@@ -609,7 +610,6 @@ pub fn threepg_create_msg4_p3(
     let mut garbled_garbler_inputs: HashMap<usize, Block> =
         HashMap::with_capacity(p1_ip_nos + p2_ip_nos);
     let mut garbled_evaluator_inputs: HashMap<usize, Block> = HashMap::with_capacity(2 * p3_ip_nos);
-    // let mut garbled_evaluator_inputs_2: HashMap<usize, Block> = HashMap::with_capacity(p3_ip_nos);
 
     let comm = &state_r3.msg3_p1.com_vals.p1_commitments;
     let decom = &state_r3.msg3_p1.decom_vals.x12_decom;

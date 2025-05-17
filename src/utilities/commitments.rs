@@ -1,4 +1,6 @@
-use crate::{config::constants::Block, utilities::hash_function::HashFunction};
+use crate::utilities::hash_function::HashFunction;
+
+use super::types::Block;
 
 /// Trait for any `Commitment` scheme which implements commit
 /// and the verify function

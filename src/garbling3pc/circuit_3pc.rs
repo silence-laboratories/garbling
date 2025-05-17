@@ -185,6 +185,7 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
                     out: Some(output),
                 });
                 id += 1;
+                output_circuit.increment_nonfree_gates();
             } else if gate == "XOR" {
                 output_circuit.push_gate(BinaryGate::Xor {
                     xid: input0,

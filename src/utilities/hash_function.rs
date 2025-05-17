@@ -1,9 +1,10 @@
-use aes_gcm::aead::Aead;
-use aes_gcm::{aead::generic_array::GenericArray, Aes256Gcm, KeyInit};
+use aes::cipher::BlockEncrypt;
+use aes::Aes256;
+use aes_gcm::{aead::generic_array::GenericArray, KeyInit};
 
-use crate::config::constants::{Block, AES_NONCE};
 use crate::config::util_errors::HashError;
 
+use super::types::Block;
 use super::utils::xor_blocks;
 
 /// Trait for any hash function which implements a secure hash function for
@@ -41,14 +42,12 @@ impl AesHash {
         AesHash { key }
     }
 
-    fn aes_call(key: Block, msg: Block) -> Block {
+    fn aes_call(key: Block, msg: [u8; 16]) -> [u8; 16] {
         let keyar = GenericArray::from(key);
-        let aes = Aes256Gcm::new(&keyar);
-        let noncear = GenericArray::from(AES_NONCE);
-        let ciphertext_with_tag = aes.encrypt(&noncear, msg.as_ref()).unwrap();
-        let ciphertext = &ciphertext_with_tag[..ciphertext_with_tag.len() - 16];
-        let output: Block = ciphertext.try_into().unwrap();
-        output
+        let aes = Aes256::new(&keyar);
+        let mut msgar = GenericArray::from(msg);
+        aes.encrypt_block(&mut msgar);
+        msgar.into()
     }
 
     /// Pads input using Merkle–Damgård-style padding
@@ -82,15 +81,27 @@ impl AesHash {
     pub fn hash(&self, input: &[u8]) -> Block {
         let padded_blocks = AesHash::md_pad(input);
 
-        let mut h = self.key; // Initial value: all-zero block
+        let mut h1 = self.key[0..16]
+            .to_owned()
+            .try_into()
+            .expect("Conversion failed"); // key value
+        let mut h2 = self.key[16..32]
+            .to_owned()
+            .try_into()
+            .expect("Conversion failed"); // key value
 
         for block in padded_blocks {
-            let cipher_output = AesHash::aes_call(block, h);
-            for i in 0..32 {
-                h[i] ^= cipher_output[i]; // XOR output with previous hash
+            let cipher_output1 = AesHash::aes_call(block, h1);
+            let cipher_output2 = AesHash::aes_call(block, h2);
+            for i in 0..16 {
+                h1[i] ^= cipher_output1[i]; // XOR output with previous hash
+                h2[i] ^= cipher_output2[i]; // XOR output with previous hash
             }
         }
-        h
+        let mut out = Block::default();
+        out[0..16].copy_from_slice(&h1);
+        out[16..32].copy_from_slice(&h2);
+        out
     }
 }
 
@@ -149,20 +160,30 @@ mod tests {
 
     #[test]
     fn test_hash_function() {
-        let input1 = [0u8; 16];
-        let input2 = [0u8; 32];
+        let input1 = [
+            12, 162, 159, 171, 99, 41, 109, 231, 188, 136, 13, 175, 217, 232, 245, 239, 31, 98,
+            162, 7, 107, 225, 88, 209, 168, 93, 151, 219, 108, 165, 208, 176, 138, 251, 26, 222,
+            208, 10, 222, 35, 145, 101, 76, 5, 1, 166, 11, 75, 192, 73, 215, 27, 61, 225, 131, 246,
+            29, 123, 54, 21, 251, 185, 40, 148,
+        ];
+        let input2 = [
+            91, 117, 139, 46, 166, 12, 148, 159, 202, 207, 188, 255, 197, 20, 105, 245, 231, 123,
+            40, 30, 81, 29, 115, 244, 83, 231, 83, 26, 70, 31, 69, 4, 16, 204, 166, 244, 5, 169,
+            230, 225, 124, 196, 177, 212, 138, 177, 90, 206, 173, 101, 196, 49, 31, 255, 235, 142,
+            125, 195, 47, 206, 202, 123, 45, 1,
+        ];
         let function = AesHash::new(AES_KEY);
 
         let output1 = function.get_hash(&input1).unwrap();
         let output2 = function.get_hash(&input2).unwrap();
 
         let required_output1 = [
-            253, 30, 201, 134, 123, 192, 96, 252, 172, 151, 209, 103, 59, 101, 203, 233, 227, 100,
-            67, 110, 110, 146, 144, 85, 217, 59, 6, 118, 119, 182, 209, 188,
+            144, 147, 90, 112, 170, 219, 105, 89, 121, 86, 196, 108, 164, 131, 50, 235, 144, 147,
+            90, 112, 170, 219, 105, 89, 121, 86, 196, 108, 164, 131, 50, 235,
         ];
         let required_output2 = [
-            106, 127, 246, 29, 159, 172, 238, 129, 13, 40, 232, 134, 53, 201, 156, 189, 115, 157,
-            92, 224, 115, 121, 125, 184, 101, 20, 250, 17, 187, 179, 205, 114,
+            121, 136, 197, 137, 143, 188, 231, 155, 151, 4, 227, 200, 42, 27, 109, 96, 121, 136,
+            197, 137, 143, 188, 231, 155, 151, 4, 227, 200, 42, 27, 109, 96,
         ];
 
         assert_eq!(output1, required_output1);

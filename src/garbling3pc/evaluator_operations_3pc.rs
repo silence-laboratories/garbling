@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::{constants::Block, garbling3pc_errors::ThreePartyEvaluatorError},
+    config::garbling3pc_errors::ThreePartyEvaluatorError,
     garbling2pc::{
         evaluator_operations::BinaryEvaluator,
         exec::{BinaryOperations, ExecutionPrimitives},
     },
-    utilities::hash_function::HashFunction,
+    utilities::{hash_function::HashFunction, types::Block},
 };
 
 use super::threepartytraits::ThreePartyBinaryEvaluator;

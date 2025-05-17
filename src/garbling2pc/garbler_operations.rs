@@ -4,12 +4,9 @@ use rand::{CryptoRng, RngCore};
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::{
-        constants::Block,
-        garbling2pc_errors::{BinaryOperationsError, ExecutionPrimitiveError, GarblerError},
-    },
+    config::garbling2pc_errors::{BinaryOperationsError, ExecutionPrimitiveError, GarblerError},
     garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
-    utilities::{hash_function::HashFunction, utils::xor_blocks},
+    utilities::{hash_function::HashFunction, types::Block, utils::xor_blocks},
 };
 
 /// Represents the garbler's state in a binary garbled circuit protocol.

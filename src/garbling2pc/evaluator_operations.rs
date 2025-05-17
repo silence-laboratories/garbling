@@ -2,12 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::{
-        constants::Block,
-        garbling2pc_errors::{BinaryOperationsError, EvaluatorError, ExecutionPrimitiveError},
-    },
+    config::garbling2pc_errors::{BinaryOperationsError, EvaluatorError, ExecutionPrimitiveError},
     garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
-    utilities::{hash_function::HashFunction, utils::xor_blocks},
+    utilities::{hash_function::HashFunction, types::Block, utils::xor_blocks},
 };
 
 /// Represents the evaluator's state in a binary garbled circuit protocol.
