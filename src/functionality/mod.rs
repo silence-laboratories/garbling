@@ -9,3 +9,7 @@ pub mod output;
 pub mod setup;
 
 pub mod circuit_eval;
+
+pub mod b_to_y;
+
+pub mod y_to_b;

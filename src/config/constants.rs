@@ -32,3 +32,10 @@ pub const SETUP_YAO_FUNC_MSG2: i32 = 208;
 
 pub const YAO_CIRC_EVAL_FUNC_MSG1: i32 = 209;
 pub const YAO_CIRC_EVAL_FUNC_MSG2: i32 = 210;
+
+pub const B2Y_FUNC_MSG1: u32 = 211;
+
+pub const Y2B_FUNC_MSG1: u32 = 212;
+pub const Y2B_FUNC_MSG2: u32 = 213;
+pub const Y2B_FUNC_MSG3: u32 = 214;
+pub const Y2B_FUNC_MSG4: u32 = 215;

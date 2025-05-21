@@ -273,7 +273,7 @@ mod tests {
             evaluator_input_ids: vec![0, 1, 2, 3],
             output_gate_ids: vec![12, 13],
             constant_gate_ids: vec![],
-            num_nonfree_gates: 0,
+            num_nonfree_gates: 4,
             num_wires: 0,
         };
 

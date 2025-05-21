@@ -162,8 +162,14 @@ mod tests {
         circuitop::circuit::BinaryCircuit,
         customcircuits::comparison::build_comparison_circuit,
         functionality::{
-            input::{input_yao_from_functionality, input_yao_functionality},
-            output::{output_yao_functionality, validate_yao_share},
+            input::{
+                batch_input_yao_from_functionality, batch_input_yao_functionality,
+                input_yao_from_functionality, input_yao_functionality,
+            },
+            output::{
+                batch_output_yao_functionality, batch_output_yao_to_functionality,
+                output_yao_functionality, output_yao_to_functionality, validate_yao_share,
+            },
             setup::setup_yao_functionality,
         },
         utilities::{commitments::HashCommitment, hash_function::AesHash, utils::bool_vec_to_hex},
@@ -205,7 +211,7 @@ mod tests {
         let mut gin = HashMap::new();
         let mut ein = HashMap::new();
 
-        let (mut rng, hash, mut comm) = if setup.participant_index() == 2 {
+        let (mut rng, hash, comm) = if setup.participant_index() == 2 {
             let hash = AesHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
             let comm = HashCommitment::new(hash.clone());
             (None, hash, comm)
@@ -258,7 +264,7 @@ mod tests {
                     0,
                     &mut rng,
                     &hash,
-                    &mut comm,
+                    &comm,
                     &yao_setup,
                 )
                 .await?
@@ -272,7 +278,7 @@ mod tests {
                     0,
                     &mut rng,
                     &hash,
-                    &mut comm,
+                    &comm,
                     &yao_setup,
                 )
                 .await?
@@ -303,7 +309,7 @@ mod tests {
                     1,
                     &mut rng,
                     &hash,
-                    &mut comm,
+                    &comm,
                     &yao_setup,
                 )
                 .await?
@@ -317,7 +323,7 @@ mod tests {
                     1,
                     &mut rng,
                     &hash,
-                    &mut comm,
+                    &comm,
                     &yao_setup,
                 )
                 .await?
@@ -348,7 +354,7 @@ mod tests {
                     2,
                     &mut rng,
                     &hash,
-                    &mut comm,
+                    &comm,
                     &yao_setup,
                 )
                 .await?
@@ -362,7 +368,7 @@ mod tests {
                     2,
                     &mut rng,
                     &hash,
-                    &mut comm,
+                    &comm,
                     &yao_setup,
                 )
                 .await?
@@ -437,6 +443,345 @@ mod tests {
             )
             .await?;
             op.push(output);
+
+            let op1 = output_yao_to_functionality(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                0,
+                out_sh.get(&i).unwrap(),
+            )
+            .await?;
+            if setup.participant_index() == 0 {
+                assert_eq!(output, op1.unwrap())
+            }
+
+            let op2 = output_yao_to_functionality(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                1,
+                out_sh.get(&i).unwrap(),
+            )
+            .await?;
+            if setup.participant_index() == 1 {
+                assert_eq!(output, op2.unwrap())
+            }
+
+            let op3 = output_yao_to_functionality(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                2,
+                out_sh.get(&i).unwrap(),
+            )
+            .await?;
+            if setup.participant_index() == 2 {
+                assert_eq!(output, op3.unwrap())
+            }
+        }
+        Ok((setup.participant_index(), op))
+    }
+
+    async fn batched_test_run_entire_flow<T, R>(
+        setup: T,
+        seed: Seed,
+        circuit: BinaryCircuit,
+        garb_input: Vec<bool>,
+        eval_input: Vec<bool>,
+        relay: R,
+    ) -> Result<(usize, Vec<bool>), ProtocolError>
+    where
+        T: CommonSetupMessage,
+        R: Relay,
+    {
+        let mut relay = FilteredMsgRelay::new(relay);
+
+        let mut init_seed = [0u8; 32];
+        let mut common_randomness_seed = [0u8; 32];
+        let mut transcript = Transcript::new(b"test");
+        transcript.append_message(b"seed", &seed);
+        transcript.challenge_bytes(b"init-seed", &mut init_seed);
+        transcript.challenge_bytes(b"common-randomness-seed", &mut common_randomness_seed);
+
+        let (_sid, mut mpc_encryption) = run_init(&setup, init_seed, &mut relay).await?;
+        let mut tag_offset_counter = TagOffsetCounter::new();
+        let yao_setup = setup_yao_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+        )
+        .await?;
+
+        let mut gin = HashMap::new();
+        let mut ein = HashMap::new();
+
+        let (mut rng, hash, comm) = if setup.participant_index() == 2 {
+            let hash = AesHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
+            let comm = HashCommitment::new(hash.clone());
+            (None, hash, comm)
+        } else {
+            let hash = AesHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
+            let comm = HashCommitment::new(hash.clone());
+            let r = ChaCha8Rng::from_seed(yao_setup.g_setup.clone().unwrap().prf_key);
+            (Some(r), hash, comm)
+        };
+
+        let mut count = 0;
+
+        let mut ids = vec![];
+        let mut inps = vec![];
+        while count < 32 && count < circuit.garbler_input_ids.len() {
+            ids.push(circuit.garbler_input_ids[count]);
+            inps.push(garb_input[count]);
+            count += 1;
+        }
+        let outs = batch_input_yao_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            &inps,
+            &mut rng,
+            &yao_setup,
+        )
+        .await?;
+        for (out, id) in outs.iter().zip(ids) {
+            gin.insert(id, out.clone());
+        }
+
+        println!("{} finished input g 0", setup.participant_index());
+
+        let mut ids = vec![];
+        let mut inps = vec![];
+        while count < 2 * 32 && count < circuit.garbler_input_ids.len() {
+            ids.push(circuit.garbler_input_ids[count]);
+            inps.push(Some(garb_input[count]));
+            count += 1;
+        }
+        let outs = if setup.participant_index() == 0 {
+            batch_input_yao_from_functionality(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                &inps,
+                0,
+                &mut rng,
+                &hash,
+                &comm,
+                &yao_setup,
+            )
+            .await?
+        } else {
+            batch_input_yao_from_functionality(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                &vec![None; inps.len()],
+                0,
+                &mut rng,
+                &hash,
+                &comm,
+                &yao_setup,
+            )
+            .await?
+        };
+        for (out, id) in outs.iter().zip(ids) {
+            gin.insert(id, out.clone());
+        }
+
+        println!("{} finished input g 1", setup.participant_index());
+
+        let mut ids = vec![];
+        let mut inps = vec![];
+        while count < 3 * 32 && count < circuit.garbler_input_ids.len() {
+            ids.push(circuit.garbler_input_ids[count]);
+            inps.push(Some(garb_input[count]));
+            count += 1;
+        }
+        let outs = if setup.participant_index() == 1 {
+            batch_input_yao_from_functionality(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                &inps,
+                1,
+                &mut rng,
+                &hash,
+                &comm,
+                &yao_setup,
+            )
+            .await?
+        } else {
+            batch_input_yao_from_functionality(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                &vec![None; inps.len()],
+                1,
+                &mut rng,
+                &hash,
+                &comm,
+                &yao_setup,
+            )
+            .await?
+        };
+        for (out, id) in outs.iter().zip(ids) {
+            gin.insert(id, out.clone());
+        }
+
+        println!("{} finished input g 2", setup.participant_index());
+
+        let mut ids = vec![];
+        let mut inps = vec![];
+        while count < 4 * 32 && count < circuit.garbler_input_ids.len() {
+            ids.push(circuit.garbler_input_ids[count]);
+            inps.push(Some(garb_input[count]));
+            count += 1;
+        }
+        let outs = if setup.participant_index() == 2 {
+            batch_input_yao_from_functionality(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                &inps,
+                2,
+                &mut rng,
+                &hash,
+                &comm,
+                &yao_setup,
+            )
+            .await?
+        } else {
+            batch_input_yao_from_functionality(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                &vec![None; inps.len()],
+                2,
+                &mut rng,
+                &hash,
+                &comm,
+                &yao_setup,
+            )
+            .await?
+        };
+        for (out, id) in outs.iter().zip(ids) {
+            gin.insert(id, out.clone());
+        }
+
+        println!("{} finished input g 3", setup.participant_index());
+
+        let mut ids = vec![];
+        let mut inps = vec![];
+        for (id, inp) in circuit.evaluator_input_ids.iter().zip(eval_input) {
+            ids.push(*id);
+            inps.push(inp);
+        }
+        let outs = batch_input_yao_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            &inps,
+            &mut rng,
+            &yao_setup,
+        )
+        .await?;
+        for (out, id) in outs.iter().zip(ids) {
+            ein.insert(id, out.clone());
+        }
+
+        println!("{} finished input e", setup.participant_index());
+
+        let out_sh = yao_circuit_eval_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            &gin,
+            &ein,
+            &circuit,
+            &mut rng,
+            &hash,
+            &yao_setup,
+        )
+        .await?;
+
+        let mut shares = vec![];
+
+        for i in circuit.output_gate_ids {
+            let cor: bool = validate_yao_share(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                out_sh.get(&i).unwrap(),
+            )
+            .await?;
+            assert!(cor);
+            shares.push(out_sh.get(&i).unwrap().clone());
+        }
+
+        let op = batch_output_yao_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            &shares,
+        )
+        .await?;
+
+        let op1 = batch_output_yao_to_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            0,
+            &shares,
+        )
+        .await?;
+
+        let op2 = batch_output_yao_to_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            1,
+            &shares,
+        )
+        .await?;
+
+        let op3 = batch_output_yao_to_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            2,
+            &shares,
+        )
+        .await?;
+
+        for i in 0..op.len() {
+            if setup.participant_index() == 0 {
+                assert_eq!(op[i], op1[i].unwrap())
+            }
+            if setup.participant_index() == 1 {
+                assert_eq!(op[i], op2[i].unwrap())
+            }
+            if setup.participant_index() == 2 {
+                assert_eq!(op[i], op3[i].unwrap())
+            }
         }
         Ok((setup.participant_index(), op))
     }
@@ -489,13 +834,14 @@ mod tests {
         circuit: BinaryCircuit,
         gin: Vec<bool>,
         ein: Vec<bool>,
+        batched: bool,
     ) -> Vec<Vec<bool>>
     where
         S: MessageRelayService<MessageRelay = R>,
         R: Relay + Send + 'static,
     {
         let parties = setup_entire_flow(None);
-        sim_parties_entire_flow(parties, coord, circuit, gin, ein).await
+        sim_parties_entire_flow(parties, coord, circuit, gin, ein, batched).await
     }
 
     async fn sim_parties_entire_flow<S, R>(
@@ -504,6 +850,7 @@ mod tests {
         circuit: BinaryCircuit,
         gin: Vec<bool>,
         ein: Vec<bool>,
+        batched: bool,
     ) -> Vec<Vec<bool>>
     where
         S: MessageRelayService<MessageRelay = R>,
@@ -513,14 +860,25 @@ mod tests {
         for (setup, seed) in parties {
             let relay = coord.connect().await.unwrap();
 
-            jset.spawn(test_run_entire_flow(
-                setup,
-                seed,
-                circuit.clone(),
-                gin.clone(),
-                ein.clone(),
-                relay,
-            ));
+            if batched {
+                jset.spawn(batched_test_run_entire_flow(
+                    setup,
+                    seed,
+                    circuit.clone(),
+                    gin.clone(),
+                    ein.clone(),
+                    relay,
+                ));
+            } else {
+                jset.spawn(test_run_entire_flow(
+                    setup,
+                    seed,
+                    circuit.clone(),
+                    gin.clone(),
+                    ein.clone(),
+                    relay,
+                ));
+            }
         }
 
         let mut results = vec![];
@@ -543,12 +901,19 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_entire_flow() {
         let circuit = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
+        let batched = true;
         for i in 0..2 {
             for j in 0..2 {
                 let gin = vec![i != 0; 128];
                 let ein = vec![j != 0; 128];
-                let output =
-                    sim_entire_flow(SimpleMessageRelay::new(), circuit.clone(), gin, ein).await;
+                let output = sim_entire_flow(
+                    SimpleMessageRelay::new(),
+                    circuit.clone(),
+                    gin,
+                    ein,
+                    batched,
+                )
+                .await;
                 assert_eq!(output[0], output[1]);
                 assert_eq!(output[2], output[1]);
                 let count = 2 * i + j;
@@ -596,8 +961,14 @@ mod tests {
 
                 let gin = vec![ibit1, ibit2];
                 let ein = vec![jbit1, jbit2];
-                let output =
-                    sim_entire_flow(SimpleMessageRelay::new(), circuit.clone(), gin, ein).await;
+                let output = sim_entire_flow(
+                    SimpleMessageRelay::new(),
+                    circuit.clone(),
+                    gin,
+                    ein,
+                    batched,
+                )
+                .await;
                 assert_eq!(output[0], output[1]);
                 assert_eq!(output[2], output[1]);
                 assert!(
