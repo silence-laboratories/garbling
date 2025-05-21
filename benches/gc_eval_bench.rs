@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use garbled_circuit::{
     circuitop::circuit::BinaryCircuit,
     config::constants::AES_KEY,
-    garbling2pc::{evaluator_operations::BinaryEvaluator, garbler_operations::BinaryGarbler},
+    old::garbling2pc::{evaluator_operations::BinaryEvaluator, garbler_operations::BinaryGarbler},
     utilities::hash_function::AesHash,
 };
 use rand::SeedableRng;

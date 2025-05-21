@@ -38,8 +38,7 @@ mod tests {
     use std::vec;
 
     use crate::{
-        circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-        customcircuits::comparison::build_comparison_circuit_threeparty,
+        circuitop::{circuit::BinaryCircuit, gate::BinaryGate}, old::garbling3pc::comparison_circ_3pc::build_comparison_circuit_threeparty,
     };
 
     #[test]

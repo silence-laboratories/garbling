@@ -4,8 +4,8 @@ use rand::{CryptoRng, RngCore};
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::garbling2pc_errors::{BinaryOperationsError, ExecutionPrimitiveError, GarblerError},
-    garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
+    old::garbling2pc::garbling2pc_errors::{BinaryOperationsError, ExecutionPrimitiveError, GarblerError},
+    old::garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
     utilities::{hash_function::HashFunction, types::Block, utils::xor_blocks},
 };
 

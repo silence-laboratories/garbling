@@ -75,7 +75,7 @@ where
             })
             .collect();
 
-        let out = evaluate_functionality(circuit, &g_shares, &e_shares, &fs[0], hash).unwrap();
+        let out = evaluate_functionality(circuit, &g_shares, &e_shares, &fs[0], hash);
 
         output = out
             .iter()
@@ -116,8 +116,7 @@ where
             &yao_setup.g_setup.clone().unwrap(),
             r,
             hash,
-        )
-        .unwrap();
+        );
         let tf = block_vec2tblock_vec(&f);
 
         send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;

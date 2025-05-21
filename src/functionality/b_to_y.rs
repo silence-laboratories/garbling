@@ -341,8 +341,7 @@ where
             gin.insert(circuit.garbler_input_ids[2], share_x3);
 
             let (_, outshares) =
-                garble_functionality(&circuit, &gin, &HashMap::new(), &yaosetup, &mut r, hash)
-                    .unwrap();
+                garble_functionality(&circuit, &gin, &HashMap::new(), &yaosetup, &mut r, hash);
 
             Ok(YaoShare {
                 g_share: Some(outshares.get(&circuit.output_gate_ids[0]).unwrap().clone()),
@@ -364,8 +363,7 @@ where
             gin.insert(circuit.garbler_input_ids[2], share_x3);
 
             let (_, outshares) =
-                garble_functionality(&circuit, &gin, &HashMap::new(), &yaosetup, &mut r, hash)
-                    .unwrap();
+                garble_functionality(&circuit, &gin, &HashMap::new(), &yaosetup, &mut r, hash);
 
             Ok(YaoShare {
                 g_share: Some(outshares.get(&circuit.output_gate_ids[0]).unwrap().clone()),
@@ -398,8 +396,7 @@ where
             gin.insert(circuit.garbler_input_ids[1], share_x2);
             gin.insert(circuit.garbler_input_ids[2], share_x3);
 
-            let outshares =
-                evaluate_functionality(&circuit, &gin, &HashMap::new(), &[], hash).unwrap();
+            let outshares = evaluate_functionality(&circuit, &gin, &HashMap::new(), &[], hash);
 
             Ok(YaoShare {
                 g_share: None,
@@ -466,8 +463,7 @@ where
                 gin.insert(circuit.garbler_input_ids[2], share_x3);
 
                 let (_, outshares) =
-                    garble_functionality(&circuit, &gin, &HashMap::new(), &yaosetup, &mut r, hash)
-                        .unwrap();
+                    garble_functionality(&circuit, &gin, &HashMap::new(), &yaosetup, &mut r, hash);
 
                 let output = YaoShare {
                     g_share: Some(outshares.get(&circuit.output_gate_ids[0]).unwrap().clone()),
@@ -500,8 +496,7 @@ where
                 gin.insert(circuit.garbler_input_ids[2], share_x3);
 
                 let (_, outshares) =
-                    garble_functionality(&circuit, &gin, &HashMap::new(), &yaosetup, &mut r, hash)
-                        .unwrap();
+                    garble_functionality(&circuit, &gin, &HashMap::new(), &yaosetup, &mut r, hash);
 
                 let output = YaoShare {
                     g_share: Some(outshares.get(&circuit.output_gate_ids[0]).unwrap().clone()),
@@ -541,8 +536,7 @@ where
                 gin.insert(circuit.garbler_input_ids[1], share_x2);
                 gin.insert(circuit.garbler_input_ids[2], share_x3);
 
-                let outshares =
-                    evaluate_functionality(&circuit, &gin, &HashMap::new(), &[], hash).unwrap();
+                let outshares = evaluate_functionality(&circuit, &gin, &HashMap::new(), &[], hash);
 
                 let output = YaoShare {
                     g_share: None,

@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::garbling2pc_errors::{BinaryOperationsError, EvaluatorError, ExecutionPrimitiveError},
-    garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
+    old::garbling2pc::garbling2pc_errors::{BinaryOperationsError, EvaluatorError, ExecutionPrimitiveError},
+    old::garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
     utilities::{hash_function::HashFunction, types::Block, utils::xor_blocks},
 };
 
@@ -382,7 +382,7 @@ mod tests {
         circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder},
         config::constants::AES_KEY,
         customcircuits::comparison::build_comparison_circuit,
-        garbling2pc::garbler_operations::BinaryGarbler,
+        old::garbling2pc::garbler_operations::BinaryGarbler,
         utilities::{hash_function::AesHash, utils::bool_vec_to_hex},
     };
 

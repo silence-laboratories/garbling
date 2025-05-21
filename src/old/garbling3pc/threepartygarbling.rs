@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     circuitop::circuit::BinaryCircuit,
     config::constants::HASH_KEY,
-    garbling2pc::{evaluator_operations::BinaryEvaluator, garbler_operations::BinaryGarbler},
-    garbling3pc::threepartytraits::ThreePartyBinaryEvaluator,
+    old::garbling2pc::{evaluator_operations::BinaryEvaluator, garbler_operations::BinaryGarbler},
+    old::garbling3pc::threepartytraits::ThreePartyBinaryEvaluator,
     utilities::{
         commitments::{Commitment, HashCommitment},
         hash_function::AesHash,
@@ -804,8 +804,9 @@ pub fn test_run_3party_garbling(
 mod tests {
     use crate::{
         circuitop::circuit::BinaryCircuit,
-        customcircuits::comparison::build_comparison_circuit_threeparty,
-        garbling3pc::threepartytraits::ThreePartyBinaryCircuit, utilities::utils::bool_vec_to_hex,
+        old::garbling3pc::comparison_circ_3pc::build_comparison_circuit_threeparty,
+        old::garbling3pc::threepartytraits::ThreePartyBinaryCircuit,
+        utilities::utils::bool_vec_to_hex,
     };
 
     use super::test_run_3party_garbling;

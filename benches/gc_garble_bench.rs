@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use garbled_circuit::{
     circuitop::circuit::BinaryCircuit, config::constants::AES_KEY,
-    garbling2pc::garbler_operations::BinaryGarbler, utilities::hash_function::AesHash,
+    old::garbling2pc::garbler_operations::BinaryGarbler, utilities::hash_function::AesHash,
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;

@@ -1,4 +1,5 @@
-use super::garbling2pc_errors::{BinaryOperationsError, ExecutionPrimitiveError, GarblerError};
+
+use crate::old::garbling2pc::garbling2pc_errors::{BinaryOperationsError, ExecutionPrimitiveError, GarblerError};
 
 /// Represents errors that can occur while evaluating a garbled `BinaryCircuit`
 /// during the three-party garbled-circuit protocol.

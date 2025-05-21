@@ -2,9 +2,7 @@ pub mod circuitop;
 
 pub mod config;
 
-pub mod garbling2pc;
-
-pub mod garbling3pc;
+pub mod old;
 
 pub mod utilities;
 

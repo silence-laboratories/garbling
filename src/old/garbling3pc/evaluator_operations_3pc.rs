@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::garbling3pc_errors::ThreePartyEvaluatorError,
-    garbling2pc::{
+    old::garbling3pc::garbling3pc_errors::ThreePartyEvaluatorError,
+    old::garbling2pc::{
         evaluator_operations::BinaryEvaluator,
         exec::{BinaryOperations, ExecutionPrimitives},
     },
@@ -122,9 +122,9 @@ mod tests {
     use crate::{
         circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder},
         config::constants::AES_KEY,
-        customcircuits::comparison::build_comparison_circuit_threeparty,
-        garbling2pc::garbler_operations::BinaryGarbler,
-        garbling3pc::threepartytraits::{
+        old::garbling3pc::comparison_circ_3pc::build_comparison_circuit_threeparty,
+        old::garbling2pc::garbler_operations::BinaryGarbler,
+        old::garbling3pc::threepartytraits::{
             ThreePartyBinaryCircuit, ThreePartyBinaryCircuitBuilder, ThreePartyBinaryEvaluator,
             ThreePartyBinaryGarbler,
         },

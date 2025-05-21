@@ -4,7 +4,6 @@ use rand::{CryptoRng, RngCore};
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::garbling2pc_errors::GarblerError,
     utilities::{
         hash_function::HashFunction,
         types::{Block, GarblerSetup, YaoGarblerShare},
@@ -19,7 +18,7 @@ pub fn garble_functionality<R, H>(
     setup: &GarblerSetup,
     rng: &mut R,
     hash: &H,
-) -> Result<(Vec<Block>, HashMap<usize, YaoGarblerShare>), GarblerError>
+) -> (Vec<Block>, HashMap<usize, YaoGarblerShare>)
 where
     R: RngCore + CryptoRng,
     H: HashFunction,
@@ -54,8 +53,8 @@ where
                 (None, zerowire)
             }
             BinaryGate::Xor { xid, yid, out } => {
-                let x_label = w[xid].as_ref().ok_or(GarblerError::CacheItemError(xid))?;
-                let y_label = w[yid].as_ref().ok_or(GarblerError::CacheItemError(yid))?;
+                let x_label = w[xid].as_ref().unwrap();
+                let y_label = w[yid].as_ref().unwrap();
                 (out, xor_blocks(*x_label, *y_label))
             }
             BinaryGate::And {
@@ -64,9 +63,9 @@ where
                 id: _,
                 out,
             } => {
-                let x_label = w[xid].as_ref().ok_or(GarblerError::CacheItemError(xid))?;
+                let x_label = w[xid].as_ref().unwrap();
                 let xp_label = xor_blocks(*x_label, setup.delta);
-                let y_label = w[yid].as_ref().ok_or(GarblerError::CacheItemError(yid))?;
+                let y_label = w[yid].as_ref().unwrap();
                 let yp_label = xor_blocks(*y_label, setup.delta);
                 let k0 = (2 * i - 1) as u128;
                 let k1 = 2 * i as u128;
@@ -112,7 +111,7 @@ where
                 (out, w_out)
             }
             BinaryGate::Inv { xid, out } => {
-                let x_label = w[xid].as_ref().ok_or(GarblerError::CacheItemError(xid))?;
+                let x_label = w[xid].as_ref().unwrap();
                 (out, xor_blocks(*x_label, setup.delta))
             }
         };
@@ -120,7 +119,7 @@ where
     }
     let mut outputs = HashMap::new();
     for r in circuit.get_output_gate_ids().iter() {
-        let x = w[*r].as_ref().ok_or(GarblerError::CacheItemError(*r))?;
+        let x = w[*r].as_ref().unwrap();
         outputs.insert(
             *r,
             YaoGarblerShare {
@@ -130,7 +129,7 @@ where
         );
     }
 
-    Ok((f, outputs))
+    (f, outputs)
 }
 
 #[cfg(test)]
@@ -191,7 +190,7 @@ mod tests {
             })
             .collect();
 
-        let (f, _o) = garble_functionality(&circuit, &g, &e, &setup, &mut rng, &hash).unwrap();
+        let (f, _o) = garble_functionality(&circuit, &g, &e, &setup, &mut rng, &hash);
 
         println!(
             "cir: garbler_input_ids.len() {}",
@@ -253,7 +252,7 @@ mod tests {
             })
             .collect();
 
-        let (f, _o) = garble_functionality(&circuit, &g, &e, &setup, &mut rng, &hash).unwrap();
+        let (f, _o) = garble_functionality(&circuit, &g, &e, &setup, &mut rng, &hash);
 
         println!(
             "cir: garbler_input_ids.len() {}",

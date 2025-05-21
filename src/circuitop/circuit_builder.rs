@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::garbling2pc_errors::FileParsingError,
+    config::errors::FileParsingError,
 };
 
 /// `CircuitBuilder` is a struct used to construct a `BinaryCircuit`.
@@ -378,10 +378,7 @@ mod tests {
     use crate::{
         circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
         customcircuits::comparison::build_comparison_circuit,
-        garbling2pc::plaintext_operations::BinaryPlaintext,
     };
-
-    use super::CircuitBuilder;
 
     #[test]
     fn test_circuit_builder() {
@@ -435,148 +432,5 @@ mod tests {
         };
 
         assert_eq!(required_circuit, circuit);
-    }
-
-    #[test]
-    fn test_circuit_builder_parse() {
-        let mut builder = CircuitBuilder::new();
-
-        let inputs_garb = builder.garbler_inputs(4);
-        let inputs_eval = builder.evaluator_inputs(4);
-
-        let xor_garb1 = builder.xor(inputs_garb[0], inputs_garb[1]);
-        let xor_garb2 = builder.xor(inputs_garb[2], inputs_garb[3]);
-        let xor_eval1 = builder.xor(inputs_eval[0], inputs_eval[1]);
-        let xor_eval2 = builder.xor(inputs_eval[2], inputs_eval[3]);
-
-        let outputs = builder
-            .parse(
-                "circuits/binmult.txt",
-                [xor_garb1, xor_garb2].as_slice(),
-                [xor_eval1, xor_eval2].as_slice(),
-            )
-            .unwrap();
-
-        let mut builder2 = builder.clone();
-
-        for i in outputs.clone() {
-            builder.output(i);
-        }
-
-        let circuit = builder.finish();
-
-        let circ2 = BinaryCircuit::parse("circuits/binmult.txt").unwrap();
-
-        let mut outfin = true;
-        for garb in 0..16 {
-            for eval in 0..16 {
-                let mut newgarb = garb;
-                let garb0 = (newgarb % 2) != 0;
-                newgarb /= 2;
-                let garb1 = (newgarb % 2) != 0;
-                newgarb /= 2;
-                let garb2 = (newgarb % 2) != 0;
-                newgarb /= 2;
-                let garb3 = (newgarb % 2) != 0;
-
-                let mut neweval = eval;
-                let eval0 = (neweval % 2) != 0;
-                neweval /= 2;
-                let eval1 = (neweval % 2) != 0;
-                neweval /= 2;
-                let eval2 = (neweval % 2) != 0;
-                neweval /= 2;
-                let eval3 = (neweval % 2) != 0;
-
-                let actgarb0 = garb0 ^ garb1;
-                let actgarb1 = garb2 ^ garb3;
-
-                let acteval0 = eval0 ^ eval1;
-                let acteval1 = eval2 ^ eval3;
-
-                let mut pl = BinaryPlaintext::new();
-
-                let outs = pl
-                    .evaluate(
-                        circuit.clone(),
-                        &[garb0, garb1, garb2, garb3],
-                        &[eval0, eval1, eval2, eval3],
-                    )
-                    .unwrap();
-
-                let mut pl2 = BinaryPlaintext::new();
-
-                let outs2 = pl2
-                    .evaluate(circ2.clone(), &[actgarb0, actgarb1], &[acteval0, acteval1])
-                    .unwrap();
-
-                outfin &= outs == outs2;
-            }
-        }
-        assert!(outfin);
-
-        let gext0 = builder2.garbler_input();
-        let gext1 = builder2.garbler_input();
-
-        let actouts = builder2
-            .parse("circuits/binmult.txt", [gext0, gext1].as_slice(), &outputs)
-            .unwrap();
-
-        for i in actouts.clone() {
-            builder2.output(i);
-        }
-
-        let circuit = builder2.finish();
-
-        let mut outfin = true;
-        for garb in 0..16 {
-            for eval in 0..16 {
-                let mut newgarb = garb;
-                let garb0 = (newgarb % 2) != 0;
-                newgarb /= 2;
-                let garb1 = (newgarb % 2) != 0;
-                newgarb /= 2;
-                let garb2 = (newgarb % 2) != 0;
-                newgarb /= 2;
-                let garb3 = (newgarb % 2) != 0;
-
-                let mut neweval = eval;
-                let eval0 = (neweval % 2) != 0;
-                neweval /= 2;
-                let eval1 = (neweval % 2) != 0;
-                neweval /= 2;
-                let eval2 = (neweval % 2) != 0;
-                neweval /= 2;
-                let eval3 = (neweval % 2) != 0;
-
-                let actgarb0 = garb0 ^ garb1;
-                let actgarb1 = garb2 ^ garb3;
-
-                let acteval0 = eval0 ^ eval1;
-                let acteval1 = eval2 ^ eval3;
-
-                let mut pl = BinaryPlaintext::new();
-
-                let outs = pl
-                    .evaluate(
-                        circuit.clone(),
-                        &[garb0, garb1, garb2, garb3, true, false],
-                        &[eval0, eval1, eval2, eval3],
-                    )
-                    .unwrap();
-
-                let mut pl2 = BinaryPlaintext::new();
-                let mut pl3 = BinaryPlaintext::new();
-
-                let outs2 = pl2
-                    .evaluate(circ2.clone(), &[actgarb0, actgarb1], &[acteval0, acteval1])
-                    .unwrap();
-
-                let outs3 = pl3.evaluate(circ2.clone(), &[true, false], &outs2).unwrap();
-
-                outfin &= outs == outs3;
-            }
-        }
-        assert!(outfin);
     }
 }

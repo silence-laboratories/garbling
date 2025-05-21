@@ -4,8 +4,7 @@ use std::{
 };
 
 use crate::{
-    circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::garbling2pc_errors::FileParsingError,
+    circuitop::{circuit::BinaryCircuit, gate::BinaryGate}, config::errors::FileParsingError,
 };
 
 use super::threepartytraits::ThreePartyBinaryCircuit;
@@ -209,7 +208,7 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
 mod tests {
     use crate::{
         circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-        garbling3pc::threepartytraits::ThreePartyBinaryCircuit,
+        old::garbling3pc::threepartytraits::ThreePartyBinaryCircuit,
     };
 
     #[test]

@@ -1,15 +1,12 @@
 use std::collections::HashMap;
 
 use crate::{
-    circuitop::circuit::BinaryCircuit,
-    config::{
-        garbling2pc_errors::FileParsingError,
-        garbling3pc_errors::{
-            BinaryPlaintextError, ThreePartyEvaluatorError, ThreePartyGarblerError,
-        },
-    },
-    garbling2pc::garbler_operations::GarbleOutput,
-    utilities::types::Block,
+    circuitop::circuit::BinaryCircuit, config::errors::FileParsingError,
+    old::garbling2pc::garbler_operations::GarbleOutput, utilities::types::Block,
+};
+
+use super::garbling3pc_errors::{
+    BinaryPlaintextError, ThreePartyEvaluatorError, ThreePartyGarblerError,
 };
 
 /// Trait for any `BinaryCircuit` which implements the three-party secure garbled-circuit

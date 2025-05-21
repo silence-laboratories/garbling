@@ -1,11 +1,12 @@
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::{
-        garbling2pc_errors::{BinaryOperationsError, ExecutionPrimitiveError},
-        garbling3pc_errors::BinaryPlaintextError,
+    old::{
+        garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
+        garbling3pc::garbling3pc_errors::BinaryPlaintextError,
     },
-    garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
 };
+
+use super::garbling2pc_errors::{BinaryOperationsError, ExecutionPrimitiveError};
 
 /// A struct representing a plaintext simulation of a `BinaryCircuit`.
 ///

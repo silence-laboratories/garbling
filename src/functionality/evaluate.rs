@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::garbling2pc_errors::EvaluatorError,
     utilities::{
         hash_function::HashFunction,
         types::{Block, YaoEvaluatorShare},
@@ -16,7 +15,7 @@ pub fn evaluate_functionality<H>(
     evaluator_input_encoding_shares: &HashMap<usize, YaoEvaluatorShare>,
     f: &[Block],
     hash: &H,
-) -> Result<HashMap<usize, YaoEvaluatorShare>, EvaluatorError>
+) -> HashMap<usize, YaoEvaluatorShare>
 where
     H: HashFunction,
 {
@@ -41,8 +40,8 @@ where
                 (None, op_label)
             }
             BinaryGate::Xor { xid, yid, out } => {
-                let x_label = w[xid].as_ref().ok_or(EvaluatorError::CacheItemError(xid))?;
-                let y_label = w[yid].as_ref().ok_or(EvaluatorError::CacheItemError(yid))?;
+                let x_label = w[xid].as_ref().unwrap();
+                let y_label = w[yid].as_ref().unwrap();
                 (out, xor_blocks(*x_label, *y_label))
             }
             BinaryGate::And {
@@ -51,8 +50,8 @@ where
                 id: _,
                 out,
             } => {
-                let x_label = w[xid].as_ref().ok_or(EvaluatorError::CacheItemError(xid))?;
-                let y_label = w[yid].as_ref().ok_or(EvaluatorError::CacheItemError(yid))?;
+                let x_label = w[xid].as_ref().unwrap();
+                let y_label = w[yid].as_ref().unwrap();
                 let k0 = (2 * i - 1) as u128;
                 let k1 = 2 * i as u128;
                 let mut k0_bytes = Block::default();
@@ -85,7 +84,7 @@ where
                 (out, w_out)
             }
             BinaryGate::Inv { xid, out } => {
-                let x_label = w[xid].as_ref().ok_or(EvaluatorError::CacheItemError(xid))?;
+                let x_label = w[xid].as_ref().unwrap();
                 (out, *x_label)
             }
         };
@@ -93,9 +92,9 @@ where
     }
     let mut outputs: HashMap<usize, YaoEvaluatorShare> = HashMap::new();
     for r in circuit.get_output_gate_ids().iter() {
-        let x = w[*r].as_ref().ok_or(EvaluatorError::CacheItemError(*r))?;
+        let x = w[*r].as_ref().unwrap();
         outputs.insert(*r, YaoEvaluatorShare { label: *x });
     }
 
-    Ok(outputs)
+    outputs
 }

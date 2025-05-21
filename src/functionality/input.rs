@@ -440,7 +440,7 @@ where
             circuit.evaluator_input_ids[0],
             YaoEvaluatorShare { label: label_2 },
         );
-        let outmap = evaluate_functionality(&circuit, &gin, &ein, &[], hash).unwrap();
+        let outmap = evaluate_functionality(&circuit, &gin, &ein, &[], hash);
 
         output = YaoShare {
             g_share: None,
@@ -499,7 +499,7 @@ where
         );
 
         let (_, outmap) =
-            garble_functionality(&circuit, &gin, &ein, &ysetup, rngval, hash).unwrap();
+            garble_functionality(&circuit, &gin, &ein, &ysetup, rngval, hash);
 
         output = YaoShare {
             g_share: Some(outmap.get(&circuit.output_gate_ids[0]).unwrap().clone()),
@@ -697,7 +697,7 @@ where
                 circuit.evaluator_input_ids[0],
                 YaoEvaluatorShare { label: label_2 },
             );
-            let outmap = evaluate_functionality(&circuit, &gin, &ein, &[], hash).unwrap();
+            let outmap = evaluate_functionality(&circuit, &gin, &ein, &[], hash);
 
             output[i] = YaoShare {
                 g_share: None,
@@ -769,7 +769,7 @@ where
             );
 
             let (_, outmap) =
-                garble_functionality(&circuit, &gin, &ein, &ysetup, rngval, hash).unwrap();
+                garble_functionality(&circuit, &gin, &ein, &ysetup, rngval, hash);
 
             output[i] = YaoShare {
                 g_share: Some(outmap.get(&circuit.output_gate_ids[0]).unwrap().clone()),

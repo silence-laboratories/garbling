@@ -1,11 +1,13 @@
 use crate::circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder};
 
-pub fn build_comparison_circuit() -> BinaryCircuit {
+use super::threepartytraits::ThreePartyBinaryCircuitBuilder;
+
+pub fn build_comparison_circuit_threeparty() -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
-    let eval_input_1 = builder.evaluator_input();
+    let eval_input_1 = builder.evaluator_input_threeparty();
     let garb_input_1 = builder.garbler_input();
-    let eval_input_2 = builder.evaluator_input();
+    let eval_input_2 = builder.evaluator_input_threeparty();
     let garb_input_2 = builder.garbler_input();
 
     // Compare the bits

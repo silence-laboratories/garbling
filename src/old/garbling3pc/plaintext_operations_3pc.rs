@@ -1,7 +1,7 @@
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::garbling3pc_errors::BinaryPlaintextError,
-    garbling2pc::{
+    old::garbling3pc::garbling3pc_errors::BinaryPlaintextError,
+    old::garbling2pc::{
         exec::{BinaryOperations, ExecutionPrimitives},
         plaintext_operations::BinaryPlaintext,
     },
@@ -131,8 +131,8 @@ mod tests {
     use super::BinaryPlaintext;
     use crate::{
         circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder},
-        customcircuits::comparison::build_comparison_circuit_threeparty,
-        garbling3pc::threepartytraits::{
+        old::garbling3pc::comparison_circ_3pc::build_comparison_circuit_threeparty,
+        old::garbling3pc::threepartytraits::{
             ThreePartyBinaryCircuit, ThreePartyBinaryCircuitBuilder, ThreePartyBinaryPlaintext,
         },
         utilities::utils::bool_vec_to_hex,
