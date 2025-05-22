@@ -309,6 +309,7 @@ impl CircuitBuilder<BinaryCircuit> {
                     id,
                     out: Some(output + latest_ref - sub_val),
                 });
+                self.circ.increment_nonfree_gates();
                 id += 1;
             } else if gate == "XOR" {
                 let newinput0: usize;
