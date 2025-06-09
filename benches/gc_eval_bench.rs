@@ -1,11 +1,16 @@
+use std::collections::HashMap;
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use garbled_circuit::{
     circuitop::circuit::BinaryCircuit,
     config::constants::AES_KEY,
-    old::garbling2pc::{evaluator_operations::BinaryEvaluator, garbler_operations::BinaryGarbler},
-    utilities::hash_function::AesHash,
+    functionality::{evaluate::evaluate_functionality, garble::garble_functionality},
+    utilities::{
+        hash_function::AesHash,
+        types::{Block, GarblerSetup, YaoEvaluatorShare, YaoGarblerShare},
+    },
 };
-use rand::SeedableRng;
+use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 pub fn eval_aes256_benchmark(c: &mut Criterion) {
@@ -13,28 +18,58 @@ pub fn eval_aes256_benchmark(c: &mut Criterion) {
     let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
 
     let circuit = BinaryCircuit::parse("circuits/aes256.txt").unwrap();
-    let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
-    let garble_out = garbler.garble(&circuit).unwrap();
-    let garbler_inputs = garbler.get_garbled_inputs(
-        &circuit.garbler_input_ids,
-        [false; 256].as_slice(),
-        &garble_out.garbler_input_encodings.clone(),
-    );
-    let evaluator_inputs = garbler.get_garbled_inputs(
-        &circuit.evaluator_input_ids,
-        [false; 128].as_slice(),
-        &garble_out.evaluator_input_encodings.clone(),
+
+    let mut delta = Block::default();
+    rng.fill_bytes(&mut delta);
+
+    let hash = AesHash::new(AES_KEY);
+
+    let mut ggarin = HashMap::new();
+    let mut gevain = HashMap::new();
+    let mut egarin = HashMap::new();
+    let mut eevain = HashMap::new();
+
+    for ind in &circuit.garbler_input_ids {
+        let mut zero = Block::default();
+        rng.fill_bytes(&mut zero);
+        ggarin.insert(
+            *ind,
+            YaoGarblerShare {
+                delta,
+                f_label: zero,
+            },
+        );
+        egarin.insert(*ind, YaoEvaluatorShare { label: zero });
+    }
+
+    for ind in &circuit.garbler_input_ids {
+        let mut zero = Block::default();
+        rng.fill_bytes(&mut zero);
+        gevain.insert(
+            *ind,
+            YaoGarblerShare {
+                delta,
+                f_label: zero,
+            },
+        );
+        eevain.insert(*ind, YaoEvaluatorShare { label: zero });
+    }
+
+    let (gc, _) = garble_functionality(
+        &circuit,
+        &ggarin,
+        &gevain,
+        &GarblerSetup {
+            delta,
+            comm_crs: Block::default(),
+            prf_key: Block::default(),
+        },
+        &mut rng,
+        &hash,
     );
     group.bench_function("aes256_eval", |b| {
         b.iter(|| {
-            let mut evaluator = BinaryEvaluator::new(
-                garble_out.decoding_infos.clone(),
-                AesHash::new(AES_KEY),
-                garble_out.garbled_circuit.clone(),
-            );
-            evaluator
-                .evaluate(&circuit, &garbler_inputs, &evaluator_inputs)
-                .unwrap();
+            let _ = evaluate_functionality(&circuit, &egarin, &eevain, &gc, &hash);
         })
     });
     group.finish();
@@ -45,28 +80,58 @@ pub fn eval_aes128_benchmark(c: &mut Criterion) {
     let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
 
     let circuit = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
-    let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
-    let garble_out = garbler.garble(&circuit).unwrap();
-    let garbler_inputs = garbler.get_garbled_inputs(
-        &circuit.garbler_input_ids,
-        [false; 128].as_slice(),
-        &garble_out.garbler_input_encodings.clone(),
-    );
-    let evaluator_inputs = garbler.get_garbled_inputs(
-        &circuit.evaluator_input_ids,
-        [false; 128].as_slice(),
-        &garble_out.evaluator_input_encodings.clone(),
+
+    let mut delta = Block::default();
+    rng.fill_bytes(&mut delta);
+
+    let hash = AesHash::new(AES_KEY);
+
+    let mut ggarin = HashMap::new();
+    let mut gevain = HashMap::new();
+    let mut egarin = HashMap::new();
+    let mut eevain = HashMap::new();
+
+    for ind in &circuit.garbler_input_ids {
+        let mut zero = Block::default();
+        rng.fill_bytes(&mut zero);
+        ggarin.insert(
+            *ind,
+            YaoGarblerShare {
+                delta,
+                f_label: zero,
+            },
+        );
+        egarin.insert(*ind, YaoEvaluatorShare { label: zero });
+    }
+
+    for ind in &circuit.garbler_input_ids {
+        let mut zero = Block::default();
+        rng.fill_bytes(&mut zero);
+        gevain.insert(
+            *ind,
+            YaoGarblerShare {
+                delta,
+                f_label: zero,
+            },
+        );
+        eevain.insert(*ind, YaoEvaluatorShare { label: zero });
+    }
+
+    let (gc, _) = garble_functionality(
+        &circuit,
+        &ggarin,
+        &gevain,
+        &GarblerSetup {
+            delta,
+            comm_crs: Block::default(),
+            prf_key: Block::default(),
+        },
+        &mut rng,
+        &hash,
     );
     group.bench_function("aes128_eval", |b| {
         b.iter(|| {
-            let mut evaluator = BinaryEvaluator::new(
-                garble_out.decoding_infos.clone(),
-                AesHash::new(AES_KEY),
-                garble_out.garbled_circuit.clone(),
-            );
-            evaluator
-                .evaluate(&circuit, &garbler_inputs, &evaluator_inputs)
-                .unwrap();
+            let _ = evaluate_functionality(&circuit, &egarin, &eevain, &gc, &hash);
         })
     });
     group.finish();
@@ -77,28 +142,57 @@ pub fn eval_sha256_benchmark(c: &mut Criterion) {
     let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
 
     let circuit = BinaryCircuit::parse("circuits/sha256.txt").unwrap();
-    let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
-    let garble_out = garbler.garble(&circuit).unwrap();
-    let garbler_inputs = garbler.get_garbled_inputs(
-        &circuit.garbler_input_ids,
-        [false; 512].as_slice(),
-        &garble_out.garbler_input_encodings.clone(),
-    );
-    let evaluator_inputs = garbler.get_garbled_inputs(
-        &circuit.evaluator_input_ids,
-        [false; 256].as_slice(),
-        &garble_out.evaluator_input_encodings.clone(),
+    let mut delta = Block::default();
+    rng.fill_bytes(&mut delta);
+
+    let hash = AesHash::new(AES_KEY);
+
+    let mut ggarin = HashMap::new();
+    let mut gevain = HashMap::new();
+    let mut egarin = HashMap::new();
+    let mut eevain = HashMap::new();
+
+    for ind in &circuit.garbler_input_ids {
+        let mut zero = Block::default();
+        rng.fill_bytes(&mut zero);
+        ggarin.insert(
+            *ind,
+            YaoGarblerShare {
+                delta,
+                f_label: zero,
+            },
+        );
+        egarin.insert(*ind, YaoEvaluatorShare { label: zero });
+    }
+
+    for ind in &circuit.garbler_input_ids {
+        let mut zero = Block::default();
+        rng.fill_bytes(&mut zero);
+        gevain.insert(
+            *ind,
+            YaoGarblerShare {
+                delta,
+                f_label: zero,
+            },
+        );
+        eevain.insert(*ind, YaoEvaluatorShare { label: zero });
+    }
+
+    let (gc, _) = garble_functionality(
+        &circuit,
+        &ggarin,
+        &gevain,
+        &GarblerSetup {
+            delta,
+            comm_crs: Block::default(),
+            prf_key: Block::default(),
+        },
+        &mut rng,
+        &hash,
     );
     group.bench_function("sha256_eval", |b| {
         b.iter(|| {
-            let mut evaluator = BinaryEvaluator::new(
-                garble_out.decoding_infos.clone(),
-                AesHash::new(AES_KEY),
-                garble_out.garbled_circuit.clone(),
-            );
-            evaluator
-                .evaluate(&circuit, &garbler_inputs, &evaluator_inputs)
-                .unwrap();
+            let _ = evaluate_functionality(&circuit, &egarin, &eevain, &gc, &hash);
         })
     });
     group.finish();
