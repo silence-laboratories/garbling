@@ -142,7 +142,7 @@ mod tests {
         circuitop::circuit::BinaryCircuit,
         customcircuits::comparison::build_comparison_circuit,
         utilities::{
-            hash_function::AesHash,
+            garble_hash::AesGarbleHash,
             types::{Block, GarblerSetup, YaoGarblerShare},
         },
     };
@@ -160,7 +160,7 @@ mod tests {
         };
 
         let mut rng = ChaCha8Rng::from_seed(setup.prf_key);
-        let hash = AesHash::new(Block::default());
+        let hash = AesGarbleHash::new(Block::default());
 
         let g = circuit
             .garbler_input_ids
@@ -222,7 +222,7 @@ mod tests {
         };
 
         let mut rng = ChaCha8Rng::from_seed(setup.prf_key);
-        let hash = AesHash::new(Block::default());
+        let hash = AesGarbleHash::new(Block::default());
 
         let g = circuit
             .garbler_input_ids

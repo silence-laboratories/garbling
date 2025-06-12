@@ -6,7 +6,7 @@ use garbled_circuit::{
     config::constants::AES_KEY,
     functionality::garble::garble_functionality,
     utilities::{
-        hash_function::AesHash,
+        garble_hash::AesGarbleHash,
         types::{Block, GarblerSetup, YaoGarblerShare},
     },
 };
@@ -14,15 +14,16 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 pub fn garble_aes256_benchmark(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Preprocess");
-    let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
+    let mut group = c.benchmark_group("Garble");
+    let mut rng = ChaCha8Rng::from_seed(Block::default());
 
+    // 8832 AND Gates
     let circuit = BinaryCircuit::parse("circuits/aes256.txt").unwrap();
 
     let mut delta = Block::default();
     rng.fill_bytes(&mut delta);
 
-    let hash = AesHash::new(AES_KEY);
+    let hash = AesGarbleHash::new(AES_KEY);
 
     let mut ggarin = HashMap::new();
     let mut gevain = HashMap::new();
@@ -70,15 +71,16 @@ pub fn garble_aes256_benchmark(c: &mut Criterion) {
 }
 
 pub fn garble_aes128_benchmark(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Preprocess");
-    let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
+    let mut group = c.benchmark_group("Garble");
+    let mut rng = ChaCha8Rng::from_seed(Block::default());
 
+    // 6400 AND Gates
     let circuit = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
 
     let mut delta = Block::default();
     rng.fill_bytes(&mut delta);
 
-    let hash = AesHash::new(AES_KEY);
+    let hash = AesGarbleHash::new(AES_KEY);
 
     let mut ggarin = HashMap::new();
     let mut gevain = HashMap::new();
@@ -126,15 +128,16 @@ pub fn garble_aes128_benchmark(c: &mut Criterion) {
 }
 
 pub fn garble_sha256_benchmark(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Preprocess");
-    let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
+    let mut group = c.benchmark_group("Garble");
+    let mut rng = ChaCha8Rng::from_seed(Block::default());
 
+    // 22573 AND Gates
     let circuit = BinaryCircuit::parse("circuits/sha256.txt").unwrap();
 
     let mut delta = Block::default();
     rng.fill_bytes(&mut delta);
 
-    let hash = AesHash::new(AES_KEY);
+    let hash = AesGarbleHash::new(AES_KEY);
 
     let mut ggarin = HashMap::new();
     let mut gevain = HashMap::new();

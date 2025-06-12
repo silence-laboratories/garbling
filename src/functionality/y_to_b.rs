@@ -463,7 +463,10 @@ mod tests {
             circuit_eval::yao_circuit_eval_functionality, input::batch_input_yao_functionality,
             output::validate_yao_share, setup::setup_yao_functionality,
         },
-        utilities::{commitments::HashCommitment, hash_function::AesHash, utils::bool_vec_to_hex},
+        utilities::{
+            commitments::HashCommitment, garble_hash::AesGarbleHash, shahash::Sha512Hash,
+            types::Block, utils::bool_vec_to_hex,
+        },
     };
 
     use super::{batch_yao_to_binary_functionality, yao_to_binary_functionality};
@@ -479,8 +482,8 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut init_seed = [0u8; 32];
-        let mut common_randomness_seed = [0u8; 32];
+        let mut init_seed = Block::default();
+        let mut common_randomness_seed = Block::default();
         let mut transcript = Transcript::new(b"test");
         transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
@@ -508,12 +511,12 @@ mod tests {
         .await?;
 
         let (mut rng, hash, comm) = if setup.participant_index() == 2 {
-            let hash = AesHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
+            let hash = AesGarbleHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
+            let comm = HashCommitment::new(Sha512Hash::new());
             (None, hash, comm)
         } else {
-            let hash = AesHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
+            let hash = AesGarbleHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
+            let comm = HashCommitment::new(Sha512Hash::new());
             let r = ChaCha8Rng::from_seed(yao_setup.g_setup.clone().unwrap().prf_key);
             (Some(r), hash, comm)
         };
@@ -657,8 +660,8 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut init_seed = [0u8; 32];
-        let mut common_randomness_seed = [0u8; 32];
+        let mut init_seed = Block::default();
+        let mut common_randomness_seed = Block::default();
         let mut transcript = Transcript::new(b"test");
         transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
@@ -686,12 +689,12 @@ mod tests {
         .await?;
 
         let (mut rng, hash, comm) = if setup.participant_index() == 2 {
-            let hash = AesHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
+            let hash = AesGarbleHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
+            let comm = HashCommitment::new(Sha512Hash::new());
             (None, hash, comm)
         } else {
-            let hash = AesHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
+            let hash = AesGarbleHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
+            let comm = HashCommitment::new(Sha512Hash::new());
             let r = ChaCha8Rng::from_seed(yao_setup.g_setup.clone().unwrap().prf_key);
             (Some(r), hash, comm)
         };
@@ -812,7 +815,7 @@ mod tests {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    fn setup_y_to_b(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
+    fn setup_y_to_b(instance: Option<Block>) -> Vec<(SetupMessage, Block)> {
         use sha2::{Digest, Sha256};
         use sl_compute::transport::setup::{NoSigningKey, NoVerifyingKey, ProtocolParticipant};
         use sl_mpc_mate::message::InstanceId;
@@ -864,7 +867,7 @@ mod tests {
     }
 
     async fn sim_parties_y_to_b<S, R>(
-        parties: Vec<(SetupMessage, [u8; 32])>,
+        parties: Vec<(SetupMessage, Block)>,
         coord: S,
         batch: bool,
     ) -> Vec<Vec<bool>>

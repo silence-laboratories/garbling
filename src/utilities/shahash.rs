@@ -1,13 +1,11 @@
-use sha2::{Sha512, Digest};
+use sha2::{Digest, Sha512};
 
 use crate::config::util_errors::HashError;
 
 use super::{hash_function::HashFunction, types::Block, utils::xor_blocks};
 
-
 #[derive(Clone, Debug, Default)]
-pub struct Sha512Hash {
-}
+pub struct Sha512Hash {}
 
 impl Sha512Hash {
     pub fn new() -> Self {
@@ -16,8 +14,7 @@ impl Sha512Hash {
 }
 
 impl HashFunction for Sha512Hash {
-    fn initialize(&mut self, _key: Block) {
-    }
+    fn initialize(&mut self, _key: Block) {}
 
     fn cr_hash(&self, x: &Block) -> Block {
         let hashval = self.get_hash(x).unwrap();
@@ -25,7 +22,7 @@ impl HashFunction for Sha512Hash {
     }
 
     fn ccr_hash(&self, x: &Block) -> Block {
-        let mut y = [0u8; 32];
+        let mut y = Block::default();
         for i in 0..16 {
             y[i] = x[i] ^ x[i + 16];
         }

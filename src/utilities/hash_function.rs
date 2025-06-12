@@ -70,7 +70,7 @@ impl AesHash {
         padded
             .chunks(32)
             .map(|chunk| {
-                let mut block = [0u8; 32];
+                let mut block = Block::default();
                 block.copy_from_slice(chunk);
                 block
             })
@@ -121,7 +121,7 @@ impl HashFunction for AesHash {
     ///
     /// The function computes `cr_hash(σ(x))` where `σ(xL || xR) = (xR ⊕ xL) || xL`
     fn ccr_hash(&self, x: &Block) -> Block {
-        let mut y = [0u8; 32];
+        let mut y = Block::default();
         for i in 0..16 {
             y[i] = x[i] ^ x[i + 16];
         }

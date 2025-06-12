@@ -50,18 +50,18 @@ impl<H: HashFunction> Commitment for HashCommitment<H> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{config::constants::AES_KEY, utilities::hash_function::AesHash};
+    use crate::utilities::{shahash::Sha512Hash, types::Block};
 
     use super::{Commitment, HashCommitment};
 
     #[test]
     fn test_commitments() {
-        let hash = AesHash::new(AES_KEY);
+        let hash = Sha512Hash::new();
 
         let commitment = HashCommitment::new(hash);
 
-        let message1 = [0u8; 32];
-        let witness1 = [0u8; 32];
+        let message1 = Block::default();
+        let witness1 = Block::default();
         let commitment1 = commitment.commit(message1, witness1);
         assert!(commitment.verify(message1, witness1, commitment1));
 

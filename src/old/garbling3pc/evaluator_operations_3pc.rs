@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    old::garbling3pc::garbling3pc_errors::ThreePartyEvaluatorError,
     old::garbling2pc::{
         evaluator_operations::BinaryEvaluator,
         exec::{BinaryOperations, ExecutionPrimitives},
     },
+    old::garbling3pc::garbling3pc_errors::ThreePartyEvaluatorError,
     utilities::{hash_function::HashFunction, types::Block},
 };
 
@@ -122,13 +122,17 @@ mod tests {
     use crate::{
         circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder},
         config::constants::AES_KEY,
-        old::garbling3pc::comparison_circ_3pc::build_comparison_circuit_threeparty,
-        old::garbling2pc::garbler_operations::BinaryGarbler,
-        old::garbling3pc::threepartytraits::{
-            ThreePartyBinaryCircuit, ThreePartyBinaryCircuitBuilder, ThreePartyBinaryEvaluator,
-            ThreePartyBinaryGarbler,
+        old::{
+            garbling2pc::garbler_operations::BinaryGarbler,
+            garbling3pc::{
+                comparison_circ_3pc::build_comparison_circuit_threeparty,
+                threepartytraits::{
+                    ThreePartyBinaryCircuit, ThreePartyBinaryCircuitBuilder,
+                    ThreePartyBinaryEvaluator, ThreePartyBinaryGarbler,
+                },
+            },
         },
-        utilities::{hash_function::AesHash, utils::bool_vec_to_hex},
+        utilities::{garble_hash::AesGarbleHash, types::Block, utils::bool_vec_to_hex},
     };
 
     #[test]
@@ -142,8 +146,8 @@ mod tests {
         builder.output(result);
         let circuit = builder.finish();
 
-        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
-        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
+        let mut rng = ChaCha8Rng::from_seed(Block::default());
+        let mut garbler = BinaryGarbler::new(AesGarbleHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
         let mut rng = rand::rng();
 
@@ -152,7 +156,7 @@ mod tests {
                 let jinp = rng.random_bool(0.5);
                 let mut evaluator = BinaryEvaluator::new(
                     garble_output.decoding_infos.clone(),
-                    AesHash::new(AES_KEY),
+                    AesGarbleHash::new(AES_KEY),
                     garble_output.garbled_circuit.clone(),
                 );
                 let garbler_inputs = garbler.get_garbled_inputs(
@@ -195,8 +199,8 @@ mod tests {
         builder.output(result);
         let circuit = builder.finish();
 
-        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
-        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
+        let mut rng = ChaCha8Rng::from_seed(Block::default());
+        let mut garbler = BinaryGarbler::new(AesGarbleHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
         let mut rng = rand::rng();
 
@@ -205,7 +209,7 @@ mod tests {
                 let jinp = rng.random_bool(0.5);
                 let mut evaluator = BinaryEvaluator::new(
                     garble_output.decoding_infos.clone(),
-                    AesHash::new(AES_KEY),
+                    AesGarbleHash::new(AES_KEY),
                     garble_output.garbled_circuit.clone(),
                 );
                 let garbler_inputs = garbler.get_garbled_inputs(
@@ -249,8 +253,8 @@ mod tests {
         builder.output(result);
         let circuit = builder.finish();
 
-        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
-        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
+        let mut rng = ChaCha8Rng::from_seed(Block::default());
+        let mut garbler = BinaryGarbler::new(AesGarbleHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
         let mut rng = rand::rng();
 
@@ -258,7 +262,7 @@ mod tests {
             let jinp = rng.random_bool(0.5);
             let mut evaluator = BinaryEvaluator::new(
                 garble_output.decoding_infos.clone(),
-                AesHash::new(AES_KEY),
+                AesGarbleHash::new(AES_KEY),
                 garble_output.garbled_circuit.clone(),
             );
             let garbler_inputs = garbler.get_garbled_inputs(
@@ -293,8 +297,8 @@ mod tests {
     #[test]
     fn test_comparison_circuit_garbled_3pc() {
         let comparison_circuit = build_comparison_circuit_threeparty();
-        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
-        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
+        let mut rng = ChaCha8Rng::from_seed(Block::default());
+        let mut garbler = BinaryGarbler::new(AesGarbleHash::new(AES_KEY), &mut rng);
         let garble_output = garbler
             .garble_threeparty(comparison_circuit.clone())
             .unwrap();
@@ -310,7 +314,7 @@ mod tests {
 
                 let mut evaluator = BinaryEvaluator::new(
                     garble_output.decoding_infos.clone(),
-                    AesHash::new(AES_KEY),
+                    AesGarbleHash::new(AES_KEY),
                     garble_output.garbled_circuit.clone(),
                 );
                 let garbler_inputs = garbler.get_garbled_inputs(
@@ -351,8 +355,8 @@ mod tests {
     #[test]
     fn test_aes_garbled_3pc() {
         let circuit = BinaryCircuit::parse_threeparty("circuits/aes128.txt").unwrap();
-        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
-        let mut garbler = BinaryGarbler::new(AesHash::new(AES_KEY), &mut rng);
+        let mut rng = ChaCha8Rng::from_seed(Block::default());
+        let mut garbler = BinaryGarbler::new(AesGarbleHash::new(AES_KEY), &mut rng);
         let mut rng = rand::rng();
         let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
         for i in 0..2 {
@@ -367,7 +371,7 @@ mod tests {
                 }
                 let mut evaluator = BinaryEvaluator::new(
                     garble_output.decoding_infos.clone(),
-                    AesHash::new(AES_KEY),
+                    AesGarbleHash::new(AES_KEY),
                     garble_output.garbled_circuit.clone(),
                 );
                 let garbler_inputs = garbler.get_garbled_inputs(

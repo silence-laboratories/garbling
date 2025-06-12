@@ -19,6 +19,7 @@ use crate::{
     utilities::{
         commitments::Commitment,
         hash_function::HashFunction,
+        shahash::Sha512Hash,
         types::{Block, YaoEvaluatorShare, YaoGarblerShare, YaoSetup, YaoShare},
         utils::xor_blocks,
     },
@@ -80,15 +81,13 @@ impl FixedExternalSize for B2YMsg1 {
     const SIZE: usize = 32 * 6;
 }
 
-fn bit_to_yao_create_msg1_p1<H, C, R>(
+fn bit_to_yao_create_msg1_p1<C, R>(
     share: &BinaryShare,
     delta: &Block,
-    hash: &H,
     rng: &mut R,
     comm: &C,
 ) -> (B2YMsg1, YaoGarblerShare, YaoGarblerShare, YaoGarblerShare)
 where
-    H: HashFunction,
     C: Commitment,
     R: CryptoRng + RngCore,
 {
@@ -124,7 +123,8 @@ where
     h2_init[0..32].copy_from_slice(&comm_2f);
     h2_init[32..64].copy_from_slice(&comm_2t);
 
-    let hash_val = hash.get_hash(&h2_init).unwrap();
+    let shahash = Sha512Hash::new();
+    let hash_val = shahash.get_hash(&h2_init).unwrap();
 
     let label_1 = if x1 {
         xor_blocks(label_1f, *delta)
@@ -159,15 +159,13 @@ where
     )
 }
 
-fn bit_to_yao_create_msg1_p2<H, C, R>(
+fn bit_to_yao_create_msg1_p2<C, R>(
     share: &BinaryShare,
     delta: &Block,
-    hash: &H,
     rng: &mut R,
     comm: &C,
 ) -> (B2YMsg1, YaoGarblerShare, YaoGarblerShare, YaoGarblerShare)
 where
-    H: HashFunction,
     C: Commitment,
     R: CryptoRng + RngCore,
 {
@@ -203,7 +201,8 @@ where
     h3_init[0..32].copy_from_slice(&comm_3f);
     h3_init[32..64].copy_from_slice(&comm_3t);
 
-    let hash_val = hash.get_hash(&h3_init).unwrap();
+    let shahash = Sha512Hash::new();
+    let hash_val = shahash.get_hash(&h3_init).unwrap();
 
     let label_1 = if x1 {
         xor_blocks(label_1f, *delta)
@@ -238,15 +237,13 @@ where
     )
 }
 
-fn bit_to_yao_process_msg1_p3<H, C>(
+fn bit_to_yao_process_msg1_p3<C>(
     share: &BinaryShare,
     msg1_p1: &B2YMsg1,
     msg1_p2: &B2YMsg1,
     comm: &C,
-    hash: &H,
 ) -> (YaoEvaluatorShare, YaoEvaluatorShare, YaoEvaluatorShare)
 where
-    H: HashFunction,
     C: Commitment,
 {
     let x3 = share.value2;
@@ -254,16 +251,17 @@ where
 
     assert_eq!(msg1_p1.label_1, msg1_p2.label_1);
 
+    let shahash = Sha512Hash::new();
     let mut h2_init = [0u8; 64];
     h2_init[0..32].copy_from_slice(&msg1_p2.false_com);
     h2_init[32..64].copy_from_slice(&msg1_p2.true_com);
-    let h2 = hash.get_hash(&h2_init).unwrap();
+    let h2 = shahash.get_hash(&h2_init).unwrap();
     assert_eq!(h2, msg1_p1.hash);
 
     let mut h3_init = [0u8; 64];
     h3_init[0..32].copy_from_slice(&msg1_p1.false_com);
     h3_init[32..64].copy_from_slice(&msg1_p1.true_com);
-    let h3 = hash.get_hash(&h3_init).unwrap();
+    let h3 = shahash.get_hash(&h3_init).unwrap();
     assert_eq!(h3, msg1_p2.hash);
 
     if x2 {
@@ -331,7 +329,7 @@ where
             let mut r = rng.as_mut().unwrap();
             let yaosetup = yao_setup.clone().g_setup.unwrap();
             let (msg1, share_x1, share_x2, share_x3) =
-                bit_to_yao_create_msg1_p1(share, &yaosetup.delta, hash, &mut r, comm);
+                bit_to_yao_create_msg1_p1(share, &yaosetup.delta, &mut r, comm);
 
             send_to_party(setup, mpc_encryption, tag, msg1, 2, relay).await?;
 
@@ -353,7 +351,7 @@ where
             let mut r = rng.as_mut().unwrap();
             let yaosetup = yao_setup.clone().g_setup.unwrap();
             let (msg1, share_x1, share_x2, share_x3) =
-                bit_to_yao_create_msg1_p2(share, &yaosetup.delta, hash, &mut r, comm);
+                bit_to_yao_create_msg1_p2(share, &yaosetup.delta, &mut r, comm);
 
             send_to_party(setup, mpc_encryption, tag, msg1, 2, relay).await?;
 
@@ -389,7 +387,7 @@ where
             let msg1_p2 = recv[1].clone();
 
             let (share_x1, share_x2, share_x3) =
-                bit_to_yao_process_msg1_p3(share, &msg1_p1, &msg1_p2, comm, hash);
+                bit_to_yao_process_msg1_p3(share, &msg1_p1, &msg1_p2, comm);
 
             let mut gin = HashMap::new();
             gin.insert(circuit.garbler_input_ids[0], share_x1);
@@ -454,7 +452,7 @@ where
 
             (0..batch_size).for_each(|i| {
                 let (msg1, share_x1, share_x2, share_x3) =
-                    bit_to_yao_create_msg1_p1(&share[i], &yaosetup.delta, hash, &mut r, comm);
+                    bit_to_yao_create_msg1_p1(&share[i], &yaosetup.delta, &mut r, comm);
                 msg1s.push(msg1);
 
                 let mut gin = HashMap::new();
@@ -487,7 +485,7 @@ where
 
             (0..batch_size).for_each(|i| {
                 let (msg1, share_x1, share_x2, share_x3) =
-                    bit_to_yao_create_msg1_p2(&share[i], &yaosetup.delta, hash, &mut r, comm);
+                    bit_to_yao_create_msg1_p2(&share[i], &yaosetup.delta, &mut r, comm);
                 msg1s.push(msg1);
 
                 let mut gin = HashMap::new();
@@ -530,7 +528,7 @@ where
             let mut outputs = Vec::new();
             for i in 0..batch_size {
                 let (share_x1, share_x2, share_x3) =
-                    bit_to_yao_process_msg1_p3(&share[i], &msg1_p1[i], &msg1_p2[i], comm, hash);
+                    bit_to_yao_process_msg1_p3(&share[i], &msg1_p1[i], &msg1_p2[i], comm);
                 let mut gin = HashMap::new();
                 gin.insert(circuit.garbler_input_ids[0], share_x1);
                 gin.insert(circuit.garbler_input_ids[1], share_x2);
@@ -573,7 +571,10 @@ mod tests {
 
     use crate::{
         functionality::{output::batch_output_yao_functionality, setup::setup_yao_functionality},
-        utilities::{commitments::HashCommitment, hash_function::AesHash, utils::bool_vec_to_hex},
+        utilities::{
+            commitments::HashCommitment, garble_hash::AesGarbleHash, shahash::Sha512Hash,
+            types::Block, utils::bool_vec_to_hex,
+        },
     };
 
     use super::{batch_binary_to_yao_functionality, binary_to_yao_functionality};
@@ -589,8 +590,8 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut init_seed = [0u8; 32];
-        let mut common_randomness_seed = [0u8; 32];
+        let mut init_seed = Block::default();
+        let mut common_randomness_seed = Block::default();
         let mut transcript = Transcript::new(b"test");
         transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
@@ -621,12 +622,12 @@ mod tests {
         let msg_sh = vec![BinaryShare::ZERO; 128];
 
         let (mut rng, hash, comm) = if setup.participant_index() == 2 {
-            let hash = AesHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
+            let hash = AesGarbleHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
+            let comm = HashCommitment::new(Sha512Hash::new());
             (None, hash, comm)
         } else {
-            let hash = AesHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
+            let hash = AesGarbleHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
+            let comm = HashCommitment::new(Sha512Hash::new());
             let r = ChaCha8Rng::from_seed(yao_setup.g_setup.clone().unwrap().prf_key);
             (Some(r), hash, comm)
         };
@@ -722,8 +723,8 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut init_seed = [0u8; 32];
-        let mut common_randomness_seed = [0u8; 32];
+        let mut init_seed = Block::default();
+        let mut common_randomness_seed = Block::default();
         let mut transcript = Transcript::new(b"test");
         transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
@@ -754,12 +755,12 @@ mod tests {
         let msg_sh = vec![BinaryShare::ZERO; 128];
 
         let (mut rng, hash, comm) = if setup.participant_index() == 2 {
-            let hash = AesHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
+            let hash = AesGarbleHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
+            let comm = HashCommitment::new(Sha512Hash::new());
             (None, hash, comm)
         } else {
-            let hash = AesHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
+            let hash = AesGarbleHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
+            let comm = HashCommitment::new(Sha512Hash::new());
             let r = ChaCha8Rng::from_seed(yao_setup.g_setup.clone().unwrap().prf_key);
             (Some(r), hash, comm)
         };
@@ -854,7 +855,7 @@ mod tests {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    fn setup_b_to_y(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
+    fn setup_b_to_y(instance: Option<Block>) -> Vec<(SetupMessage, Block)> {
         use sha2::{Digest, Sha256};
         use sl_compute::transport::setup::{NoSigningKey, NoVerifyingKey, ProtocolParticipant};
         use sl_mpc_mate::message::InstanceId;
@@ -906,7 +907,7 @@ mod tests {
     }
 
     async fn sim_parties_b_to_y<S, R>(
-        parties: Vec<(SetupMessage, [u8; 32])>,
+        parties: Vec<(SetupMessage, Block)>,
         coord: S,
         batch: bool,
     ) -> Vec<Vec<bool>>

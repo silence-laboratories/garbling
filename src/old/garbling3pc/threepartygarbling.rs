@@ -7,11 +7,14 @@ use serde::{Deserialize, Serialize};
 use crate::{
     circuitop::circuit::BinaryCircuit,
     config::constants::HASH_KEY,
-    old::garbling2pc::{evaluator_operations::BinaryEvaluator, garbler_operations::BinaryGarbler},
-    old::garbling3pc::threepartytraits::ThreePartyBinaryEvaluator,
+    old::{
+        garbling2pc::{evaluator_operations::BinaryEvaluator, garbler_operations::BinaryGarbler},
+        garbling3pc::threepartytraits::ThreePartyBinaryEvaluator,
+    },
     utilities::{
         commitments::{Commitment, HashCommitment},
-        hash_function::AesHash,
+        garble_hash::AesGarbleHash,
+        shahash::Sha512Hash,
         types::Block,
         utils::xor_blocks,
     },
@@ -248,8 +251,8 @@ pub fn threepg_create_msg3_p1(
     prf_seed: &Block,
     circuit: &BinaryCircuit,
 ) -> Result<(ThreePGMsg3, ThreePGParty12StateR3), String> {
-    let hash = AesHash::new(HASH_KEY);
-    let rng_key: [u8; 32] = *prf_seed;
+    let hash = AesGarbleHash::new(HASH_KEY);
+    let rng_key: Block = *prf_seed;
     if p1_ip_nos + p2_ip_nos != circuit.num_garbler_inputs() {
         return Err("Garbler Input Size inconsistent".to_string());
     }
@@ -276,7 +279,7 @@ pub fn threepg_create_msg3_p1(
         b_vec[2].push(rng.random_bool(0.5));
     }
 
-    let hash_commit = HashCommitment::new(AesHash::new(p1_state_r1.comm_crs));
+    let hash_commit = HashCommitment::new(Sha512Hash::new());
 
     let mut p1_commitments: HashMap<(usize, usize), Block> = HashMap::new();
     let mut p1_decommitments: HashMap<(usize, usize), (Block, Block)> = HashMap::new();
@@ -416,9 +419,9 @@ pub fn threepg_create_msg3_p2(
     prf_seed: &Block,
     circuit: &BinaryCircuit,
 ) -> Result<(ThreePGMsg3, ThreePGParty12StateR3), String> {
-    let hash = AesHash::new(HASH_KEY);
+    let hash = AesGarbleHash::new(HASH_KEY);
 
-    let rng_key: [u8; 32] = *prf_seed;
+    let rng_key: Block = *prf_seed;
     if p1_ip_nos + p2_ip_nos != circuit.num_garbler_inputs() {
         return Err("Garbler Input Size inconsistent".to_string());
     }
@@ -446,7 +449,7 @@ pub fn threepg_create_msg3_p2(
         b_vec[2].push(rng.random_bool(0.5));
     }
 
-    let hash_commit = HashCommitment::new(AesHash::new(p2_state_r1.comm_crs));
+    let hash_commit = HashCommitment::new(Sha512Hash::new());
 
     let mut p1_commitments: HashMap<(usize, usize), Block> = HashMap::new();
     let mut p1_decommitments: HashMap<(usize, usize), (Block, Block)> = HashMap::new();
@@ -601,7 +604,7 @@ pub fn threepg_create_msg4_p3(
         return None;
     }
 
-    let commitment = HashCommitment::new(AesHash::new(state_r1.comm_crs));
+    let commitment = HashCommitment::new(Sha512Hash::new());
 
     let p1_ip_nos = state_r3.msg3_p1.com_vals.p1_commitments.len() / 2;
     let p2_ip_nos = state_r3.msg3_p1.com_vals.p2_commitments.len() / 2;
@@ -680,7 +683,7 @@ pub fn threepg_create_msg4_p3(
         }
     }
 
-    let hash = AesHash::new(HASH_KEY);
+    let hash = AesGarbleHash::new(HASH_KEY);
     let mut eval = BinaryEvaluator::new(HashMap::new(), hash, state_r3.msg3_p1.com_vals.gc.clone());
 
     let dec = eval
@@ -703,7 +706,7 @@ pub fn threepg_create_msg5_p12(
     circuit: &BinaryCircuit,
     state_r3: &ThreePGParty12StateR3,
 ) -> ThreePGOutput {
-    let hash = AesHash::new(HASH_KEY);
+    let hash = AesGarbleHash::new(HASH_KEY);
     let eval = BinaryEvaluator::new(state_r3.decoding_info.clone(), hash, state_r3.gc.clone());
     let op = eval.get_plaintext_output(
         circuit.get_output_gate_ids().to_vec(),
