@@ -1,6 +1,6 @@
 use sha2::{Digest, Sha512};
 
-use crate::config::util_errors::HashError;
+use crate::{config::util_errors::HashError, utilities::types::BLOCK_SIZE};
 
 use super::{hash_function::HashFunction, types::Block, utils::xor_blocks};
 
@@ -23,10 +23,10 @@ impl HashFunction for Sha512Hash {
 
     fn ccr_hash(&self, x: &Block) -> Block {
         let mut y = Block::default();
-        for i in 0..16 {
-            y[i] = x[i] ^ x[i + 16];
+        for i in 0..BLOCK_SIZE / 2 {
+            y[i] = x[i] ^ x[i + BLOCK_SIZE / 2];
         }
-        y[16..32].copy_from_slice(&x[16..32]);
+        y[BLOCK_SIZE / 2..BLOCK_SIZE].copy_from_slice(&x[BLOCK_SIZE / 2..BLOCK_SIZE]);
         self.cr_hash(&y)
     }
 
@@ -40,9 +40,9 @@ impl HashFunction for Sha512Hash {
     fn get_hash(&self, input: &[u8]) -> Result<Block, HashError> {
         let mut hasher = Sha512::new();
         hasher.update(input);
-        let result: [u8; 64] = hasher.finalize().into();
+        let result: [u8; BLOCK_SIZE * 4] = hasher.finalize().into();
         let mut output = Block::default();
-        output.copy_from_slice(&result[32..64]);
+        output.copy_from_slice(&result[BLOCK_SIZE * 3..BLOCK_SIZE * 4]);
         Ok(output)
     }
 }

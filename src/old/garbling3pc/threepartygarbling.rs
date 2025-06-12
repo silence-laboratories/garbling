@@ -260,7 +260,10 @@ pub fn threepg_create_msg3_p1(
     if p3_ip_nos * 2 != circuit.num_evaluator_inputs() {
         return Err("Evaluator Input Size inconsistent".to_string());
     }
-    let mut rng = ChaCha8Rng::from_seed(rng_key);
+    let mut rngkey = [0u8; 32];
+    rngkey[0..16].copy_from_slice(&rng_key);
+    rngkey[16..32].copy_from_slice(&rng_key);
+    let mut rng = ChaCha8Rng::from_seed(rngkey);
     let mut garbler = BinaryGarbler::new(hash.clone(), &mut rng);
     let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
     let delta = garbler.delta;
@@ -430,7 +433,10 @@ pub fn threepg_create_msg3_p2(
         return Err("Evaluator Input Size inconsistent".to_string());
     }
 
-    let mut rng = ChaCha8Rng::from_seed(rng_key);
+    let mut rngkey = [0u8; 32];
+    rngkey[0..16].copy_from_slice(&rng_key);
+    rngkey[16..32].copy_from_slice(&rng_key);
+    let mut rng = ChaCha8Rng::from_seed(rngkey);
     let mut garbler = BinaryGarbler::new(hash.clone(), &mut rng);
     let garble_output = garbler.garble_threeparty(circuit.clone()).unwrap();
     let delta = garbler.delta;

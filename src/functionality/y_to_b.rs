@@ -14,7 +14,7 @@ use crate::{
     config::constants::{Y2B_FUNC_MSG1, Y2B_FUNC_MSG2, Y2B_FUNC_MSG3, Y2B_FUNC_MSG4},
     utilities::{
         commitments::Commitment,
-        types::{Block, GarblerSetup, YaoGarblerShare, YaoSetup, YaoShare},
+        types::{Block, GarblerSetup, YaoGarblerShare, YaoSetup, YaoShare, BLOCK_SIZE},
         utils::{lsb, xor_blocks},
     },
 };
@@ -97,10 +97,10 @@ where
             assert!(yao_setup.g_setup.is_some());
             let yaosetup = yao_setup.g_setup.clone().unwrap();
             let (y, wyr, wr0) = create_yao_to_binary_msg1(&yaosetup);
-            let mut msg = [0u8; 33];
-            msg[0..32].copy_from_slice(&wyr);
+            let mut msg = [0u8; BLOCK_SIZE + 1];
+            msg[0..BLOCK_SIZE].copy_from_slice(&wyr);
             if y {
-                msg[32] = 1;
+                msg[BLOCK_SIZE] = 1;
             }
             send_to_party(setup, mpc_encryption, tag1, msg, 2, relay).await?;
             send_to_party(setup, mpc_encryption, tag1, wr0, 1, relay).await?;
@@ -110,11 +110,11 @@ where
             let (com0, com1, _, _, wit0, wit1) =
                 create_yao_to_binary_msg2(&wr0, comm, r, &input.clone().g_share.unwrap());
 
-            let mut msg = [0u8; 128];
-            msg[0..32].copy_from_slice(&com0);
-            msg[32..64].copy_from_slice(&com1);
-            msg[64..96].copy_from_slice(&wit0);
-            msg[96..128].copy_from_slice(&wit1);
+            let mut msg = [0u8; BLOCK_SIZE * 4];
+            msg[0..BLOCK_SIZE].copy_from_slice(&com0);
+            msg[BLOCK_SIZE..BLOCK_SIZE * 2].copy_from_slice(&com1);
+            msg[BLOCK_SIZE * 2..BLOCK_SIZE * 3].copy_from_slice(&wit0);
+            msg[BLOCK_SIZE * 3..BLOCK_SIZE * 4].copy_from_slice(&wit1);
 
             send_to_party(setup, mpc_encryption, tag2, msg, 2, relay).await?;
             let p = lsb(input.clone().g_share.unwrap().f_label) != 0;
@@ -125,7 +125,8 @@ where
         }
         1 => {
             let msg1s: Vec<Block> =
-                receive_from_parties(setup, mpc_encryption, tag1, 32, vec![0], relay).await?;
+                receive_from_parties(setup, mpc_encryption, tag1, BLOCK_SIZE, vec![0], relay)
+                    .await?;
             let mut wr0 = Block::default();
             wr0.copy_from_slice(&msg1s[0]);
 
@@ -134,14 +135,15 @@ where
             let (com0, com1, wz0, wz1, _, _) =
                 create_yao_to_binary_msg2(&wr0, comm, r, &input.clone().g_share.unwrap());
 
-            let mut msg = [0u8; 128];
-            msg[0..32].copy_from_slice(&com0);
-            msg[32..64].copy_from_slice(&com1);
+            let mut msg = [0u8; BLOCK_SIZE * 4];
+            msg[0..BLOCK_SIZE].copy_from_slice(&com0);
+            msg[BLOCK_SIZE..BLOCK_SIZE * 2].copy_from_slice(&com1);
 
             send_to_party(setup, mpc_encryption, tag2, msg, 2, relay).await?;
 
             let msg2s: Vec<Block> =
-                receive_from_parties(setup, mpc_encryption, tag3, 32, vec![2], relay).await?;
+                receive_from_parties(setup, mpc_encryption, tag3, BLOCK_SIZE, vec![2], relay)
+                    .await?;
             let mut wxz = Block::default();
             wxz.copy_from_slice(&msg2s[0]);
 
@@ -162,11 +164,12 @@ where
             })
         }
         _ => {
-            let msg1s: Vec<[u8; 33]> =
-                receive_from_parties(setup, mpc_encryption, tag1, 33, vec![0], relay).await?;
+            let msg1s: Vec<[u8; BLOCK_SIZE + 1]> =
+                receive_from_parties(setup, mpc_encryption, tag1, BLOCK_SIZE + 1, vec![0], relay)
+                    .await?;
             let mut wyr = Block::default();
-            wyr.copy_from_slice(&msg1s[0][0..32]);
-            let y = msg1s[0][32] != 0;
+            wyr.copy_from_slice(&msg1s[0][0..BLOCK_SIZE]);
+            let y = msg1s[0][BLOCK_SIZE] != 0;
 
             let yaoshare = input.e_share.clone().unwrap();
 
@@ -174,8 +177,15 @@ where
 
             send_to_party(setup, mpc_encryption, tag3, wxz, 1, relay).await?;
 
-            let msg2s: Vec<Vec<u8>> =
-                receive_from_parties(setup, mpc_encryption, tag2, 128, vec![0, 1], relay).await?;
+            let msg2s: Vec<Vec<u8>> = receive_from_parties(
+                setup,
+                mpc_encryption,
+                tag2,
+                BLOCK_SIZE * 4,
+                vec![0, 1],
+                relay,
+            )
+            .await?;
 
             let mut com0 = Block::default();
             let mut com1 = Block::default();
@@ -184,12 +194,12 @@ where
             let mut wit0 = Block::default();
             let mut wit1 = Block::default();
 
-            com0.copy_from_slice(&msg2s[0][0..32]);
-            com1.copy_from_slice(&msg2s[0][32..64]);
-            com01.copy_from_slice(&msg2s[1][0..32]);
-            com11.copy_from_slice(&msg2s[1][32..64]);
-            wit0.copy_from_slice(&msg2s[0][64..96]);
-            wit1.copy_from_slice(&msg2s[0][96..128]);
+            com0.copy_from_slice(&msg2s[0][0..BLOCK_SIZE]);
+            com1.copy_from_slice(&msg2s[0][BLOCK_SIZE..BLOCK_SIZE * 2]);
+            com01.copy_from_slice(&msg2s[1][0..BLOCK_SIZE]);
+            com11.copy_from_slice(&msg2s[1][BLOCK_SIZE..BLOCK_SIZE * 2]);
+            wit0.copy_from_slice(&msg2s[0][BLOCK_SIZE * 2..BLOCK_SIZE * 3]);
+            wit1.copy_from_slice(&msg2s[0][BLOCK_SIZE * 3..BLOCK_SIZE * 4]);
 
             assert_eq!(com0, com01);
             assert_eq!(com1, com11);
@@ -259,10 +269,10 @@ where
 
             (0..batch_size).for_each(|i| {
                 let (y, wyr, wr0) = create_yao_to_binary_msg1(&yaosetup);
-                let mut msg = [0u8; 33];
-                msg[0..32].copy_from_slice(&wyr);
+                let mut msg = [0u8; BLOCK_SIZE + 1];
+                msg[0..BLOCK_SIZE].copy_from_slice(&wyr);
                 if y {
-                    msg[32] = 1;
+                    msg[BLOCK_SIZE] = 1;
                 }
 
                 for i in msg {
@@ -304,9 +314,15 @@ where
         1 => {
             let r = rng.as_mut().unwrap();
 
-            let msg1s: Vec<Vec<u8>> =
-                receive_from_parties(setup, mpc_encryption, tag1, 32 * batch_size, vec![0], relay)
-                    .await?;
+            let msg1s: Vec<Vec<u8>> = receive_from_parties(
+                setup,
+                mpc_encryption,
+                tag1,
+                BLOCK_SIZE * batch_size,
+                vec![0],
+                relay,
+            )
+            .await?;
 
             let mut outputs = Vec::new();
             let mut msgs = Vec::new();
@@ -316,7 +332,7 @@ where
 
             (0..batch_size).for_each(|i| {
                 let mut wr0 = Block::default();
-                wr0.copy_from_slice(&msg1s[0][32 * i..32 * (i + 1)]);
+                wr0.copy_from_slice(&msg1s[0][BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)]);
                 let (com0, com1, wz0, wz1, _, _) =
                     create_yao_to_binary_msg2(&wr0, comm, r, &input[i].clone().g_share.unwrap());
 
@@ -332,13 +348,19 @@ where
             });
             send_to_party(setup, mpc_encryption, tag4, msgs, 2, relay).await?;
 
-            let msg2s: Vec<Vec<u8>> =
-                receive_from_parties(setup, mpc_encryption, tag3, 32 * batch_size, vec![2], relay)
-                    .await?;
+            let msg2s: Vec<Vec<u8>> = receive_from_parties(
+                setup,
+                mpc_encryption,
+                tag3,
+                BLOCK_SIZE * batch_size,
+                vec![2],
+                relay,
+            )
+            .await?;
 
             for i in 0..batch_size {
                 let mut wxz = Block::default();
-                wxz.copy_from_slice(&msg2s[0][32 * i..32 * (i + 1)]);
+                wxz.copy_from_slice(&msg2s[0][BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)]);
 
                 let val1 = wxz == wz0s[i];
                 let val2 = wxz == wz1s[i];
@@ -356,9 +378,15 @@ where
             Ok(outputs)
         }
         _ => {
-            let msg1s: Vec<Vec<u8>> =
-                receive_from_parties(setup, mpc_encryption, tag1, 33 * batch_size, vec![0], relay)
-                    .await?;
+            let msg1s: Vec<Vec<u8>> = receive_from_parties(
+                setup,
+                mpc_encryption,
+                tag1,
+                (BLOCK_SIZE + 1) * batch_size,
+                vec![0],
+                relay,
+            )
+            .await?;
 
             let mut wxzs = Vec::new();
             let mut outputs = Vec::new();
@@ -367,8 +395,10 @@ where
 
             (0..batch_size).for_each(|i| {
                 let mut wyr = Block::default();
-                wyr.copy_from_slice(&msg1s[0][33 * i..(33 * i + 32)]);
-                let y = msg1s[0][33 * i + 32] != 0;
+                wyr.copy_from_slice(
+                    &msg1s[0][(BLOCK_SIZE + 1) * i..((BLOCK_SIZE + 1) * i + BLOCK_SIZE)],
+                );
+                let y = msg1s[0][(BLOCK_SIZE + 1) * i + BLOCK_SIZE] != 0;
                 let yaoshare = input[i].e_share.clone().unwrap();
                 let wxz = xor_blocks(yaoshare.label, wyr);
                 for i in wxz {
@@ -384,15 +414,21 @@ where
                 setup,
                 mpc_encryption,
                 tag2,
-                128 * batch_size,
+                BLOCK_SIZE * 4 * batch_size,
                 vec![0],
                 relay,
             )
             .await?;
 
-            let msg2s_1: Vec<Vec<u8>> =
-                receive_from_parties(setup, mpc_encryption, tag4, 64 * batch_size, vec![1], relay)
-                    .await?;
+            let msg2s_1: Vec<Vec<u8>> = receive_from_parties(
+                setup,
+                mpc_encryption,
+                tag4,
+                BLOCK_SIZE * 2 * batch_size,
+                vec![1],
+                relay,
+            )
+            .await?;
 
             for i in 0..batch_size {
                 let yaoshare = input[i].e_share.clone().unwrap();
@@ -404,12 +440,28 @@ where
                 let mut wit0 = Block::default();
                 let mut wit1 = Block::default();
 
-                com0.copy_from_slice(&msg2s_0[0][128 * i..(128 * i + 32)]);
-                com1.copy_from_slice(&msg2s_0[0][(128 * i + 32)..(128 * i + 64)]);
-                com01.copy_from_slice(&msg2s_1[0][64 * i..(64 * i + 32)]);
-                com11.copy_from_slice(&msg2s_1[0][(64 * i + 32)..(64 * i + 64)]);
-                wit0.copy_from_slice(&msg2s_0[0][(128 * i + 64)..(128 * i + 96)]);
-                wit1.copy_from_slice(&msg2s_0[0][(128 * i + 96)..(128 * i + 128)]);
+                com0.copy_from_slice(
+                    &msg2s_0[0][BLOCK_SIZE * 4 * i..(BLOCK_SIZE * 4 * i + BLOCK_SIZE)],
+                );
+                com1.copy_from_slice(
+                    &msg2s_0[0]
+                        [(BLOCK_SIZE * 4 * i + BLOCK_SIZE)..(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 2)],
+                );
+                com01.copy_from_slice(
+                    &msg2s_1[0][BLOCK_SIZE * 2 * i..(BLOCK_SIZE * 2 * i + BLOCK_SIZE)],
+                );
+                com11.copy_from_slice(
+                    &msg2s_1[0]
+                        [(BLOCK_SIZE * 2 * i + BLOCK_SIZE)..(BLOCK_SIZE * 2 * i + BLOCK_SIZE * 2)],
+                );
+                wit0.copy_from_slice(
+                    &msg2s_0[0][(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 2)
+                        ..(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 3)],
+                );
+                wit1.copy_from_slice(
+                    &msg2s_0[0][(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 3)
+                        ..(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 4)],
+                );
 
                 assert_eq!(com0, com01);
                 assert_eq!(com1, com11);
@@ -465,7 +517,7 @@ mod tests {
         },
         utilities::{
             commitments::HashCommitment, garble_hash::AesGarbleHash, shahash::Sha512Hash,
-            types::Block, utils::bool_vec_to_hex,
+            utils::bool_vec_to_hex,
         },
     };
 
@@ -482,8 +534,8 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut init_seed = Block::default();
-        let mut common_randomness_seed = Block::default();
+        let mut init_seed = [0u8; 32];
+        let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
         transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
@@ -660,8 +712,8 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut init_seed = Block::default();
-        let mut common_randomness_seed = Block::default();
+        let mut init_seed = [0u8; 32];
+        let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
         transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
@@ -815,7 +867,7 @@ mod tests {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    fn setup_y_to_b(instance: Option<Block>) -> Vec<(SetupMessage, Block)> {
+    fn setup_y_to_b(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
         use sha2::{Digest, Sha256};
         use sl_compute::transport::setup::{NoSigningKey, NoVerifyingKey, ProtocolParticipant};
         use sl_mpc_mate::message::InstanceId;
@@ -867,7 +919,7 @@ mod tests {
     }
 
     async fn sim_parties_y_to_b<S, R>(
-        parties: Vec<(SetupMessage, Block)>,
+        parties: Vec<(SetupMessage, [u8; 32])>,
         coord: S,
         batch: bool,
     ) -> Vec<Vec<bool>>

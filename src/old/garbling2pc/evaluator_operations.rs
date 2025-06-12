@@ -2,11 +2,15 @@ use std::collections::HashMap;
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    old::garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
-    old::garbling2pc::garbling2pc_errors::{
-        BinaryOperationsError, EvaluatorError, ExecutionPrimitiveError,
+    old::garbling2pc::{
+        exec::{BinaryOperations, ExecutionPrimitives},
+        garbling2pc_errors::{BinaryOperationsError, EvaluatorError, ExecutionPrimitiveError},
     },
-    utilities::{hash_function::HashFunction, types::Block, utils::xor_blocks},
+    utilities::{
+        hash_function::HashFunction,
+        types::{Block, BLOCK_SIZE},
+        utils::xor_blocks,
+    },
 };
 
 /// Represents the evaluator's state in a binary garbled circuit protocol.
@@ -336,9 +340,9 @@ impl<H: HashFunction> BinaryOperations for BinaryEvaluator<H> {
         let j2_temp = self.get_next_gate_index().to_le_bytes();
 
         let mut j = Block::default();
-        j[16..32].copy_from_slice(&j_temp);
+        j[(BLOCK_SIZE - 16)..].copy_from_slice(&j_temp);
         let mut j2 = Block::default();
-        j2[16..32].copy_from_slice(&j2_temp);
+        j2[(BLOCK_SIZE - 16)..].copy_from_slice(&j2_temp);
 
         let t_gen = self.get_next_cache_value();
         let t_eval = self.get_next_cache_value();
@@ -385,7 +389,7 @@ mod tests {
         config::constants::AES_KEY,
         customcircuits::comparison::build_comparison_circuit,
         old::garbling2pc::garbler_operations::BinaryGarbler,
-        utilities::{garble_hash::AesGarbleHash, types::Block, utils::bool_vec_to_hex},
+        utilities::{garble_hash::AesGarbleHash, utils::bool_vec_to_hex},
     };
 
     #[test]
@@ -399,7 +403,7 @@ mod tests {
         builder.output(result);
         let circuit = builder.finish();
 
-        let mut rng = ChaCha8Rng::from_seed(Block::default());
+        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesGarbleHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble(&circuit).unwrap();
 
@@ -450,7 +454,7 @@ mod tests {
         builder.output(result);
         let circuit = builder.finish();
 
-        let mut rng = ChaCha8Rng::from_seed(Block::default());
+        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesGarbleHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble(&circuit).unwrap();
 
@@ -502,7 +506,7 @@ mod tests {
         builder.output(result);
         let circuit = builder.finish();
 
-        let mut rng = ChaCha8Rng::from_seed(Block::default());
+        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesGarbleHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble(&circuit).unwrap();
 
@@ -550,7 +554,7 @@ mod tests {
                 let result = builder.xor(result1, result2);
                 builder.output(result);
                 let circuit = builder.finish();
-                let mut rng = ChaCha8Rng::from_seed(Block::default());
+                let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
                 let mut garbler = BinaryGarbler::new(AesGarbleHash::new(AES_KEY), &mut rng);
                 let garble_output = garbler.garble(&circuit).unwrap();
                 let mut evaluator = BinaryEvaluator::new(
@@ -590,7 +594,7 @@ mod tests {
     #[test]
     fn test_comparison_circuit_garbled() {
         let comparison_circuit = build_comparison_circuit();
-        let mut rng = ChaCha8Rng::from_seed(Block::default());
+        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesGarbleHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble(&comparison_circuit.clone()).unwrap();
         for i in 0..3 {
@@ -639,7 +643,7 @@ mod tests {
     #[test]
     fn test_aes_garbled() {
         let circuit = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
-        let mut rng = ChaCha8Rng::from_seed(Block::default());
+        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
         let mut garbler = BinaryGarbler::new(AesGarbleHash::new(AES_KEY), &mut rng);
         let garble_output = garbler.garble(&circuit).unwrap();
         for i in 0..2 {

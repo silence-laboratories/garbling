@@ -1,8 +1,9 @@
 use aes::cipher::BlockEncrypt;
-use aes::Aes256;
+use aes::Aes128;
 use aes_gcm::{aead::generic_array::GenericArray, KeyInit};
 
 use crate::config::util_errors::HashError;
+use crate::utilities::types::BLOCK_SIZE;
 
 use super::types::Block;
 use super::utils::xor_blocks;
@@ -44,14 +45,14 @@ impl AesHash {
 
     fn aes_call(key: Block, msg: [u8; 16]) -> [u8; 16] {
         let keyar = GenericArray::from(key);
-        let aes = Aes256::new(&keyar);
+        let aes = Aes128::new(&keyar);
         let mut msgar = GenericArray::from(msg);
         aes.encrypt_block(&mut msgar);
         msgar.into()
     }
 
     /// Pads input using Merkle–Damgård-style padding
-    /// (msg + 0x80 + zero padding + length in 8 bytes) % 32 = 0
+    /// (msg + 0x80 + zero padding + length in 8 bytes) % BLOCK_SIZE = 0
     fn md_pad(input: &[u8]) -> Vec<Block> {
         let input_len_bits = (input.len() as u64) * 8;
 
@@ -59,16 +60,16 @@ impl AesHash {
 
         padded.push(0x80);
 
-        while (padded.len() + 8) % 32 != 0 {
+        while (padded.len() + 8) % BLOCK_SIZE != 0 {
             padded.push(0x00);
         }
 
         padded.extend_from_slice(&input_len_bits.to_be_bytes());
 
         // Convert to blocks
-        assert!(padded.len() % 32 == 0);
+        assert!(padded.len() % BLOCK_SIZE == 0);
         padded
-            .chunks(32)
+            .chunks(BLOCK_SIZE)
             .map(|chunk| {
                 let mut block = Block::default();
                 block.copy_from_slice(chunk);
@@ -77,30 +78,21 @@ impl AesHash {
             .collect()
     }
 
+    // to be changed for reduce block size
     /// Davies–Meyer hash: H_i = E(M_i, H_{i-1}) ⊕ H_{i-1}
     pub fn hash(&self, input: &[u8]) -> Block {
         let padded_blocks = AesHash::md_pad(input);
 
-        let mut h1 = self.key[0..16]
-            .to_owned()
-            .try_into()
-            .expect("Conversion failed"); // key value
-        let mut h2 = self.key[16..32]
-            .to_owned()
-            .try_into()
-            .expect("Conversion failed"); // key value
+        let mut h = self.key;
 
         for block in padded_blocks {
-            let cipher_output1 = AesHash::aes_call(block, h1);
-            let cipher_output2 = AesHash::aes_call(block, h2);
+            let cipher_output = AesHash::aes_call(block, h);
             for i in 0..16 {
-                h1[i] ^= cipher_output1[i]; // XOR output with previous hash
-                h2[i] ^= cipher_output2[i]; // XOR output with previous hash
+                h[i] ^= cipher_output[i]; // XOR output with previous hash
             }
         }
         let mut out = Block::default();
-        out[0..16].copy_from_slice(&h1);
-        out[16..32].copy_from_slice(&h2);
+        out.copy_from_slice(&h);
         out
     }
 }
@@ -122,10 +114,10 @@ impl HashFunction for AesHash {
     /// The function computes `cr_hash(σ(x))` where `σ(xL || xR) = (xR ⊕ xL) || xL`
     fn ccr_hash(&self, x: &Block) -> Block {
         let mut y = Block::default();
-        for i in 0..16 {
-            y[i] = x[i] ^ x[i + 16];
+        for i in 0..BLOCK_SIZE / 2 {
+            y[i] = x[i] ^ x[i + BLOCK_SIZE / 2];
         }
-        y[16..32].copy_from_slice(&x[16..32]);
+        y[BLOCK_SIZE / 2..BLOCK_SIZE].copy_from_slice(&x[BLOCK_SIZE / 2..BLOCK_SIZE]);
         self.cr_hash(&y)
     }
 
@@ -177,13 +169,13 @@ mod tests {
         let output1 = function.get_hash(&input1).unwrap();
         let output2 = function.get_hash(&input2).unwrap();
 
+        println!("o1 {:?}\n\no2{:?}", output1, output2);
+
         let required_output1 = [
-            144, 147, 90, 112, 170, 219, 105, 89, 121, 86, 196, 108, 164, 131, 50, 235, 144, 147,
-            90, 112, 170, 219, 105, 89, 121, 86, 196, 108, 164, 131, 50, 235,
+            54, 218, 6, 139, 23, 154, 34, 92, 216, 91, 41, 177, 156, 76, 101, 130,
         ];
         let required_output2 = [
-            121, 136, 197, 137, 143, 188, 231, 155, 151, 4, 227, 200, 42, 27, 109, 96, 121, 136,
-            197, 137, 143, 188, 231, 155, 151, 4, 227, 200, 42, 27, 109, 96,
+            97, 216, 175, 252, 173, 133, 251, 12, 202, 131, 200, 32, 81, 60, 0, 232,
         ];
 
         assert_eq!(output1, required_output1);

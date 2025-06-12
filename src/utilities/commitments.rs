@@ -1,4 +1,4 @@
-use crate::utilities::hash_function::HashFunction;
+use crate::utilities::{hash_function::HashFunction, types::BLOCK_SIZE};
 
 use super::types::Block;
 
@@ -33,24 +33,27 @@ impl<H: HashFunction> HashCommitment<H> {
 impl<H: HashFunction> Commitment for HashCommitment<H> {
     /// Implementation of the `commit` function for a `HashCommitment`
     fn commit(&self, message: Block, witness: Block) -> Block {
-        let mut temp = [0u8; 64];
-        temp[..32].copy_from_slice(&message);
-        temp[32..64].copy_from_slice(&witness);
+        let mut temp = [0u8; BLOCK_SIZE * 2];
+        temp[..BLOCK_SIZE].copy_from_slice(&message);
+        temp[BLOCK_SIZE..BLOCK_SIZE * 2].copy_from_slice(&witness);
         self.hash.get_hash(&temp).unwrap()
     }
 
     /// Implementation of the `verify` function for a `HashCommitment`
     fn verify(&self, message: Block, witness: Block, commitment: Block) -> bool {
-        let mut temp = [0u8; 64];
-        temp[..32].copy_from_slice(&message);
-        temp[32..64].copy_from_slice(&witness);
+        let mut temp = [0u8; BLOCK_SIZE * 2];
+        temp[..BLOCK_SIZE].copy_from_slice(&message);
+        temp[BLOCK_SIZE..BLOCK_SIZE * 2].copy_from_slice(&witness);
         self.hash.get_hash(&temp).unwrap() == commitment
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::utilities::{shahash::Sha512Hash, types::Block};
+    use crate::utilities::{
+        shahash::Sha512Hash,
+        types::{Block, BLOCK_SIZE},
+    };
 
     use super::{Commitment, HashCommitment};
 
@@ -65,8 +68,8 @@ mod tests {
         let commitment1 = commitment.commit(message1, witness1);
         assert!(commitment.verify(message1, witness1, commitment1));
 
-        let message2 = [1u8; 32];
-        let witness2 = [1u8; 32];
+        let message2 = [1u8; BLOCK_SIZE];
+        let witness2 = [1u8; BLOCK_SIZE];
         let commitment2 = commitment.commit(message2, witness2);
         assert!(commitment.verify(message2, witness2, commitment2));
     }

@@ -4,7 +4,7 @@ use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
     utilities::{
         hash_function::HashFunction,
-        types::{Block, YaoEvaluatorShare},
+        types::{Block, YaoEvaluatorShare, BLOCK_SIZE},
         utils::{lsb, xor_blocks},
     },
 };
@@ -56,8 +56,8 @@ where
                 let k1 = 2 * i as u128;
                 let mut k0_bytes = Block::default();
                 let mut k1_bytes = Block::default();
-                k0_bytes[16..32].copy_from_slice(&k0.to_le_bytes());
-                k1_bytes[16..32].copy_from_slice(&k1.to_le_bytes());
+                k0_bytes[(BLOCK_SIZE - 16)..].copy_from_slice(&k0.to_le_bytes());
+                k1_bytes[(BLOCK_SIZE - 16)..].copy_from_slice(&k1.to_le_bytes());
 
                 let sx = lsb(*x_label);
                 let sy = lsb(*y_label);

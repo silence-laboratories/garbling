@@ -6,25 +6,26 @@ use aes_gcm::KeyInit;
 
 use crate::{
     config::util_errors::HashError,
-    utilities::{hash_function::HashFunction, types::Block, utils::xor_blocks},
+    utilities::{
+        hash_function::HashFunction,
+        types::{Block, BLOCK_SIZE},
+        utils::xor_blocks,
+    },
 };
 
-pub fn double_gf2_256_bytes(x: Block) -> Block {
-    let mut result = Block::default();
+pub fn double_gf2_128_bytes(x: Block) -> Block {
+    let mut result = [0u8; 16];
     let mut carry = 0u8;
 
-    for i in (0..32).rev() {
+    for i in (0..16).rev() {
         let byte = x[i];
         result[i] = (byte << 1) | carry;
         carry = (byte & 0x80) >> 7;
     }
 
-    // If the MSB (bit 255) was set, reduce modulo x^256 + x^10 + x^5 + x^2 + 1
+    // If the MSB (bit 127) was set, reduce modulo x^128 + x^7 + x^2 + x + 1
     if carry != 0 {
-        result[28] ^= 0x01 << 2; // x^10
-        result[31] ^= 0x01 << 5; // x^5
-        result[31] ^= 0x01 << 2; // x^2
-        result[31] ^= 0x01 << 0; // x^0
+        result[15] ^= 0x87;
     }
 
     result
@@ -55,35 +56,25 @@ impl AesGarbleHash {
     pub fn hash(&self, input: &[u8]) -> Block {
         // let padded_blocks = AesGarbleHash::md_pad(input);
         assert!(
-            input.len() == 32,
-            "input length inconsistent. expected 32, found {}",
+            input.len() == BLOCK_SIZE,
+            "input length inconsistent. expected {}, found {}",
+            BLOCK_SIZE,
             input.len()
         );
 
-        let h1 = self.key[0..16]
-            .to_owned()
-            .try_into()
-            .expect("Conversion failed");
-        let b1 = input[0..16]
-            .to_owned()
-            .try_into()
-            .expect("Conversion failed");
-        let h2 = self.key[16..32]
-            .to_owned()
-            .try_into()
-            .expect("Conversion failed");
-        let b2 = input[16..32]
+        // to be changed for reduce block size.
+        let h = self.key;
+        let b = input[0..16]
             .to_owned()
             .try_into()
             .expect("Conversion failed");
 
         // for block in padded_blocks {
-        let cipher_output1 = AesGarbleHash::aes_call(b1, h1);
-        let cipher_output2 = AesGarbleHash::aes_call(b2, h2);
+        let cipher_output = AesGarbleHash::aes_call(b, h);
 
+        // to be changed for reduce block size
         let mut out = Block::default();
-        out[0..16].copy_from_slice(&cipher_output1);
-        out[16..32].copy_from_slice(&cipher_output2);
+        out.copy_from_slice(&cipher_output);
         out
     }
 }
@@ -105,10 +96,10 @@ impl HashFunction for AesGarbleHash {
     /// The function computes `cr_hash(σ(x))` where `σ(xL || xR) = (xR ⊕ xL) || xL`
     fn ccr_hash(&self, x: &Block) -> Block {
         let mut y = Block::default();
-        for i in 0..16 {
-            y[i] = x[i] ^ x[i + 16];
+        for i in 0..BLOCK_SIZE / 2 {
+            y[i] = x[i] ^ x[i + BLOCK_SIZE / 2];
         }
-        y[16..32].copy_from_slice(&x[16..32]);
+        y[BLOCK_SIZE / 2..BLOCK_SIZE].copy_from_slice(&x[BLOCK_SIZE / 2..BLOCK_SIZE]);
         self.cr_hash(&y)
     }
 
@@ -123,7 +114,7 @@ impl HashFunction for AesGarbleHash {
         // let kval = xval.mul(two).add(ival);
         // self.get_hash(&kval.0.to_be_bytes()).unwrap()
 
-        self.get_hash(&xor_blocks(double_gf2_256_bytes(*x), *i))
+        self.get_hash(&xor_blocks(double_gf2_128_bytes(*x), *i))
             .unwrap()
     }
 

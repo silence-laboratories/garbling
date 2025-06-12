@@ -20,7 +20,7 @@ use crate::{
         commitments::Commitment,
         hash_function::HashFunction,
         shahash::Sha512Hash,
-        types::{Block, YaoEvaluatorShare, YaoGarblerShare, YaoSetup, YaoShare},
+        types::{Block, YaoEvaluatorShare, YaoGarblerShare, YaoSetup, YaoShare, BLOCK_SIZE},
         utils::xor_blocks,
     },
 };
@@ -36,36 +36,36 @@ pub(crate) struct B2YMsg1 {
 
 impl Wrap for B2YMsg1 {
     fn external_size(&self) -> usize {
-        32 * 6
+        BLOCK_SIZE * 6
     }
 
     fn write(&self, buffer: &mut [u8]) {
-        buffer[0..32].copy_from_slice(&self.label_1);
-        buffer[32..32 * 2].copy_from_slice(&self.false_com);
-        buffer[32 * 2..32 * 3].copy_from_slice(&self.true_com);
-        buffer[32 * 3..32 * 4].copy_from_slice(&self.decom.0);
-        buffer[32 * 4..32 * 5].copy_from_slice(&self.decom.1);
-        buffer[32 * 5..32 * 6].copy_from_slice(&self.hash);
+        buffer[0..BLOCK_SIZE].copy_from_slice(&self.label_1);
+        buffer[BLOCK_SIZE..BLOCK_SIZE * 2].copy_from_slice(&self.false_com);
+        buffer[BLOCK_SIZE * 2..BLOCK_SIZE * 3].copy_from_slice(&self.true_com);
+        buffer[BLOCK_SIZE * 3..BLOCK_SIZE * 4].copy_from_slice(&self.decom.0);
+        buffer[BLOCK_SIZE * 4..BLOCK_SIZE * 5].copy_from_slice(&self.decom.1);
+        buffer[BLOCK_SIZE * 5..BLOCK_SIZE * 6].copy_from_slice(&self.hash);
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
         let mut label_1 = Block::default();
-        label_1.copy_from_slice(&buffer[0..32]);
+        label_1.copy_from_slice(&buffer[0..BLOCK_SIZE]);
 
         let mut false_com = Block::default();
-        false_com.copy_from_slice(&buffer[32..32 * 2]);
+        false_com.copy_from_slice(&buffer[BLOCK_SIZE..BLOCK_SIZE * 2]);
 
         let mut true_com = Block::default();
-        true_com.copy_from_slice(&buffer[32 * 2..32 * 3]);
+        true_com.copy_from_slice(&buffer[BLOCK_SIZE * 2..BLOCK_SIZE * 3]);
 
         let mut decom0 = Block::default();
-        decom0.copy_from_slice(&buffer[32 * 3..32 * 4]);
+        decom0.copy_from_slice(&buffer[BLOCK_SIZE * 3..BLOCK_SIZE * 4]);
 
         let mut decom1 = Block::default();
-        decom1.copy_from_slice(&buffer[32 * 4..32 * 5]);
+        decom1.copy_from_slice(&buffer[BLOCK_SIZE * 4..BLOCK_SIZE * 5]);
 
         let mut hash = Block::default();
-        hash.copy_from_slice(&buffer[32 * 5..32 * 6]);
+        hash.copy_from_slice(&buffer[BLOCK_SIZE * 5..BLOCK_SIZE * 6]);
 
         Some(Self {
             label_1,
@@ -78,7 +78,7 @@ impl Wrap for B2YMsg1 {
 }
 
 impl FixedExternalSize for B2YMsg1 {
-    const SIZE: usize = 32 * 6;
+    const SIZE: usize = BLOCK_SIZE * 6;
 }
 
 fn bit_to_yao_create_msg1_p1<C, R>(
@@ -119,9 +119,9 @@ where
     let label_3t = xor_blocks(label_3f, *delta);
     let comm_3t = comm.commit(label_3t, witness_3t);
 
-    let mut h2_init = [0u8; 64];
-    h2_init[0..32].copy_from_slice(&comm_2f);
-    h2_init[32..64].copy_from_slice(&comm_2t);
+    let mut h2_init = [0u8; BLOCK_SIZE * 2];
+    h2_init[0..BLOCK_SIZE].copy_from_slice(&comm_2f);
+    h2_init[BLOCK_SIZE..BLOCK_SIZE * 2].copy_from_slice(&comm_2t);
 
     let shahash = Sha512Hash::new();
     let hash_val = shahash.get_hash(&h2_init).unwrap();
@@ -197,9 +197,9 @@ where
     let label_3t = xor_blocks(label_3f, *delta);
     let comm_3t = comm.commit(label_3t, witness_3t);
 
-    let mut h3_init = [0u8; 64];
-    h3_init[0..32].copy_from_slice(&comm_3f);
-    h3_init[32..64].copy_from_slice(&comm_3t);
+    let mut h3_init = [0u8; BLOCK_SIZE * 2];
+    h3_init[0..BLOCK_SIZE].copy_from_slice(&comm_3f);
+    h3_init[BLOCK_SIZE..BLOCK_SIZE * 2].copy_from_slice(&comm_3t);
 
     let shahash = Sha512Hash::new();
     let hash_val = shahash.get_hash(&h3_init).unwrap();
@@ -252,15 +252,15 @@ where
     assert_eq!(msg1_p1.label_1, msg1_p2.label_1);
 
     let shahash = Sha512Hash::new();
-    let mut h2_init = [0u8; 64];
-    h2_init[0..32].copy_from_slice(&msg1_p2.false_com);
-    h2_init[32..64].copy_from_slice(&msg1_p2.true_com);
+    let mut h2_init = [0u8; BLOCK_SIZE * 2];
+    h2_init[0..BLOCK_SIZE].copy_from_slice(&msg1_p2.false_com);
+    h2_init[BLOCK_SIZE..BLOCK_SIZE * 2].copy_from_slice(&msg1_p2.true_com);
     let h2 = shahash.get_hash(&h2_init).unwrap();
     assert_eq!(h2, msg1_p1.hash);
 
-    let mut h3_init = [0u8; 64];
-    h3_init[0..32].copy_from_slice(&msg1_p1.false_com);
-    h3_init[32..64].copy_from_slice(&msg1_p1.true_com);
+    let mut h3_init = [0u8; BLOCK_SIZE * 2];
+    h3_init[0..BLOCK_SIZE].copy_from_slice(&msg1_p1.false_com);
+    h3_init[BLOCK_SIZE..BLOCK_SIZE * 2].copy_from_slice(&msg1_p1.true_com);
     let h3 = shahash.get_hash(&h3_init).unwrap();
     assert_eq!(h3, msg1_p2.hash);
 
@@ -573,7 +573,7 @@ mod tests {
         functionality::{output::batch_output_yao_functionality, setup::setup_yao_functionality},
         utilities::{
             commitments::HashCommitment, garble_hash::AesGarbleHash, shahash::Sha512Hash,
-            types::Block, utils::bool_vec_to_hex,
+            utils::bool_vec_to_hex,
         },
     };
 
@@ -590,8 +590,8 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut init_seed = Block::default();
-        let mut common_randomness_seed = Block::default();
+        let mut init_seed = [0u8; 32];
+        let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
         transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
@@ -723,8 +723,8 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut init_seed = Block::default();
-        let mut common_randomness_seed = Block::default();
+        let mut init_seed = [0u8; 32];
+        let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
         transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
@@ -855,7 +855,7 @@ mod tests {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    fn setup_b_to_y(instance: Option<Block>) -> Vec<(SetupMessage, Block)> {
+    fn setup_b_to_y(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
         use sha2::{Digest, Sha256};
         use sl_compute::transport::setup::{NoSigningKey, NoVerifyingKey, ProtocolParticipant};
         use sl_mpc_mate::message::InstanceId;
@@ -907,7 +907,7 @@ mod tests {
     }
 
     async fn sim_parties_b_to_y<S, R>(
-        parties: Vec<(SetupMessage, Block)>,
+        parties: Vec<(SetupMessage, [u8; 32])>,
         coord: S,
         batch: bool,
     ) -> Vec<Vec<bool>>

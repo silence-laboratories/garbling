@@ -16,7 +16,7 @@ use crate::{
         hash_function::HashFunction,
         types::{
             block_vec2tblock_vec, tblock_vec2block_vec, Block, TBlock, YaoEvaluatorShare,
-            YaoGarblerShare, YaoSetup, YaoShare,
+            YaoGarblerShare, YaoSetup, YaoShare, BLOCK_SIZE,
         },
     },
 };
@@ -50,7 +50,7 @@ where
     relay.ask_messages(setup, tag1, true).await?;
 
     if party_id == 2 {
-        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len()) * 32;
+        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len()) * BLOCK_SIZE;
 
         let tfs: Vec<Vec<TBlock>> =
             receive_from_parties(setup, mpc_encryption, tag1, len, vec![0, 1], relay).await?;
@@ -173,7 +173,7 @@ mod tests {
         },
         utilities::{
             commitments::HashCommitment, garble_hash::AesGarbleHash, shahash::Sha512Hash,
-            types::Block, utils::bool_vec_to_hex,
+            utils::bool_vec_to_hex,
         },
     };
 
@@ -193,8 +193,8 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut init_seed = Block::default();
-        let mut common_randomness_seed = Block::default();
+        let mut init_seed = [0u8; 32];
+        let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
         transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
@@ -502,8 +502,8 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut init_seed = Block::default();
-        let mut common_randomness_seed = Block::default();
+        let mut init_seed = [0u8; 32];
+        let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
         transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
@@ -789,7 +789,7 @@ mod tests {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    fn setup_entire_flow(instance: Option<Block>) -> Vec<(SetupMessage, Block)> {
+    fn setup_entire_flow(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
         use sha2::{Digest, Sha256};
         use sl_compute::transport::setup::{NoSigningKey, NoVerifyingKey, ProtocolParticipant};
         use sl_mpc_mate::message::InstanceId;
@@ -847,7 +847,7 @@ mod tests {
     }
 
     async fn sim_parties_entire_flow<S, R>(
-        parties: Vec<(SetupMessage, Block)>,
+        parties: Vec<(SetupMessage, [u8; 32])>,
         coord: S,
         circuit: BinaryCircuit,
         gin: Vec<bool>,

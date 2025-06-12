@@ -15,7 +15,7 @@ use rand_chacha::ChaCha8Rng;
 
 pub fn garble_aes256_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Garble");
-    let mut rng = ChaCha8Rng::from_seed(Block::default());
+    let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
 
     // 8832 AND Gates
     let circuit = BinaryCircuit::parse("circuits/aes256.txt").unwrap();
@@ -60,7 +60,7 @@ pub fn garble_aes256_benchmark(c: &mut Criterion) {
                 &GarblerSetup {
                     delta,
                     comm_crs: Block::default(),
-                    prf_key: Block::default(),
+                    prf_key: [0u8; 32],
                 },
                 &mut rng,
                 &hash,
@@ -72,7 +72,7 @@ pub fn garble_aes256_benchmark(c: &mut Criterion) {
 
 pub fn garble_aes128_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Garble");
-    let mut rng = ChaCha8Rng::from_seed(Block::default());
+    let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
 
     // 6400 AND Gates
     let circuit = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
@@ -117,7 +117,7 @@ pub fn garble_aes128_benchmark(c: &mut Criterion) {
                 &GarblerSetup {
                     delta,
                     comm_crs: Block::default(),
-                    prf_key: Block::default(),
+                    prf_key: [0u8; 32],
                 },
                 &mut rng,
                 &hash,
@@ -129,7 +129,7 @@ pub fn garble_aes128_benchmark(c: &mut Criterion) {
 
 pub fn garble_sha256_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Garble");
-    let mut rng = ChaCha8Rng::from_seed(Block::default());
+    let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
 
     // 22573 AND Gates
     let circuit = BinaryCircuit::parse("circuits/sha256.txt").unwrap();
@@ -174,7 +174,7 @@ pub fn garble_sha256_benchmark(c: &mut Criterion) {
                 &GarblerSetup {
                     delta,
                     comm_crs: Block::default(),
-                    prf_key: Block::default(),
+                    prf_key: [0u8; 32],
                 },
                 &mut rng,
                 &hash,

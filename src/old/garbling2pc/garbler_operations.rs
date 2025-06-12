@@ -4,9 +4,15 @@ use rand::{CryptoRng, RngCore};
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    old::garbling2pc::garbling2pc_errors::{BinaryOperationsError, ExecutionPrimitiveError, GarblerError},
-    old::garbling2pc::exec::{BinaryOperations, ExecutionPrimitives},
-    utilities::{hash_function::HashFunction, types::Block, utils::xor_blocks},
+    old::garbling2pc::{
+        exec::{BinaryOperations, ExecutionPrimitives},
+        garbling2pc_errors::{BinaryOperationsError, ExecutionPrimitiveError, GarblerError},
+    },
+    utilities::{
+        hash_function::HashFunction,
+        types::{Block, BLOCK_SIZE},
+        utils::xor_blocks,
+    },
 };
 
 /// Represents the garbler's state in a binary garbled circuit protocol.
@@ -192,9 +198,9 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         let j2_temp = self.get_next_gate_index().to_le_bytes();
 
         let mut j = Block::default();
-        j[16..32].copy_from_slice(&j_temp);
+        j[(BLOCK_SIZE - 16)..].copy_from_slice(&j_temp);
         let mut j2 = Block::default();
-        j2[16..32].copy_from_slice(&j2_temp);
+        j2[(BLOCK_SIZE - 16)..].copy_from_slice(&j2_temp);
 
         let (t_gen, out_gen) = self.gen_half_gate(p_a, p_b, a, j);
         let (t_eval, out_eval) = self.eval_half_gate(p_b, a, b, j2);
@@ -493,7 +499,7 @@ impl<H: HashFunction, R: RngCore + CryptoRng> ExecutionPrimitives for BinaryGarb
     fn output(&mut self, x: &Self::Item) -> Result<Option<Self::Item>, ExecutionPrimitiveError> {
         let i_temp = self.get_next_output_index().to_le_bytes();
         let mut i = Block::default();
-        i[16..32].copy_from_slice(&i_temp);
+        i[(BLOCK_SIZE - 16)..].copy_from_slice(&i_temp);
         let delta = self.delta;
         let xhash = self.hash.tccr_hash(x, &i);
         let xdhash = self.hash.tccr_hash(&xor_blocks(*x, delta), &i);

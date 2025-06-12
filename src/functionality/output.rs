@@ -13,7 +13,7 @@ use sl_compute::{
 use crate::{
     config::constants::{OUTPUT_YAO_FUNC_MSG1, OUTPUT_YAO_FUNC_MSG2, OUTPUT_YAO_TO_FUNC_MSG1},
     utilities::{
-        types::{Block, YaoShare},
+        types::{Block, YaoShare, BLOCK_SIZE},
         utils::{lsb, xor_blocks},
     },
 };
@@ -56,7 +56,7 @@ where
         Ok(true)
     } else {
         let out: Vec<Block> =
-            receive_from_parties(setup, mpc_encryption, tag1, 32, vec![2], relay).await?;
+            receive_from_parties(setup, mpc_encryption, tag1, BLOCK_SIZE, vec![2], relay).await?;
         let share = input.g_share.clone().unwrap();
         let val1 = share.f_label == out[0];
         let val2 = xor_blocks(share.f_label, share.delta) == out[0];
@@ -91,7 +91,7 @@ where
         let share = input.g_share.clone().unwrap();
 
         let wxs: Vec<Block> =
-            receive_from_parties(setup, mpc_encryption, tag1, 32, vec![2], relay).await?;
+            receive_from_parties(setup, mpc_encryption, tag1, BLOCK_SIZE, vec![2], relay).await?;
 
         let t1 = wxs[0] == share.f_label;
         let t2 = wxs[0] == xor_blocks(share.f_label, share.delta);
@@ -148,8 +148,15 @@ where
     relay.ask_messages(setup, tag2, true).await?;
 
     if party_id == 0 || party_id == 1 {
-        let wxs: Vec<Vec<u8>> =
-            receive_from_parties(setup, mpc_encryption, tag1, 32 * batch_size, vec![2], relay).await?;
+        let wxs: Vec<Vec<u8>> = receive_from_parties(
+            setup,
+            mpc_encryption,
+            tag1,
+            BLOCK_SIZE * batch_size,
+            vec![2],
+            relay,
+        )
+        .await?;
 
         let mut xval = BinaryString::new();
 
@@ -158,7 +165,7 @@ where
             let share = input[i].g_share.clone().unwrap();
 
             let mut wx = Block::default();
-            wx.copy_from_slice(&wxs[0][32 * i..32 * (i + 1)]);
+            wx.copy_from_slice(&wxs[0][BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)]);
 
             let t1 = wx == share.f_label;
             let t2 = wx == xor_blocks(share.f_label, share.delta);
@@ -171,12 +178,12 @@ where
 
         send_to_party(setup, mpc_encryption, tag2, xval.value, 2, relay).await?;
     } else {
-        let mut msg = vec![0u8; 32 * batch_size];
+        let mut msg = vec![0u8; BLOCK_SIZE * batch_size];
         let mut xval = BinaryString::new();
         for i in 0..batch_size {
             assert!(input[i].e_share.is_some());
             let share = input[i].e_share.clone().unwrap();
-            msg[32 * i..32 * (i + 1)].copy_from_slice(&share.label);
+            msg[BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)].copy_from_slice(&share.label);
             xval.push(false);
         }
 
@@ -262,7 +269,7 @@ where
         let share = input.g_share.clone().unwrap();
 
         let wxs: Vec<Block> =
-            receive_from_parties(setup, mpc_encryption, tag1, 32, vec![2], relay).await?;
+            receive_from_parties(setup, mpc_encryption, tag1, BLOCK_SIZE, vec![2], relay).await?;
 
         let t1 = wxs[0] == share.f_label;
         let t2 = wxs[0] == xor_blocks(share.f_label, share.delta);
@@ -329,25 +336,31 @@ where
             send_to_party(setup, mpc_encryption, tag1, msg.value, 2, relay).await?;
         }
     } else if party_id == 2 {
-        let mut msg = vec![0u8; 32 * batch_size];
+        let mut msg = vec![0u8; BLOCK_SIZE * batch_size];
 
         for i in 0..batch_size {
             assert!(input[i].e_share.is_some());
             let share = input[i].e_share.clone().unwrap();
-            msg[32 * i..32 * (i + 1)].copy_from_slice(&share.label);
+            msg[BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)].copy_from_slice(&share.label);
         }
         send_to_party(setup, mpc_encryption, tag1, msg, pid, relay).await?;
     } else if party_id == pid {
-        let wxs: Vec<Vec<u8>> =
-            receive_from_parties(setup, mpc_encryption, tag1, 32 * batch_size, vec![2], relay)
-                .await?;
+        let wxs: Vec<Vec<u8>> = receive_from_parties(
+            setup,
+            mpc_encryption,
+            tag1,
+            BLOCK_SIZE * batch_size,
+            vec![2],
+            relay,
+        )
+        .await?;
 
         for i in 0..batch_size {
             assert!(input[i].g_share.is_some());
             let share = input[i].g_share.clone().unwrap();
 
             let mut wx = Block::default();
-            wx.copy_from_slice(&wxs[0][32 * i..32 * (i + 1)]);
+            wx.copy_from_slice(&wxs[0][BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)]);
 
             let t1 = wx == share.f_label;
             let t2 = wx == xor_blocks(share.f_label, share.delta);

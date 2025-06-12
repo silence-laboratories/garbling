@@ -9,7 +9,7 @@ use sl_compute::transport::{
 
 use crate::{
     config::constants::{SETUP_YAO_FUNC_MSG1, SETUP_YAO_FUNC_MSG2},
-    utilities::types::{Block, EvaluatorSetup, GarblerSetup, YaoSetup},
+    utilities::types::{Block, EvaluatorSetup, GarblerSetup, YaoSetup, BLOCK_SIZE},
 };
 
 pub async fn setup_yao_functionality<T, R>(
@@ -47,17 +47,17 @@ where
         output.e_setup = Some(EvaluatorSetup { comm_crs: crs })
     } else {
         let crss: Vec<Block> =
-            receive_from_parties(setup, mpc_encryption, tag1, 32, vec![2], relay).await?;
+            receive_from_parties(setup, mpc_encryption, tag1, BLOCK_SIZE, vec![2], relay).await?;
 
         let mut rng = rand::rngs::StdRng::from_os_rng();
         let seed = if party_id == 0 {
-            let mut seed = Block::default();
+            let mut seed = [0u8; 32];
             rng.fill_bytes(&mut seed);
 
             send_to_party(setup, mpc_encryption, tag2, seed, 1, relay).await?;
             seed
         } else {
-            let seed: Vec<Block> =
+            let seed: Vec<[u8; 32]> =
                 receive_from_parties(setup, mpc_encryption, tag2, 32, vec![0], relay).await?;
             seed[0]
         };

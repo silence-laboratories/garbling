@@ -1,10 +1,12 @@
 use sl_compute::transport::proto::{FixedExternalSize, Wrap};
 
+pub const BLOCK_SIZE: usize = 16;
+
 /// Represents a 128-bit block of data.
 ///
 /// This is used for representing the output of hashes for
 /// the garbled circuit.
-pub type Block = [u8; 32];
+pub type Block = [u8; BLOCK_SIZE];
 
 pub struct TBlock(Block);
 
@@ -14,18 +16,18 @@ impl Wrap for TBlock {
     }
 
     fn write(&self, buffer: &mut [u8]) {
-        buffer[0..32].copy_from_slice(&self.0);
+        buffer[0..BLOCK_SIZE].copy_from_slice(&self.0);
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
         let mut block = Block::default();
-        block.copy_from_slice(&buffer[0..32]);
+        block.copy_from_slice(&buffer[0..BLOCK_SIZE]);
         Some(TBlock(block))
     }
 }
 
 impl FixedExternalSize for TBlock {
-    const SIZE: usize = 32;
+    const SIZE: usize = BLOCK_SIZE;
 }
 
 pub fn block_vec2tblock_vec(x: &[Block]) -> Vec<TBlock> {
@@ -58,7 +60,7 @@ pub struct YaoShare {
 #[derive(Clone, Debug, Default)]
 pub struct GarblerSetup {
     pub comm_crs: Block,
-    pub prf_key: Block,
+    pub prf_key: [u8; 32],
     pub delta: Block,
 }
 
