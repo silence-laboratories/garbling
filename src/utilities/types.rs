@@ -8,6 +8,11 @@ pub const BLOCK_SIZE: usize = 16;
 /// the garbled circuit.
 pub type Block = [u8; BLOCK_SIZE];
 
+pub enum MapArg<T> {
+    Scalar(T),
+    Vector(Vec<T>),
+}
+
 pub struct TBlock(Block);
 
 impl Wrap for TBlock {

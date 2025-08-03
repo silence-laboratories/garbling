@@ -15,13 +15,110 @@ use crate::{
     utilities::{
         hash_function::HashFunction,
         types::{
-            block_vec2tblock_vec, tblock_vec2block_vec, Block, TBlock, YaoEvaluatorShare,
+            block_vec2tblock_vec, tblock_vec2block_vec, Block, MapArg, TBlock, YaoEvaluatorShare,
             YaoGarblerShare, YaoSetup, YaoShare, BLOCK_SIZE,
         },
     },
 };
 
 use super::garble::garble_functionality;
+
+pub fn yao_circuit_eval_process_msg1_p2<H>(
+    g_input: &HashMap<usize, YaoShare>,
+    e_input: &HashMap<usize, YaoShare>,
+    fs: &[Block],
+    circuit: &BinaryCircuit,
+    hash: &H,
+) -> HashMap<usize, YaoShare>
+where
+    H: HashFunction,
+{
+    let g_shares: HashMap<usize, YaoEvaluatorShare> = g_input
+        .iter()
+        .map(|(&ind, share)| {
+            assert!(share.e_share.is_some());
+            (ind, share.e_share.clone().unwrap())
+        })
+        .collect();
+
+    let e_shares: HashMap<usize, YaoEvaluatorShare> = e_input
+        .iter()
+        .map(|(&ind, share)| {
+            assert!(share.e_share.is_some());
+            (ind, share.e_share.clone().unwrap())
+        })
+        .collect();
+
+    let out = evaluate_functionality(circuit, &g_shares, &e_shares, fs, hash);
+
+    out.iter()
+        .map(|(&id, val)| {
+            (
+                id,
+                YaoShare {
+                    g_share: None,
+                    e_share: Some(val.clone()),
+                },
+            )
+        })
+        .collect()
+}
+
+pub fn yao_circuit_eval_create_msg1_p01<G, H>(
+    g_input: &HashMap<usize, YaoShare>,
+    e_input: &HashMap<usize, YaoShare>,
+    yao_setup: &YaoSetup,
+    circuit: &BinaryCircuit,
+    rng: &mut Option<G>,
+    hash: &H,
+) -> (Vec<Block>, HashMap<usize, YaoShare>)
+where
+    G: RngCore + CryptoRng,
+    H: HashFunction,
+{
+    assert!(yao_setup.g_setup.is_some());
+
+    let g_shares: HashMap<usize, YaoGarblerShare> = g_input
+        .iter()
+        .map(|(&ind, share)| {
+            assert!(share.g_share.is_some());
+            (ind, share.g_share.clone().unwrap())
+        })
+        .collect();
+
+    let e_shares: HashMap<usize, YaoGarblerShare> = e_input
+        .iter()
+        .map(|(&ind, share)| {
+            assert!(share.g_share.is_some());
+            (ind, share.g_share.clone().unwrap())
+        })
+        .collect();
+
+    let r = rng.as_mut().unwrap();
+
+    let (f, out_shares) = garble_functionality(
+        circuit,
+        &g_shares,
+        &e_shares,
+        &yao_setup.g_setup.clone().unwrap(),
+        r,
+        hash,
+    );
+    let out: HashMap<usize, YaoShare> = out_shares
+        .iter()
+        .map(|(&id, element)| {
+            (
+                id,
+                YaoShare {
+                    g_share: Some(element.clone()),
+                    e_share: None,
+                },
+            )
+        })
+        .collect();
+
+    (f, out)
+}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn yao_circuit_eval_functionality<T, R, G, H>(
@@ -59,80 +156,595 @@ where
 
         assert_eq!(fs[0], fs[1]);
 
-        let g_shares: HashMap<usize, YaoEvaluatorShare> = g_input
-            .iter()
-            .map(|(&ind, share)| {
-                assert!(share.e_share.is_some());
-                (ind, share.e_share.clone().unwrap())
-            })
-            .collect();
-
-        let e_shares: HashMap<usize, YaoEvaluatorShare> = e_input
-            .iter()
-            .map(|(&ind, share)| {
-                assert!(share.e_share.is_some());
-                (ind, share.e_share.clone().unwrap())
-            })
-            .collect();
-
-        let out = evaluate_functionality(circuit, &g_shares, &e_shares, &fs[0], hash);
-
-        output = out
-            .iter()
-            .map(|(&id, val)| {
-                (
-                    id,
-                    YaoShare {
-                        g_share: None,
-                        e_share: Some(val.clone()),
-                    },
-                )
-            })
-            .collect()
+        output = yao_circuit_eval_process_msg1_p2(g_input, e_input, &fs[0], circuit, hash);
     } else {
-        assert!(yao_setup.g_setup.is_some());
-
-        let g_shares: HashMap<usize, YaoGarblerShare> = g_input
-            .iter()
-            .map(|(&ind, share)| {
-                assert!(share.g_share.is_some());
-                (ind, share.g_share.clone().unwrap())
-            })
-            .collect();
-
-        let e_shares: HashMap<usize, YaoGarblerShare> = e_input
-            .iter()
-            .map(|(&ind, share)| {
-                assert!(share.g_share.is_some());
-                (ind, share.g_share.clone().unwrap())
-            })
-            .collect();
-
-        let r = rng.as_mut().unwrap();
-        let (f, out_shares) = garble_functionality(
-            circuit,
-            &g_shares,
-            &e_shares,
-            &yao_setup.g_setup.clone().unwrap(),
-            r,
-            hash,
-        );
+        let (f, out) =
+            yao_circuit_eval_create_msg1_p01(g_input, e_input, yao_setup, circuit, rng, hash);
         let tf = block_vec2tblock_vec(&f);
 
         send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
 
-        output = out_shares
-            .iter()
-            .map(|(&id, element)| {
-                (
-                    id,
-                    YaoShare {
-                        g_share: Some(element.clone()),
-                        e_share: None,
-                    },
-                )
-            })
-            .collect();
+        output = out;
+    }
+    Ok(output)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn yao_map_circuit_eval_functionality<T, R, G, H>(
+    setup: &T,
+    mpc_encryption: &mut MPCEncryption,
+    tag_offset_counter: &mut TagOffsetCounter,
+    relay: &mut FilteredMsgRelay<R>,
+    g_inputs: &MapArg<HashMap<usize, YaoShare>>,
+    e_inputs: &MapArg<HashMap<usize, YaoShare>>,
+    circuits: &MapArg<BinaryCircuit>,
+    rng: &mut Option<G>,
+    hash: &H,
+    yao_setup: &YaoSetup,
+) -> Result<Vec<HashMap<usize, YaoShare>>, ProtocolError>
+where
+    T: CommonSetupMessage,
+    R: Relay,
+    G: RngCore + CryptoRng,
+    H: HashFunction,
+{
+    let party_id = setup.participant_index();
+
+    let tag_offset = tag_offset_counter.next_value();
+    let tag1 = MessageTag::tag1(YAO_CIRC_EVAL_FUNC_MSG1.try_into().unwrap(), tag_offset);
+    relay.ask_messages(setup, tag1, true).await?;
+
+    let mut output = Vec::new();
+
+    if party_id == 2 {
+        match circuits {
+            MapArg::Scalar(circuit) => match g_inputs {
+                MapArg::Scalar(g_input) => match e_inputs {
+                    MapArg::Scalar(e_input) => {
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                            * BLOCK_SIZE;
+
+                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
+                            setup,
+                            mpc_encryption,
+                            tag1,
+                            len,
+                            vec![0, 1],
+                            relay,
+                        )
+                        .await?;
+
+                        let fs: Vec<Vec<Block>> =
+                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+
+                        assert_eq!(fs[0], fs[1]);
+
+                        let temp = yao_circuit_eval_process_msg1_p2(
+                            g_input, e_input, &fs[0], circuit, hash,
+                        );
+
+                        output.push(temp);
+                    }
+                    MapArg::Vector(e_inputs) => {
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                            * BLOCK_SIZE
+                            * e_inputs.len();
+
+                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
+                            setup,
+                            mpc_encryption,
+                            tag1,
+                            len,
+                            vec![0, 1],
+                            relay,
+                        )
+                        .await?;
+
+                        let fs: Vec<Vec<Block>> =
+                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+
+                        assert_eq!(fs[0], fs[1]);
+
+                        let complen =
+                            2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                        let mut temp = Vec::new();
+                        (0..e_inputs.len()).for_each(|i| {
+                            let f = fs[0][complen * i..complen * (i + 1)].to_vec();
+                            let out = yao_circuit_eval_process_msg1_p2(
+                                g_input,
+                                &e_inputs[i],
+                                &f,
+                                circuit,
+                                hash,
+                            );
+                            temp.push(out);
+                        });
+                        output = temp;
+                    }
+                },
+                MapArg::Vector(g_inputs) => match e_inputs {
+                    MapArg::Scalar(e_input) => {
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                            * BLOCK_SIZE
+                            * g_inputs.len();
+
+                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
+                            setup,
+                            mpc_encryption,
+                            tag1,
+                            len,
+                            vec![0, 1],
+                            relay,
+                        )
+                        .await?;
+
+                        let fs: Vec<Vec<Block>> =
+                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+
+                        assert_eq!(fs[0], fs[1]);
+
+                        let complen =
+                            2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                        let mut temp = Vec::new();
+                        (0..g_inputs.len()).for_each(|i| {
+                            let f = fs[0][complen * i..complen * (i + 1)].to_vec();
+                            let out = yao_circuit_eval_process_msg1_p2(
+                                &g_inputs[i],
+                                e_input,
+                                &f,
+                                circuit,
+                                hash,
+                            );
+                            temp.push(out);
+                        });
+                        output = temp;
+                    }
+                    MapArg::Vector(e_inputs) => {
+                        assert_eq!(e_inputs.len(), g_inputs.len());
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                            * BLOCK_SIZE
+                            * g_inputs.len();
+
+                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
+                            setup,
+                            mpc_encryption,
+                            tag1,
+                            len,
+                            vec![0, 1],
+                            relay,
+                        )
+                        .await?;
+
+                        let fs: Vec<Vec<Block>> =
+                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+
+                        assert_eq!(fs[0], fs[1]);
+
+                        let complen =
+                            2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                        let mut temp = Vec::new();
+                        (0..g_inputs.len()).for_each(|i| {
+                            let f = fs[0][complen * i..complen * (i + 1)].to_vec();
+                            let out = yao_circuit_eval_process_msg1_p2(
+                                &g_inputs[i],
+                                &e_inputs[i],
+                                &f,
+                                circuit,
+                                hash,
+                            );
+                            temp.push(out);
+                        });
+                        output = temp;
+                    }
+                },
+            },
+            MapArg::Vector(circuits) => match g_inputs {
+                MapArg::Scalar(g_input) => match e_inputs {
+                    MapArg::Scalar(e_input) => {
+                        let mut len = 0;
+                        for circuit in circuits {
+                            len += (2 * circuit.num_nonfree_gates
+                                + circuit.constant_gate_ids.len())
+                                * BLOCK_SIZE;
+                        }
+
+                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
+                            setup,
+                            mpc_encryption,
+                            tag1,
+                            len,
+                            vec![0, 1],
+                            relay,
+                        )
+                        .await?;
+
+                        let fs: Vec<Vec<Block>> =
+                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+
+                        assert_eq!(fs[0], fs[1]);
+
+                        let mut temp = Vec::new();
+                        let mut len = 0;
+                        circuits.iter().for_each(|circuit| {
+                            let complen =
+                                2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                            let f = fs[0][len..len + complen].to_vec();
+                            let out = yao_circuit_eval_process_msg1_p2(
+                                g_input, e_input, &f, circuit, hash,
+                            );
+                            len += complen;
+                            temp.push(out);
+                        });
+                        output = temp;
+                    }
+                    MapArg::Vector(e_inputs) => {
+                        assert_eq!(e_inputs.len(), circuits.len());
+
+                        let mut len = 0;
+                        for circuit in circuits {
+                            len += (2 * circuit.num_nonfree_gates
+                                + circuit.constant_gate_ids.len())
+                                * BLOCK_SIZE;
+                        }
+
+                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
+                            setup,
+                            mpc_encryption,
+                            tag1,
+                            len,
+                            vec![0, 1],
+                            relay,
+                        )
+                        .await?;
+
+                        let fs: Vec<Vec<Block>> =
+                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+
+                        assert_eq!(fs[0], fs[1]);
+
+                        let mut temp = Vec::new();
+                        let mut len = 0;
+                        circuits
+                            .iter()
+                            .zip(e_inputs)
+                            .for_each(|(circuit, e_input)| {
+                                let complen =
+                                    2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                                let f = fs[0][len..len + complen].to_vec();
+                                let out = yao_circuit_eval_process_msg1_p2(
+                                    g_input, e_input, &f, circuit, hash,
+                                );
+                                len += complen;
+                                temp.push(out);
+                            });
+                        output = temp;
+                    }
+                },
+                MapArg::Vector(g_inputs) => match e_inputs {
+                    MapArg::Scalar(e_input) => {
+                        assert_eq!(g_inputs.len(), circuits.len());
+
+                        let mut len = 0;
+                        for circuit in circuits {
+                            len += (2 * circuit.num_nonfree_gates
+                                + circuit.constant_gate_ids.len())
+                                * BLOCK_SIZE;
+                        }
+
+                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
+                            setup,
+                            mpc_encryption,
+                            tag1,
+                            len,
+                            vec![0, 1],
+                            relay,
+                        )
+                        .await?;
+
+                        let fs: Vec<Vec<Block>> =
+                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+
+                        assert_eq!(fs[0], fs[1]);
+
+                        let mut temp = Vec::new();
+                        let mut len = 0;
+                        circuits
+                            .iter()
+                            .zip(g_inputs)
+                            .for_each(|(circuit, g_input)| {
+                                let complen =
+                                    2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                                let f = fs[0][len..len + complen].to_vec();
+                                let out = yao_circuit_eval_process_msg1_p2(
+                                    g_input, e_input, &f, circuit, hash,
+                                );
+                                len += complen;
+                                temp.push(out);
+                            });
+                        output = temp;
+                    }
+                    MapArg::Vector(e_inputs) => {
+                        assert_eq!(g_inputs.len(), circuits.len());
+                        assert_eq!(e_inputs.len(), circuits.len());
+
+                        let mut len = 0;
+                        for circuit in circuits {
+                            len += (2 * circuit.num_nonfree_gates
+                                + circuit.constant_gate_ids.len())
+                                * BLOCK_SIZE;
+                        }
+
+                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
+                            setup,
+                            mpc_encryption,
+                            tag1,
+                            len,
+                            vec![0, 1],
+                            relay,
+                        )
+                        .await?;
+
+                        let fs: Vec<Vec<Block>> =
+                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+
+                        assert_eq!(fs[0], fs[1]);
+
+                        let mut temp = Vec::new();
+                        let mut len = 0;
+                        circuits.iter().zip(g_inputs).zip(e_inputs).for_each(
+                            |((circuit, g_input), e_input)| {
+                                let complen =
+                                    2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                                let f = fs[0][len..len + complen].to_vec();
+                                let out = yao_circuit_eval_process_msg1_p2(
+                                    g_input, e_input, &f, circuit, hash,
+                                );
+                                len += complen;
+                                temp.push(out);
+                            },
+                        );
+                        output = temp;
+                    }
+                },
+            },
+        }
+    } else {
+        match circuits {
+            MapArg::Scalar(circuit) => match g_inputs {
+                MapArg::Scalar(g_input) => match e_inputs {
+                    MapArg::Scalar(e_input) => {
+                        let (f, out) = yao_circuit_eval_create_msg1_p01(
+                            g_input, e_input, yao_setup, circuit, rng, hash,
+                        );
+                        let tf = block_vec2tblock_vec(&f);
+
+                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+
+                        let temp = out;
+                        output.push(temp);
+                    }
+                    MapArg::Vector(e_inputs) => {
+                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<usize, YaoShare>>) = e_inputs
+                            .iter()
+                            .map(|e_input| {
+                                yao_circuit_eval_create_msg1_p01(
+                                    g_input, e_input, yao_setup, circuit, rng, hash,
+                                )
+                            })
+                            .collect();
+
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                            * BLOCK_SIZE
+                            * e_inputs.len();
+
+                        let mut fvec = Vec::with_capacity(len);
+                        for vec in f {
+                            for b in vec {
+                                fvec.push(b);
+                            }
+                        }
+                        let tf = block_vec2tblock_vec(&fvec);
+
+                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+
+                        let temp = out;
+                        output = temp;
+                    }
+                },
+                MapArg::Vector(g_inputs) => match e_inputs {
+                    MapArg::Scalar(e_input) => {
+                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<usize, YaoShare>>) = g_inputs
+                            .iter()
+                            .map(|g_input| {
+                                yao_circuit_eval_create_msg1_p01(
+                                    g_input, e_input, yao_setup, circuit, rng, hash,
+                                )
+                            })
+                            .collect();
+
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                            * BLOCK_SIZE
+                            * g_inputs.len();
+
+                        let mut fvec = Vec::with_capacity(len);
+                        for vec in f {
+                            for b in vec {
+                                fvec.push(b);
+                            }
+                        }
+                        let tf = block_vec2tblock_vec(&fvec);
+
+                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+
+                        let temp = out;
+                        output = temp;
+                    }
+                    MapArg::Vector(e_inputs) => {
+                        assert_eq!(e_inputs.len(), g_inputs.len());
+                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<usize, YaoShare>>) = g_inputs
+                            .iter()
+                            .zip(e_inputs)
+                            .map(|(g_input, e_input)| {
+                                yao_circuit_eval_create_msg1_p01(
+                                    g_input, e_input, yao_setup, circuit, rng, hash,
+                                )
+                            })
+                            .collect();
+
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                            * BLOCK_SIZE
+                            * g_inputs.len();
+
+                        let mut fvec = Vec::with_capacity(len);
+                        for vec in f {
+                            for b in vec {
+                                fvec.push(b);
+                            }
+                        }
+                        let tf = block_vec2tblock_vec(&fvec);
+
+                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+
+                        let temp = out;
+                        output = temp;
+                    }
+                },
+            },
+            MapArg::Vector(circuits) => match g_inputs {
+                MapArg::Scalar(g_input) => match e_inputs {
+                    MapArg::Scalar(e_input) => {
+                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<usize, YaoShare>>) = circuits
+                            .iter()
+                            .map(|circuit| {
+                                yao_circuit_eval_create_msg1_p01(
+                                    g_input, e_input, yao_setup, circuit, rng, hash,
+                                )
+                            })
+                            .collect();
+
+                        let mut len = 0;
+                        for circuit in circuits {
+                            len += (2 * circuit.num_nonfree_gates
+                                + circuit.constant_gate_ids.len())
+                                * BLOCK_SIZE;
+                        }
+
+                        let mut fvec = Vec::with_capacity(len);
+                        for vec in f {
+                            for b in vec {
+                                fvec.push(b);
+                            }
+                        }
+                        let tf = block_vec2tblock_vec(&fvec);
+
+                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+
+                        let temp = out;
+                        output = temp;
+                    }
+                    MapArg::Vector(e_inputs) => {
+                        assert_eq!(e_inputs.len(), circuits.len());
+                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<usize, YaoShare>>) = circuits
+                            .iter()
+                            .zip(e_inputs)
+                            .map(|(circuit, e_input)| {
+                                yao_circuit_eval_create_msg1_p01(
+                                    g_input, e_input, yao_setup, circuit, rng, hash,
+                                )
+                            })
+                            .collect();
+
+                        let mut len = 0;
+                        for circuit in circuits {
+                            len += (2 * circuit.num_nonfree_gates
+                                + circuit.constant_gate_ids.len())
+                                * BLOCK_SIZE;
+                        }
+
+                        let mut fvec = Vec::with_capacity(len);
+                        for vec in f {
+                            for b in vec {
+                                fvec.push(b);
+                            }
+                        }
+                        let tf = block_vec2tblock_vec(&fvec);
+
+                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+
+                        let temp = out;
+                        output = temp;
+                    }
+                },
+                MapArg::Vector(g_inputs) => match e_inputs {
+                    MapArg::Scalar(e_input) => {
+                        assert_eq!(g_inputs.len(), circuits.len());
+                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<usize, YaoShare>>) = circuits
+                            .iter()
+                            .zip(g_inputs)
+                            .map(|(circuit, g_input)| {
+                                yao_circuit_eval_create_msg1_p01(
+                                    g_input, e_input, yao_setup, circuit, rng, hash,
+                                )
+                            })
+                            .collect();
+
+                        let mut len = 0;
+                        for circuit in circuits {
+                            len += (2 * circuit.num_nonfree_gates
+                                + circuit.constant_gate_ids.len())
+                                * BLOCK_SIZE;
+                        }
+
+                        let mut fvec = Vec::with_capacity(len);
+                        for vec in f {
+                            for b in vec {
+                                fvec.push(b);
+                            }
+                        }
+                        let tf = block_vec2tblock_vec(&fvec);
+
+                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+
+                        let temp = out;
+                        output = temp;
+                    }
+                    MapArg::Vector(e_inputs) => {
+                        assert_eq!(e_inputs.len(), circuits.len());
+                        assert_eq!(g_inputs.len(), circuits.len());
+                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<usize, YaoShare>>) = circuits
+                            .iter()
+                            .zip(g_inputs)
+                            .zip(e_inputs)
+                            .map(|((circuit, g_input), e_input)| {
+                                yao_circuit_eval_create_msg1_p01(
+                                    g_input, e_input, yao_setup, circuit, rng, hash,
+                                )
+                            })
+                            .collect();
+
+                        let mut len = 0;
+                        for circuit in circuits {
+                            len += (2 * circuit.num_nonfree_gates
+                                + circuit.constant_gate_ids.len())
+                                * BLOCK_SIZE;
+                        }
+
+                        let mut fvec = Vec::with_capacity(len);
+                        for vec in f {
+                            for b in vec {
+                                fvec.push(b);
+                            }
+                        }
+                        let tf = block_vec2tblock_vec(&fvec);
+
+                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+
+                        let temp = out;
+                        output = temp;
+                    }
+                },
+            },
+        }
     }
     Ok(output)
 }
@@ -161,6 +773,7 @@ mod tests {
         circuitop::circuit::BinaryCircuit,
         customcircuits::comparison::build_comparison_circuit,
         functionality::{
+            circuit_eval::yao_map_circuit_eval_functionality,
             input::{
                 batch_input_yao_from_functionality, batch_input_yao_functionality,
                 input_yao_from_functionality, input_yao_functionality,
@@ -173,7 +786,7 @@ mod tests {
         },
         utilities::{
             commitments::HashCommitment, garble_hash::AesGarbleHash, shahash::Sha512Hash,
-            utils::bool_vec_to_hex,
+            types::MapArg, utils::bool_vec_to_hex,
         },
     };
 
@@ -212,6 +825,8 @@ mod tests {
 
         let mut gin = HashMap::new();
         let mut ein = HashMap::new();
+        let mut notgin = HashMap::new();
+        let mut notein = HashMap::new();
 
         let (mut rng, hash, comm) = if setup.participant_index() == 2 {
             let hash = AesGarbleHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
@@ -387,13 +1002,13 @@ mod tests {
             gin.insert(id, out);
         }
 
-        for (id, inp) in circuit.evaluator_input_ids.iter().zip(eval_input) {
+        for (id, inp) in circuit.evaluator_input_ids.iter().zip(&eval_input) {
             let out = input_yao_functionality(
                 &setup,
                 &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
-                &inp,
+                inp,
                 &mut rng,
                 &yao_setup,
             )
@@ -408,6 +1023,49 @@ mod tests {
             .await?;
             assert!(cor);
             ein.insert(*id, out);
+            let out = input_yao_functionality(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                &!inp,
+                &mut rng,
+                &yao_setup,
+            )
+            .await?;
+            let cor = validate_yao_share(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                &out,
+            )
+            .await?;
+            assert!(cor);
+            notein.insert(*id, out);
+        }
+
+        for (id, inp) in circuit.garbler_input_ids.iter().zip(&garb_input) {
+            let out = input_yao_functionality(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                &!inp,
+                &mut rng,
+                &yao_setup,
+            )
+            .await?;
+            let cor = validate_yao_share(
+                &setup,
+                &mut mpc_encryption,
+                &mut tag_offset_counter,
+                &mut relay,
+                &out,
+            )
+            .await?;
+            assert!(cor);
+            notgin.insert(*id, out);
         }
 
         let out_sh = yao_circuit_eval_functionality(
@@ -424,15 +1082,113 @@ mod tests {
         )
         .await?;
 
+        let outs_case1_sh = yao_map_circuit_eval_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            &MapArg::Scalar(gin.clone()),
+            &MapArg::Vector(vec![ein.clone(), notein.clone()]),
+            &MapArg::Scalar(circuit.clone()),
+            &mut rng,
+            &hash,
+            &yao_setup,
+        )
+        .await?;
+
+        let outs_case2_sh = yao_map_circuit_eval_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            &MapArg::Vector(vec![gin.clone(), notgin.clone()]),
+            &MapArg::Scalar(ein.clone()),
+            &MapArg::Scalar(circuit.clone()),
+            &mut rng,
+            &hash,
+            &yao_setup,
+        )
+        .await?;
+
+        let outs_case3_sh = yao_map_circuit_eval_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            &MapArg::Vector(vec![gin.clone(), notgin.clone()]),
+            &MapArg::Vector(vec![ein.clone(), notein.clone()]),
+            &MapArg::Scalar(circuit.clone()),
+            &mut rng,
+            &hash,
+            &yao_setup,
+        )
+        .await?;
+
+        let outs_case4_sh = yao_map_circuit_eval_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            &MapArg::Scalar(gin.clone()),
+            &MapArg::Scalar(ein.clone()),
+            &MapArg::Vector(vec![circuit.clone(), circuit.clone()]),
+            &mut rng,
+            &hash,
+            &yao_setup,
+        )
+        .await?;
+
+        let outs_case5_sh = yao_map_circuit_eval_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            &MapArg::Scalar(gin.clone()),
+            &MapArg::Vector(vec![ein.clone(), notein.clone()]),
+            &MapArg::Vector(vec![circuit.clone(), circuit.clone()]),
+            &mut rng,
+            &hash,
+            &yao_setup,
+        )
+        .await?;
+
+        let outs_case6_sh = yao_map_circuit_eval_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            &MapArg::Vector(vec![gin.clone(), notgin.clone()]),
+            &MapArg::Scalar(ein.clone()),
+            &MapArg::Vector(vec![circuit.clone(), circuit.clone()]),
+            &mut rng,
+            &hash,
+            &yao_setup,
+        )
+        .await?;
+
+        let outs_case7_sh = yao_map_circuit_eval_functionality(
+            &setup,
+            &mut mpc_encryption,
+            &mut tag_offset_counter,
+            &mut relay,
+            &MapArg::Vector(vec![gin.clone(), notgin.clone()]),
+            &MapArg::Vector(vec![ein.clone(), notein.clone()]),
+            &MapArg::Vector(vec![circuit.clone(), circuit.clone()]),
+            &mut rng,
+            &hash,
+            &yao_setup,
+        )
+        .await?;
+
         let mut op = vec![];
 
-        for i in circuit.output_gate_ids {
+        for i in &circuit.output_gate_ids {
             let cor: bool = validate_yao_share(
                 &setup,
                 &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
-                out_sh.get(&i).unwrap(),
+                out_sh.get(i).unwrap(),
             )
             .await?;
             assert!(cor);
@@ -441,7 +1197,7 @@ mod tests {
                 &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
-                out_sh.get(&i).unwrap(),
+                out_sh.get(i).unwrap(),
             )
             .await?;
             op.push(output);
@@ -452,7 +1208,7 @@ mod tests {
                 &mut tag_offset_counter,
                 &mut relay,
                 0,
-                out_sh.get(&i).unwrap(),
+                out_sh.get(i).unwrap(),
             )
             .await?;
             if setup.participant_index() == 0 {
@@ -465,7 +1221,7 @@ mod tests {
                 &mut tag_offset_counter,
                 &mut relay,
                 1,
-                out_sh.get(&i).unwrap(),
+                out_sh.get(i).unwrap(),
             )
             .await?;
             if setup.participant_index() == 1 {
@@ -478,13 +1234,224 @@ mod tests {
                 &mut tag_offset_counter,
                 &mut relay,
                 2,
-                out_sh.get(&i).unwrap(),
+                out_sh.get(i).unwrap(),
             )
             .await?;
             if setup.participant_index() == 2 {
                 assert_eq!(output, op3.unwrap())
             }
         }
+
+        println!("\nCase 1 outputs: ");
+
+        for out_sh in outs_case1_sh {
+            let mut opt = vec![];
+            for i in &circuit.output_gate_ids {
+                let cor: bool = validate_yao_share(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                assert!(cor);
+                let output = output_yao_functionality(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                opt.push(output);
+            }
+            let hexout = bool_vec_to_hex(opt);
+            if setup.participant_index() == 0 {
+                println!("{}", hexout);
+            }
+        }
+
+        println!("\nCase 2 outputs: ");
+
+        for out_sh in outs_case2_sh {
+            let mut opt = vec![];
+            for i in &circuit.output_gate_ids {
+                let cor: bool = validate_yao_share(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                assert!(cor);
+                let output = output_yao_functionality(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                opt.push(output);
+            }
+            let hexout = bool_vec_to_hex(opt);
+            if setup.participant_index() == 0 {
+                println!("{}", hexout);
+            }
+        }
+
+        println!("\nCase 3 outputs: ");
+
+        for out_sh in outs_case3_sh {
+            let mut opt = vec![];
+            for i in &circuit.output_gate_ids {
+                let cor: bool = validate_yao_share(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                assert!(cor);
+                let output = output_yao_functionality(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                opt.push(output);
+            }
+            let hexout = bool_vec_to_hex(opt);
+            if setup.participant_index() == 0 {
+                println!("{}", hexout);
+            }
+        }
+
+        println!("\nCase 4 outputs: ");
+
+        for out_sh in outs_case4_sh {
+            let mut opt = vec![];
+            for i in &circuit.output_gate_ids {
+                let cor: bool = validate_yao_share(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                assert!(cor);
+                let output = output_yao_functionality(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                opt.push(output);
+            }
+            let hexout = bool_vec_to_hex(opt);
+            if setup.participant_index() == 0 {
+                println!("{}", hexout);
+            }
+        }
+
+        println!("\nCase 5 outputs: ");
+
+        for out_sh in outs_case5_sh {
+            let mut opt = vec![];
+            for i in &circuit.output_gate_ids {
+                let cor: bool = validate_yao_share(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                assert!(cor);
+                let output = output_yao_functionality(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                opt.push(output);
+            }
+            let hexout = bool_vec_to_hex(opt);
+            if setup.participant_index() == 0 {
+                println!("{}", hexout);
+            }
+        }
+
+        println!("\nCase 6 outputs: ");
+
+        for out_sh in outs_case6_sh {
+            let mut opt = vec![];
+            for i in &circuit.output_gate_ids {
+                let cor: bool = validate_yao_share(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                assert!(cor);
+                let output = output_yao_functionality(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                opt.push(output);
+            }
+            let hexout = bool_vec_to_hex(opt);
+            if setup.participant_index() == 0 {
+                println!("{}", hexout);
+            }
+        }
+
+        println!("\nCase 7 outputs: ");
+
+        for out_sh in outs_case7_sh {
+            let mut opt = vec![];
+            for i in &circuit.output_gate_ids {
+                let cor: bool = validate_yao_share(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                assert!(cor);
+                let output = output_yao_functionality(
+                    &setup,
+                    &mut mpc_encryption,
+                    &mut tag_offset_counter,
+                    &mut relay,
+                    out_sh.get(i).unwrap(),
+                )
+                .await?;
+                opt.push(output);
+            }
+            let hexout = bool_vec_to_hex(opt);
+            if setup.participant_index() == 0 {
+                println!("{}", hexout);
+            }
+        }
+
         Ok((setup.participant_index(), op))
     }
 
@@ -903,7 +1870,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_entire_flow() {
         let circuit = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
-        let batched = true;
+        let batched = false;
         for i in 0..2 {
             for j in 0..2 {
                 let gin = vec![i != 0; 128];
