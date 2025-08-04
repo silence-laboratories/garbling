@@ -92,16 +92,8 @@ where
                 f.push(g0);
                 f.push(g1);
 
-                let w_out_p1 = if px == 1 {
-                    hash.tccr_hash(&xp_label, &k0_bytes)
-                } else {
-                    hash.tccr_hash(x_label, &k0_bytes)
-                };
-                let w_out_p2 = if py == 1 {
-                    hash.tccr_hash(&yp_label, &k1_bytes)
-                } else {
-                    hash.tccr_hash(y_label, &k1_bytes)
-                };
+                let w_out_p1 = if px == 1 { g0_p2 } else { g0_p1 };
+                let w_out_p2 = if py == 1 { g1_p2 } else { g1_p1 };
 
                 let w_out = if px * py == 1 {
                     xor_blocks(xor_blocks(w_out_p1, w_out_p2), setup.delta)
