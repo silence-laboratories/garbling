@@ -83,28 +83,26 @@ impl CircuitBuilder<BinaryCircuit> {
         current
     }
 
-    /// Adds a binary gate to the circuit and returns its reference ID.
-    pub fn gate(&mut self, gate: BinaryGate) -> usize {
-        self.circ.push_gate(gate);
-        self.get_next_ref_id()
-    }
-
     /// Adds a new garbler input gate to the circuit.
     /// Returns the reference ID of the created input gate.
     pub fn garbler_input(&mut self) -> usize {
         let id = self.get_next_garbler_input_id();
-        let r = self.gate(BinaryGate::GarblerInput { id });
+        let gate_id = self.get_next_ref_id();
+        self.circ
+            .push_gate(BinaryGate::GarblerInput { id, wire: gate_id });
         self.circ.push_garbler_input(id);
-        r
+        gate_id
     }
 
     /// Adds a new evaluator input gate to the circuit.
     /// Returns the reference ID of the created input gate.
     pub fn evaluator_input(&mut self) -> usize {
         let id = self.get_next_evaluator_input_id();
-        let r = self.gate(BinaryGate::EvaluatorInput { id });
+        let gate_id = self.get_next_ref_id();
+        self.circ
+            .push_gate(BinaryGate::EvaluatorInput { id, wire: gate_id });
         self.circ.push_evaluator_input(id);
-        r
+        gate_id
     }
 
     /// Adds multiple garbler input gates to the circuit.
@@ -131,32 +129,37 @@ impl CircuitBuilder<BinaryCircuit> {
     /// Adds an XOR gate to the circuit.
     /// Returns the reference ID of the resulting gate.
     pub fn xor(&mut self, xid: usize, yid: usize) -> usize {
+        let out_id = self.get_next_ref_id();
         let gate = BinaryGate::Xor {
             xid,
             yid,
-            out: None,
+            out: out_id,
         };
-        self.gate(gate)
+        self.circ.push_gate(gate);
+        out_id
     }
 
     /// Adds a NOT gate (negation) to the circuit.
     /// Returns the reference ID of the resulting gate.
     pub fn negate(&mut self, xid: usize) -> usize {
-        let gate = BinaryGate::Inv { xid, out: None };
-        self.gate(gate)
+        let out_id = self.get_next_ref_id();
+        let gate = BinaryGate::Inv { xid, out: out_id };
+        self.circ.push_gate(gate);
+        out_id
     }
 
     /// Adds an AND gate to the circuit.
     /// Returns the reference ID of the resulting gate.
     pub fn and(&mut self, xid: usize, yid: usize) -> usize {
+        let out_id = self.get_next_ref_id();
         let gate = BinaryGate::And {
             xid,
             yid,
             id: self.get_next_ciphertext_id(),
-            out: None,
+            out: out_id,
         };
-
-        self.gate(gate)
+        self.circ.push_gate(gate);
+        out_id
     }
 
     /// Adds a constant gate to the circuit.
@@ -166,11 +169,12 @@ impl CircuitBuilder<BinaryCircuit> {
         match self.const_map.get(&val) {
             Some(&r) => r,
             None => {
-                let gate = BinaryGate::Constant { val };
-                let r = self.gate(gate);
-                self.const_map.insert(val, r);
-                self.circ.push_constant_gate(r);
-                r
+                let out_id = self.get_next_ref_id();
+                let gate = BinaryGate::Constant { val, wire: out_id };
+                self.circ.push_gate(gate);
+                self.const_map.insert(val, out_id);
+                self.circ.push_constant_gate(val, out_id);
+                out_id
             }
         }
     }
@@ -180,6 +184,8 @@ impl CircuitBuilder<BinaryCircuit> {
         self.circ.push_output_gate(id);
     }
 
+    /// Takes a file, the input ids and adds the circuit in the file to the circuit.
+    /// Returns the resultant output gate ids from the circuit file.
     pub fn parse(
         &mut self,
         file_name: &str,
@@ -307,7 +313,7 @@ impl CircuitBuilder<BinaryCircuit> {
                     xid: newinput0,
                     yid: newinput1,
                     id,
-                    out: Some(output + latest_ref - sub_val),
+                    out: output + latest_ref - sub_val,
                 });
                 self.circ.increment_nonfree_gates();
                 id += 1;
@@ -332,7 +338,7 @@ impl CircuitBuilder<BinaryCircuit> {
                 self.circ.push_gate(BinaryGate::Xor {
                     xid: newinput0,
                     yid: newinput1,
-                    out: Some(output + latest_ref - sub_val),
+                    out: output + latest_ref - sub_val,
                 });
             } else if gate == "INV" {
                 let newinput0: usize;
@@ -346,7 +352,7 @@ impl CircuitBuilder<BinaryCircuit> {
 
                 self.circ.push_gate(BinaryGate::Inv {
                     xid: newinput0,
-                    out: Some(output + latest_ref - sub_val),
+                    out: output + latest_ref - sub_val,
                 });
             } else {
                 return Err(FileParsingError::FileFormatError(i));
@@ -363,6 +369,90 @@ impl CircuitBuilder<BinaryCircuit> {
 
         Ok(output_wire_ids)
     }
+
+    pub fn add_circuit(
+        &mut self,
+        other_circuit: &BinaryCircuit,
+        garbler_input_ids: &[usize],
+        evaluator_input_ids: &[usize],
+    ) -> Vec<usize> {
+        assert_eq!(
+            garbler_input_ids.len(),
+            other_circuit.garbler_input_ids.len()
+        );
+        assert_eq!(
+            evaluator_input_ids.len(),
+            other_circuit.evaluator_input_ids.len()
+        );
+
+        let mut old_to_new_map = HashMap::new();
+
+        // for (now_id, other_id) in garbler_input_ids
+        //     .iter()
+        //     .zip(&other_circuit.garbler_input_ids)
+        // {
+        //     old_to_new_map.insert(*other_id, *now_id);
+        // }
+
+        // for (now_id, other_id) in evaluator_input_ids
+        //     .iter()
+        //     .zip(&other_circuit.evaluator_input_ids)
+        // {
+        //     old_to_new_map.insert(*other_id, *now_id);
+        // }
+
+        println!("{:?}", old_to_new_map);
+        println!("gin {:?}", other_circuit.garbler_input_ids);
+        println!("ein {:?}", other_circuit.evaluator_input_ids);
+
+        // for (val, id) in &other_circuit.constant_map {
+        //     old_to_new_map.insert(*id, self.constant(*val));
+        // }
+
+        for gate in &other_circuit.gates {
+            match gate {
+                BinaryGate::Xor { xid, yid, out } => {
+                    println!("{}", xid);
+                    let newx = old_to_new_map.get(xid).unwrap();
+                    let newy = old_to_new_map.get(yid).unwrap();
+                    let newz = self.xor(*newx, *newy);
+                    old_to_new_map.insert(*out, newz);
+                }
+                BinaryGate::And {
+                    xid,
+                    yid,
+                    id: _,
+                    out,
+                } => {
+                    let newx = old_to_new_map.get(xid).unwrap();
+                    let newy = old_to_new_map.get(yid).unwrap();
+                    let newz = self.and(*newx, *newy);
+                    old_to_new_map.insert(*out, newz);
+                }
+                BinaryGate::Inv { xid, out } => {
+                    let newx = old_to_new_map.get(xid).unwrap();
+                    let newz = self.negate(*newx);
+                    old_to_new_map.insert(*out, newz);
+                }
+                BinaryGate::GarblerInput { id, wire } => {
+                    old_to_new_map.insert(*wire, garbler_input_ids[*id]);
+                }
+                BinaryGate::EvaluatorInput { id, wire } => {
+                    old_to_new_map.insert(*wire, evaluator_input_ids[*id]);
+                }
+                BinaryGate::Constant { val, wire } => {
+                    old_to_new_map.insert(*wire, self.constant(*val));
+                }
+            }
+        }
+
+        let mut outputs = Vec::new();
+        for out in &other_circuit.output_gate_ids {
+            outputs.push(*old_to_new_map.get(out).unwrap());
+        }
+
+        outputs
+    }
 }
 
 /// Implements the `Default` trait for `CircuitBuilder<BinaryCircuit>`.
@@ -374,7 +464,7 @@ impl Default for CircuitBuilder<BinaryCircuit> {
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
+    use std::{collections::HashMap, vec};
 
     use crate::{
         circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
@@ -385,49 +475,52 @@ mod tests {
     fn test_circuit_builder() {
         let circuit = build_comparison_circuit();
 
+        let mut reqconst = HashMap::new();
+        reqconst.insert(1, 6);
+
         let required_circuit = BinaryCircuit {
             gates: vec![
-                BinaryGate::EvaluatorInput { id: 0 },
-                BinaryGate::GarblerInput { id: 0 },
-                BinaryGate::EvaluatorInput { id: 1 },
-                BinaryGate::GarblerInput { id: 1 },
+                BinaryGate::EvaluatorInput { id: 0, wire: 0 },
+                BinaryGate::GarblerInput { id: 0, wire: 1 },
+                BinaryGate::EvaluatorInput { id: 1, wire: 2 },
+                BinaryGate::GarblerInput { id: 1, wire: 3 },
                 BinaryGate::Xor {
                     xid: 0,
                     yid: 1,
-                    out: None,
+                    out: 4,
                 },
                 BinaryGate::Xor {
                     xid: 2,
                     yid: 3,
-                    out: None,
+                    out: 5,
                 },
-                BinaryGate::Constant { val: 1 },
+                BinaryGate::Constant { val: 1, wire: 6 },
                 BinaryGate::And {
                     xid: 4,
                     yid: 5,
                     id: 0,
-                    out: None,
+                    out: 7,
                 },
                 BinaryGate::Xor {
                     xid: 4,
                     yid: 5,
-                    out: None,
+                    out: 8,
                 },
                 BinaryGate::Xor {
                     xid: 7,
                     yid: 8,
-                    out: None,
+                    out: 9,
                 },
                 BinaryGate::Xor {
                     xid: 9,
                     yid: 6,
-                    out: None,
+                    out: 10,
                 },
             ],
             garbler_input_ids: [0, 1].to_vec(),
             evaluator_input_ids: vec![0, 1],
             output_gate_ids: vec![10],
-            constant_gate_ids: vec![6],
+            constant_map: reqconst,
             num_nonfree_gates: 1,
             num_wires: 0,
         };

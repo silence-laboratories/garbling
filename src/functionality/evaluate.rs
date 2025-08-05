@@ -24,20 +24,20 @@ where
 
     for (i, gate) in circuit.gates.iter().enumerate() {
         let (out_gate, f_label) = match *gate {
-            BinaryGate::GarblerInput { id } => {
+            BinaryGate::GarblerInput { id, wire } => {
                 let label_option = garbler_input_encoding_shares.get(&id);
                 let label = label_option.unwrap();
-                (None, label.label)
+                (wire, label.label)
             }
-            BinaryGate::EvaluatorInput { id } => {
+            BinaryGate::EvaluatorInput { id, wire } => {
                 let label_option = evaluator_input_encoding_shares.get(&id);
                 let label = label_option.unwrap();
-                (None, label.label)
+                (wire, label.label)
             }
-            BinaryGate::Constant { val: _ } => {
+            BinaryGate::Constant { val: _, wire } => {
                 let op_label = f[f_index];
                 f_index += 1;
-                (None, op_label)
+                (wire, op_label)
             }
             BinaryGate::Xor { xid, yid, out } => {
                 let x_label = w[xid].as_ref().unwrap();
@@ -88,7 +88,7 @@ where
                 (out, *x_label)
             }
         };
-        w[out_gate.unwrap_or(i)] = Some(f_label);
+        w[out_gate] = Some(f_label);
     }
     let mut outputs: HashMap<usize, YaoEvaluatorShare> = HashMap::new();
     for r in circuit.get_output_gate_ids().iter() {

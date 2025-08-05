@@ -29,19 +29,19 @@ where
 
     for (i, gate) in circuit.gates.iter().enumerate() {
         let (out_gate, f_label) = match *gate {
-            BinaryGate::GarblerInput { id } => {
+            BinaryGate::GarblerInput { id, wire } => {
                 let label_option = garbler_input_shares.get(&id);
                 let label = label_option.unwrap();
                 assert_eq!(label.delta, setup.delta);
-                (None, label.f_label)
+                (wire, label.f_label)
             }
-            BinaryGate::EvaluatorInput { id } => {
+            BinaryGate::EvaluatorInput { id, wire } => {
                 let label_option = evaluator_input_shares.get(&id);
                 let label = label_option.unwrap();
                 assert_eq!(label.delta, setup.delta);
-                (None, label.f_label)
+                (wire, label.f_label)
             }
-            BinaryGate::Constant { val } => {
+            BinaryGate::Constant { val, wire } => {
                 let mut zerowire = Block::default();
                 rng.fill_bytes(&mut zerowire);
                 zerowire[0] |= 1;
@@ -50,7 +50,7 @@ where
                     newwire = xor_blocks(newwire, setup.delta);
                 }
                 f.push(newwire);
-                (None, zerowire)
+                (wire, zerowire)
             }
             BinaryGate::Xor { xid, yid, out } => {
                 let x_label = w[xid].as_ref().unwrap();
@@ -107,7 +107,7 @@ where
                 (out, xor_blocks(*x_label, setup.delta))
             }
         };
-        w[out_gate.unwrap_or(i)] = Some(f_label);
+        w[out_gate] = Some(f_label);
     }
     let mut outputs = HashMap::new();
     for r in circuit.get_output_gate_ids().iter() {
@@ -194,13 +194,10 @@ mod tests {
         );
         println!("cir: gates.len() {}", circuit.gates.len());
         println!("cir: num_nonfree_gates {}", circuit.num_nonfree_gates);
+        println!("cir: constant_map.len() {}", circuit.constant_map.len());
         println!(
-            "cir: constant_gate_ids.len() {}",
-            circuit.constant_gate_ids.len()
-        );
-        println!(
-            "cir: 2*constant_gate_ids.len() + num_nonfree_gates {}",
-            2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len()
+            "cir: 2*constant_map.len() + num_nonfree_gates {}",
+            2 * circuit.num_nonfree_gates + circuit.constant_map.len()
         );
 
         println!("f {}\n\n\n\n\n\n\n", f.len());
@@ -256,13 +253,10 @@ mod tests {
         );
         println!("cir: gates.len() {}", circuit.gates.len());
         println!("cir: num_nonfree_gates {}", circuit.num_nonfree_gates);
+        println!("cir: constant_map.len() {}", circuit.constant_map.len());
         println!(
-            "cir: constant_gate_ids.len() {}",
-            circuit.constant_gate_ids.len()
-        );
-        println!(
-            "cir: 2*constant_gate_ids.len() + num_nonfree_gates {}",
-            2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len()
+            "cir: 2*constant_map.len() + num_nonfree_gates {}",
+            2 * circuit.num_nonfree_gates + circuit.constant_map.len()
         );
 
         println!("f {}", f.len());

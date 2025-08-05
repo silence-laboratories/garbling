@@ -1,4 +1,4 @@
-use crate::circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder, gate::BinaryGate};
+use crate::circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder};
 
 use super::threepartytraits::ThreePartyBinaryCircuitBuilder;
 
@@ -15,11 +15,8 @@ impl ThreePartyBinaryCircuitBuilder for CircuitBuilder<BinaryCircuit> {
     /// Adds two new evaluator input gates and an xor gate between
     /// them to the circuit. Returns the reference ID of the created xor gate.
     fn evaluator_input_threeparty(&mut self) -> usize {
-        let id = self.get_next_evaluator_input_id_threeparty();
-        let r = self.gate(BinaryGate::EvaluatorInput { id });
-        let s = self.gate(BinaryGate::EvaluatorInput { id: id + 1 });
-        self.circ.push_evaluator_input(id);
-        self.circ.push_evaluator_input(id + 1);
+        let r = self.evaluator_input();
+        let s = self.evaluator_input();
         self.xor(r, s)
     }
 
@@ -35,71 +32,75 @@ impl ThreePartyBinaryCircuitBuilder for CircuitBuilder<BinaryCircuit> {
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
+    use std::{collections::HashMap, vec};
 
     use crate::{
-        circuitop::{circuit::BinaryCircuit, gate::BinaryGate}, old::garbling3pc::comparison_circ_3pc::build_comparison_circuit_threeparty,
+        circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
+        old::garbling3pc::comparison_circ_3pc::build_comparison_circuit_threeparty,
     };
 
     #[test]
     fn test_circuit_builder_3pc() {
         let circuit = build_comparison_circuit_threeparty();
 
+        let mut reqconst = HashMap::new();
+        reqconst.insert(1, 10);
+
         let required_circuit = BinaryCircuit {
             gates: vec![
-                BinaryGate::EvaluatorInput { id: 0 },
-                BinaryGate::EvaluatorInput { id: 1 },
+                BinaryGate::EvaluatorInput { id: 0, wire: 0 },
+                BinaryGate::EvaluatorInput { id: 1, wire: 1 },
                 BinaryGate::Xor {
                     xid: 0,
                     yid: 1,
-                    out: None,
+                    out: 2,
                 },
-                BinaryGate::GarblerInput { id: 0 },
-                BinaryGate::EvaluatorInput { id: 2 },
-                BinaryGate::EvaluatorInput { id: 3 },
+                BinaryGate::GarblerInput { id: 0, wire: 3 },
+                BinaryGate::EvaluatorInput { id: 2, wire: 4 },
+                BinaryGate::EvaluatorInput { id: 3, wire: 5 },
                 BinaryGate::Xor {
                     xid: 4,
                     yid: 5,
-                    out: None,
+                    out: 6,
                 },
-                BinaryGate::GarblerInput { id: 1 },
+                BinaryGate::GarblerInput { id: 1, wire: 7 },
                 BinaryGate::Xor {
                     xid: 2,
                     yid: 3,
-                    out: None,
+                    out: 8,
                 },
                 BinaryGate::Xor {
                     xid: 6,
                     yid: 7,
-                    out: None,
+                    out: 9,
                 },
-                BinaryGate::Constant { val: 1 },
+                BinaryGate::Constant { val: 1, wire: 10 },
                 BinaryGate::And {
                     xid: 8,
                     yid: 9,
                     id: 0,
-                    out: None,
+                    out: 11,
                 },
                 BinaryGate::Xor {
                     xid: 8,
                     yid: 9,
-                    out: None,
+                    out: 12,
                 },
                 BinaryGate::Xor {
                     xid: 11,
                     yid: 12,
-                    out: None,
+                    out: 13,
                 },
                 BinaryGate::Xor {
                     xid: 13,
                     yid: 10,
-                    out: None,
+                    out: 14,
                 },
             ],
             garbler_input_ids: vec![0, 1],
             evaluator_input_ids: vec![0, 1, 2, 3],
             output_gate_ids: vec![14],
-            constant_gate_ids: vec![10],
+            constant_map: reqconst,
             num_nonfree_gates: 1,
             num_wires: 0,
         };

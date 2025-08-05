@@ -40,9 +40,9 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
         evaluator_inputs: &HashMap<usize, Block>,
     ) -> Result<HashMap<usize, Block>, ThreePartyEvaluatorError> {
         let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
-        for (i, gate) in circ.gates.iter().enumerate() {
+        for gate in &circ.gates {
             let (z_ref, value) = match *gate {
-                BinaryGate::GarblerInput { id } => {
+                BinaryGate::GarblerInput { id, wire } => {
                     if id >= garbler_inputs.len() {
                         return Err(ThreePartyEvaluatorError::GarblerIpLenError(
                             id,
@@ -50,9 +50,9 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
                         ));
                     }
                     let input_hash = garbler_inputs.get(&id).unwrap().to_owned();
-                    (None, input_hash)
+                    (wire, input_hash)
                 }
-                BinaryGate::EvaluatorInput { id } => {
+                BinaryGate::EvaluatorInput { id, wire } => {
                     if id >= evaluator_inputs.len() {
                         return Err(ThreePartyEvaluatorError::EvaluatorIpLenError(
                             id,
@@ -60,9 +60,9 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
                         ));
                     }
                     let input_hash = evaluator_inputs.get(&id).unwrap().to_owned();
-                    (None, input_hash)
+                    (wire, input_hash)
                 }
-                BinaryGate::Constant { val } => (None, self.constant(val)?),
+                BinaryGate::Constant { val, wire } => (wire, self.constant(val)?),
                 BinaryGate::Inv { xid, out } => (
                     out,
                     self.negate(
@@ -99,7 +99,7 @@ impl<H: HashFunction> ThreePartyBinaryEvaluator for BinaryEvaluator<H> {
                     )?,
                 ),
             };
-            cache[z_ref.unwrap_or(i)] = Some(value)
+            cache[z_ref] = Some(value)
         }
         let mut garbled_output: HashMap<usize, Block> = HashMap::new();
         for r in circ.get_output_gate_ids().iter() {

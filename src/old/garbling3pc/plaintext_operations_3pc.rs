@@ -1,10 +1,10 @@
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    old::garbling3pc::garbling3pc_errors::BinaryPlaintextError,
     old::garbling2pc::{
         exec::{BinaryOperations, ExecutionPrimitives},
         plaintext_operations::BinaryPlaintext,
     },
+    old::garbling3pc::garbling3pc_errors::BinaryPlaintextError,
 };
 
 use super::threepartytraits::ThreePartyBinaryPlaintext;
@@ -36,18 +36,18 @@ impl ThreePartyBinaryPlaintext for BinaryPlaintext {
         evaluator_inputs: [&[bool]; 2],
     ) -> Result<Vec<bool>, BinaryPlaintextError> {
         let mut cache: Vec<Option<bool>> = vec![None; circ.gates.len()];
-        for (i, gate) in circ.gates.iter().enumerate() {
+        for gate in &circ.gates {
             let (z_ref, value) = match *gate {
-                BinaryGate::GarblerInput { id } => {
+                BinaryGate::GarblerInput { id, wire } => {
                     if id >= garbler_inputs.len() {
                         return Err(BinaryPlaintextError::GarblerIpLenError(
                             id,
                             garbler_inputs.len(),
                         ));
                     }
-                    (None, self.process_garbler_input(id, garbler_inputs[id])?)
+                    (wire, self.process_garbler_input(id, garbler_inputs[id])?)
                 }
-                BinaryGate::EvaluatorInput { id } => {
+                BinaryGate::EvaluatorInput { id, wire } => {
                     if id / 2 >= evaluator_inputs[0].len() {
                         return Err(BinaryPlaintextError::GarblerIpLenError(
                             id,
@@ -63,17 +63,17 @@ impl ThreePartyBinaryPlaintext for BinaryPlaintext {
                     }
                     if id % 2 == 0 {
                         (
-                            None,
+                            wire,
                             self.process_evaluator_input(id, evaluator_inputs[0][id / 2])?,
                         )
                     } else {
                         (
-                            None,
+                            wire,
                             self.process_evaluator_input(id, evaluator_inputs[1][id / 2])?,
                         )
                     }
                 }
-                BinaryGate::Constant { val } => (None, self.constant(val)?),
+                BinaryGate::Constant { val, wire } => (wire, self.constant(val)?),
                 BinaryGate::Inv { xid, out } => (
                     out,
                     self.negate(
@@ -110,7 +110,7 @@ impl ThreePartyBinaryPlaintext for BinaryPlaintext {
                     )?,
                 ),
             };
-            cache[z_ref.unwrap_or(i)] = Some(value)
+            cache[z_ref] = Some(value)
         }
         let mut outputs = Vec::with_capacity(circ.output_gate_ids.len());
         for r in circ.get_output_gate_ids().iter() {

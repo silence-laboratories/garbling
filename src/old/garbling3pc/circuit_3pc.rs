@@ -4,7 +4,8 @@ use std::{
 };
 
 use crate::{
-    circuitop::{circuit::BinaryCircuit, gate::BinaryGate}, config::errors::FileParsingError,
+    circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
+    config::errors::FileParsingError,
 };
 
 use super::threepartytraits::ThreePartyBinaryCircuit;
@@ -101,19 +102,25 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
         let mut id: usize = 0;
 
         for i in 0..num_garbler_inputs {
-            output_circuit.push_gate(BinaryGate::GarblerInput { id: i });
+            output_circuit.push_gate(BinaryGate::GarblerInput { id: i, wire: i });
             output_circuit.push_garbler_input(i);
         }
 
         for i in 0..num_evaluator_inputs {
-            output_circuit.push_gate(BinaryGate::EvaluatorInput { id: 2 * i });
+            output_circuit.push_gate(BinaryGate::EvaluatorInput {
+                id: 2 * i,
+                wire: num_garbler_inputs + 3 * i,
+            });
             output_circuit.push_evaluator_input(2 * i);
-            output_circuit.push_gate(BinaryGate::EvaluatorInput { id: 2 * i + 1 });
+            output_circuit.push_gate(BinaryGate::EvaluatorInput {
+                id: 2 * i + 1,
+                wire: num_garbler_inputs + 3 * i + 1,
+            });
             output_circuit.push_evaluator_input(2 * i + 1);
             output_circuit.push_gate(BinaryGate::Xor {
                 xid: num_garbler_inputs + 3 * i,
                 yid: num_garbler_inputs + 3 * i + 1,
-                out: Some(num_garbler_inputs + 3 * i + 2),
+                out: num_garbler_inputs + 3 * i + 2,
             });
         }
 
@@ -181,7 +188,7 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
                     xid: input0,
                     yid: input1,
                     id,
-                    out: Some(output),
+                    out: output,
                 });
                 id += 1;
                 output_circuit.increment_nonfree_gates();
@@ -189,12 +196,12 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
                 output_circuit.push_gate(BinaryGate::Xor {
                     xid: input0,
                     yid: input1,
-                    out: Some(output),
+                    out: output,
                 });
             } else if gate == "INV" {
                 output_circuit.push_gate(BinaryGate::Inv {
                     xid: input0,
-                    out: Some(output),
+                    out: output,
                 });
             } else {
                 return Err(FileParsingError::FileFormatError(i));
@@ -206,6 +213,8 @@ impl ThreePartyBinaryCircuit for BinaryCircuit {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::{
         circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
         old::garbling3pc::threepartytraits::ThreePartyBinaryCircuit,
@@ -217,61 +226,61 @@ mod tests {
 
         let required_circuit = BinaryCircuit {
             gates: vec![
-                BinaryGate::GarblerInput { id: 0 },
-                BinaryGate::GarblerInput { id: 1 },
-                BinaryGate::EvaluatorInput { id: 0 },
-                BinaryGate::EvaluatorInput { id: 1 },
+                BinaryGate::GarblerInput { id: 0, wire: 0 },
+                BinaryGate::GarblerInput { id: 1, wire: 1 },
+                BinaryGate::EvaluatorInput { id: 0, wire: 2 },
+                BinaryGate::EvaluatorInput { id: 1, wire: 3 },
                 BinaryGate::Xor {
                     xid: 2,
                     yid: 3,
-                    out: Some(4),
+                    out: 4,
                 },
-                BinaryGate::EvaluatorInput { id: 2 },
-                BinaryGate::EvaluatorInput { id: 3 },
+                BinaryGate::EvaluatorInput { id: 2, wire: 5 },
+                BinaryGate::EvaluatorInput { id: 3, wire: 6 },
                 BinaryGate::Xor {
                     xid: 5,
                     yid: 6,
-                    out: Some(7),
+                    out: 7,
                 },
                 BinaryGate::And {
                     xid: 0,
                     yid: 4,
                     id: 0,
-                    out: Some(8),
+                    out: 8,
                 },
                 BinaryGate::And {
                     xid: 0,
                     yid: 7,
                     id: 1,
-                    out: Some(9),
+                    out: 9,
                 },
                 BinaryGate::And {
                     xid: 1,
                     yid: 4,
                     id: 2,
-                    out: Some(10),
+                    out: 10,
                 },
                 BinaryGate::And {
                     xid: 1,
                     yid: 7,
                     id: 3,
-                    out: Some(11),
+                    out: 11,
                 },
                 BinaryGate::Xor {
                     xid: 9,
                     yid: 10,
-                    out: Some(12),
+                    out: 12,
                 },
                 BinaryGate::Xor {
                     xid: 12,
                     yid: 11,
-                    out: Some(13),
+                    out: 13,
                 },
             ],
             garbler_input_ids: vec![0, 1],
             evaluator_input_ids: vec![0, 1, 2, 3],
             output_gate_ids: vec![12, 13],
-            constant_gate_ids: vec![],
+            constant_map: HashMap::new(),
             num_nonfree_gates: 4,
             num_wires: 0,
         };

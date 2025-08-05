@@ -155,16 +155,16 @@ impl<H: HashFunction> BinaryEvaluator<H> {
         evaluator_inputs: &HashMap<usize, Block>,
     ) -> Result<HashMap<usize, Block>, EvaluatorError> {
         let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
-        for (i, gate) in circ.gates.iter().enumerate() {
+        for gate in &circ.gates {
             let (z_ref, value) = match *gate {
-                BinaryGate::GarblerInput { id } => {
+                BinaryGate::GarblerInput { id, wire } => {
                     if id >= garbler_inputs.len() {
                         return Err(EvaluatorError::GarblerIpLenError(id, garbler_inputs.len()));
                     }
                     let input_hash = garbler_inputs.get(&id).unwrap().to_owned();
-                    (None, input_hash)
+                    (wire, input_hash)
                 }
-                BinaryGate::EvaluatorInput { id } => {
+                BinaryGate::EvaluatorInput { id, wire } => {
                     if id >= evaluator_inputs.len() {
                         return Err(EvaluatorError::EvaluatorIpLenError(
                             id,
@@ -172,9 +172,9 @@ impl<H: HashFunction> BinaryEvaluator<H> {
                         ));
                     }
                     let input_hash = evaluator_inputs.get(&id).unwrap().to_owned();
-                    (None, input_hash)
+                    (wire, input_hash)
                 }
-                BinaryGate::Constant { val } => (None, self.constant(val)?),
+                BinaryGate::Constant { val, wire } => (wire, self.constant(val)?),
                 BinaryGate::Inv { xid, out } => (
                     out,
                     self.negate(
@@ -211,7 +211,7 @@ impl<H: HashFunction> BinaryEvaluator<H> {
                     )?,
                 ),
             };
-            cache[z_ref.unwrap_or(i)] = Some(value)
+            cache[z_ref] = Some(value)
         }
         let mut garbled_output: HashMap<usize, Block> = HashMap::new();
         for r in circ.get_output_gate_ids().iter() {
@@ -380,6 +380,8 @@ impl<H: HashFunction> BinaryOperations for BinaryEvaluator<H> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
@@ -704,5 +706,47 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_aes_garbled_added() {
+        let aes = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
+
+        let mut builder = CircuitBuilder::new();
+        let key: Vec<usize> = (0..128).map(|_| builder.constant(0)).collect();
+
+        let msg: Vec<usize> = (0..128).map(|_| builder.constant(0)).collect();
+
+        let outs = builder.add_circuit(&aes, &key, &msg);
+
+        for i in outs {
+            builder.output(i);
+        }
+
+        let circuit = builder.finish();
+
+        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
+        let mut garbler = BinaryGarbler::new(AesGarbleHash::new(AES_KEY), &mut rng);
+        let garble_output = garbler.garble(&circuit).unwrap();
+        let mut evaluator = BinaryEvaluator::new(
+            garble_output.decoding_infos.clone(),
+            AesGarbleHash::new(AES_KEY),
+            garble_output.garbled_circuit.clone(),
+        );
+        let output = evaluator
+            .evaluate(&circuit, &HashMap::new(), &HashMap::new())
+            .unwrap();
+        let auth =
+            garbler.authenticate_garbled_output(&output, &garble_output.garbled_output_wires);
+        assert!(auth);
+        let decoutput =
+            evaluator.get_plaintext_output(circuit.get_output_gate_ids().to_vec(), output.clone());
+        let hexout = bool_vec_to_hex(decoutput);
+        assert_eq!(
+            hexout,
+            "74d42c539a5f3211dc3451f72bd29766".to_string(),
+            "outval: {} realval: 74d42c539a5f3211dc3451f72bd29766",
+            hexout
+        );
     }
 }

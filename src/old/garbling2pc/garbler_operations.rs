@@ -389,19 +389,21 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
         let mut cache: Vec<Option<Block>> = vec![None; circ.gates.len()];
         let mut garbler_input_encodings: HashMap<usize, Block> = HashMap::new();
         let mut evaluator_input_encodings: HashMap<usize, Block> = HashMap::new();
-        for (i, gate) in circ.gates.iter().enumerate() {
+        for gate in &circ.gates {
             let (z_ref, value) = match *gate {
-                BinaryGate::GarblerInput { id } => {
+                BinaryGate::GarblerInput { id, wire } => {
                     let input_hash = self.process_garbler_input(id, false)?;
                     garbler_input_encodings.insert(id, input_hash);
-                    (None, input_hash)
+                    println!("gvisit {} {}", id, wire);
+                    (wire, input_hash)
                 }
-                BinaryGate::EvaluatorInput { id } => {
+                BinaryGate::EvaluatorInput { id, wire } => {
                     let input_hash = self.process_evaluator_input(id, false)?;
                     evaluator_input_encodings.insert(id, input_hash);
-                    (None, input_hash)
+                    println!("evisit {} {}", id, wire);
+                    (wire, input_hash)
                 }
-                BinaryGate::Constant { val } => (None, self.constant(val)?),
+                BinaryGate::Constant { val, wire } => (wire, self.constant(val)?),
                 BinaryGate::Inv { xid, out } => (
                     out,
                     self.negate(
@@ -438,7 +440,7 @@ impl<'a, H: HashFunction, R: RngCore + CryptoRng> BinaryGarbler<'a, H, R> {
                     )?,
                 ),
             };
-            cache[z_ref.unwrap_or(i)] = Some(value)
+            cache[z_ref] = Some(value)
         }
         let mut garbled_output_wires = HashMap::new();
         let mut decoding_infos: HashMap<usize, u8> = HashMap::new();

@@ -147,7 +147,7 @@ where
     relay.ask_messages(setup, tag1, true).await?;
 
     if party_id == 2 {
-        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len()) * BLOCK_SIZE;
+        let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len()) * BLOCK_SIZE;
 
         let tfs: Vec<Vec<TBlock>> =
             receive_from_parties(setup, mpc_encryption, tag1, len, vec![0, 1], relay).await?;
@@ -201,7 +201,7 @@ where
             MapArg::Scalar(circuit) => match g_inputs {
                 MapArg::Scalar(g_input) => match e_inputs {
                     MapArg::Scalar(e_input) => {
-                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                             * BLOCK_SIZE;
 
                         let tfs: Vec<Vec<TBlock>> = receive_from_parties(
@@ -226,7 +226,7 @@ where
                         output.push(temp);
                     }
                     MapArg::Vector(e_inputs) => {
-                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                             * BLOCK_SIZE
                             * e_inputs.len();
 
@@ -246,7 +246,7 @@ where
                         assert_eq!(fs[0], fs[1]);
 
                         let complen =
-                            2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                            2 * circuit.num_nonfree_gates + circuit.constant_map.len();
                         let mut temp = Vec::new();
                         (0..e_inputs.len()).for_each(|i| {
                             let f = fs[0][complen * i..complen * (i + 1)].to_vec();
@@ -264,7 +264,7 @@ where
                 },
                 MapArg::Vector(g_inputs) => match e_inputs {
                     MapArg::Scalar(e_input) => {
-                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                             * BLOCK_SIZE
                             * g_inputs.len();
 
@@ -284,7 +284,7 @@ where
                         assert_eq!(fs[0], fs[1]);
 
                         let complen =
-                            2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                            2 * circuit.num_nonfree_gates + circuit.constant_map.len();
                         let mut temp = Vec::new();
                         (0..g_inputs.len()).for_each(|i| {
                             let f = fs[0][complen * i..complen * (i + 1)].to_vec();
@@ -301,7 +301,7 @@ where
                     }
                     MapArg::Vector(e_inputs) => {
                         assert_eq!(e_inputs.len(), g_inputs.len());
-                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                             * BLOCK_SIZE
                             * g_inputs.len();
 
@@ -321,7 +321,7 @@ where
                         assert_eq!(fs[0], fs[1]);
 
                         let complen =
-                            2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                            2 * circuit.num_nonfree_gates + circuit.constant_map.len();
                         let mut temp = Vec::new();
                         (0..g_inputs.len()).for_each(|i| {
                             let f = fs[0][complen * i..complen * (i + 1)].to_vec();
@@ -344,7 +344,7 @@ where
                         let mut len = 0;
                         for circuit in circuits {
                             len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_gate_ids.len())
+                                + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -367,7 +367,7 @@ where
                         let mut len = 0;
                         circuits.iter().for_each(|circuit| {
                             let complen =
-                                2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                                2 * circuit.num_nonfree_gates + circuit.constant_map.len();
                             let f = fs[0][len..len + complen].to_vec();
                             let out = yao_circuit_eval_process_msg1_p2(
                                 g_input, e_input, &f, circuit, hash,
@@ -383,7 +383,7 @@ where
                         let mut len = 0;
                         for circuit in circuits {
                             len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_gate_ids.len())
+                                + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -409,7 +409,7 @@ where
                             .zip(e_inputs)
                             .for_each(|(circuit, e_input)| {
                                 let complen =
-                                    2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                                    2 * circuit.num_nonfree_gates + circuit.constant_map.len();
                                 let f = fs[0][len..len + complen].to_vec();
                                 let out = yao_circuit_eval_process_msg1_p2(
                                     g_input, e_input, &f, circuit, hash,
@@ -427,7 +427,7 @@ where
                         let mut len = 0;
                         for circuit in circuits {
                             len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_gate_ids.len())
+                                + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -453,7 +453,7 @@ where
                             .zip(g_inputs)
                             .for_each(|(circuit, g_input)| {
                                 let complen =
-                                    2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                                    2 * circuit.num_nonfree_gates + circuit.constant_map.len();
                                 let f = fs[0][len..len + complen].to_vec();
                                 let out = yao_circuit_eval_process_msg1_p2(
                                     g_input, e_input, &f, circuit, hash,
@@ -470,7 +470,7 @@ where
                         let mut len = 0;
                         for circuit in circuits {
                             len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_gate_ids.len())
+                                + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -494,7 +494,7 @@ where
                         circuits.iter().zip(g_inputs).zip(e_inputs).for_each(
                             |((circuit, g_input), e_input)| {
                                 let complen =
-                                    2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len();
+                                    2 * circuit.num_nonfree_gates + circuit.constant_map.len();
                                 let f = fs[0][len..len + complen].to_vec();
                                 let out = yao_circuit_eval_process_msg1_p2(
                                     g_input, e_input, &f, circuit, hash,
@@ -533,7 +533,7 @@ where
                             })
                             .collect();
 
-                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                             * BLOCK_SIZE
                             * e_inputs.len();
 
@@ -562,7 +562,7 @@ where
                             })
                             .collect();
 
-                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                             * BLOCK_SIZE
                             * g_inputs.len();
 
@@ -591,7 +591,7 @@ where
                             })
                             .collect();
 
-                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_gate_ids.len())
+                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                             * BLOCK_SIZE
                             * g_inputs.len();
 
@@ -625,7 +625,7 @@ where
                         let mut len = 0;
                         for circuit in circuits {
                             len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_gate_ids.len())
+                                + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -657,7 +657,7 @@ where
                         let mut len = 0;
                         for circuit in circuits {
                             len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_gate_ids.len())
+                                + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -691,7 +691,7 @@ where
                         let mut len = 0;
                         for circuit in circuits {
                             len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_gate_ids.len())
+                                + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -725,7 +725,7 @@ where
                         let mut len = 0;
                         for circuit in circuits {
                             len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_gate_ids.len())
+                                + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
