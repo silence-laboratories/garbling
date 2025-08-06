@@ -387,32 +387,9 @@ impl CircuitBuilder<BinaryCircuit> {
 
         let mut old_to_new_map = HashMap::new();
 
-        // for (now_id, other_id) in garbler_input_ids
-        //     .iter()
-        //     .zip(&other_circuit.garbler_input_ids)
-        // {
-        //     old_to_new_map.insert(*other_id, *now_id);
-        // }
-
-        // for (now_id, other_id) in evaluator_input_ids
-        //     .iter()
-        //     .zip(&other_circuit.evaluator_input_ids)
-        // {
-        //     old_to_new_map.insert(*other_id, *now_id);
-        // }
-
-        println!("{:?}", old_to_new_map);
-        println!("gin {:?}", other_circuit.garbler_input_ids);
-        println!("ein {:?}", other_circuit.evaluator_input_ids);
-
-        // for (val, id) in &other_circuit.constant_map {
-        //     old_to_new_map.insert(*id, self.constant(*val));
-        // }
-
         for gate in &other_circuit.gates {
             match gate {
                 BinaryGate::Xor { xid, yid, out } => {
-                    println!("{}", xid);
                     let newx = old_to_new_map.get(xid).unwrap();
                     let newy = old_to_new_map.get(yid).unwrap();
                     let newz = self.xor(*newx, *newy);
