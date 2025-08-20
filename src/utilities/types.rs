@@ -45,36 +45,36 @@ pub fn tblock_vec2block_vec(x: &[TBlock]) -> Vec<Block> {
     out
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct YaoGarblerShare {
     pub delta: Block,
     pub f_label: Block,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct YaoEvaluatorShare {
     pub label: Block,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct YaoShare {
     pub g_share: Option<YaoGarblerShare>,
     pub e_share: Option<YaoEvaluatorShare>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct GarblerSetup {
     pub comm_crs: Block,
     pub prf_key: [u8; 32],
     pub delta: Block,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct EvaluatorSetup {
     pub comm_crs: Block,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct YaoSetup {
     pub g_setup: Option<GarblerSetup>,
     pub e_setup: Option<EvaluatorSetup>,
