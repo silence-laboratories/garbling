@@ -7,7 +7,12 @@ edition = "2021"
 
 [dev-dependencies]
 criterion = "0.5.1"
-
+tokio = { workspace = true, features = [
+    "rt",
+    "sync",
+    "macros",
+    "rt-multi-thread",
+]}
 [features]
 test-support = ["sl-mpc-mate/simple-relay"]
 
@@ -33,3 +38,7 @@ sl-mpc-mate = { git = "https://github.com/silence-laboratories/sl-crypto.git", r
 sha2 = "0.10.8"
 merlin = "3.0.0"
 crypto-bigint = "0.6.1"
+
+
+[workspace.dependencies]
+tokio = "1.43.0"
