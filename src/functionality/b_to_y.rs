@@ -8,8 +8,8 @@ use sl_compute::{
         types::ProtocolError,
         utils::{receive_from_parties, send_to_party, TagOffsetCounter},
     },
-    types::BinaryShare,
 };
+use sl_compute_common::BinaryShare;
 use sl_mpc_mate::{coord::Relay, message::MessageTag};
 
 use crate::{

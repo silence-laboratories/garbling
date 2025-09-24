@@ -38,7 +38,7 @@ sl-mpc-mate = { git = "https://github.com/silence-laboratories/sl-crypto.git", r
 sha2 = "0.10.8"
 merlin = "3.0.0"
 crypto-bigint = "0.6.1"
-
+sl-compute-common = { git = "https://github.com/silence-laboratories/sl-crypto.git", branch = "sl-compute-common" }
 
 [workspace.dependencies]
 tokio = "1.43.0"
