@@ -719,7 +719,7 @@ where
     }
 }
 
-/// Generate setup messages and seeds for DKG parties.
+/// Generate setup messages and seeds for parties.
 #[cfg(any(test, feature = "test-support"))]
 pub fn run_init(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
     use std::time::Duration;

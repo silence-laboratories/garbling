@@ -49,3 +49,10 @@ thiserror = "1.0"
 
 [workspace.dependencies]
 tokio = "1.43.0"
+
+
+[workspace]
+members = [
+  ".",
+  "crates/hd-migration",
+]
