@@ -131,7 +131,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_reconstruct_shamir() {
-        let mut rng = rngs::StdRng::from_os_rng();
+        let mut rng = rngs::StdRng::from_entropy();
 
         let x1 = NonZeroScalar::new(random_scalar(&mut rng)).unwrap();
         let x2 = NonZeroScalar::new(random_scalar(&mut rng)).unwrap();

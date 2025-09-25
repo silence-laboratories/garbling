@@ -52,7 +52,7 @@ where
     };
 
     if party_id == 2 {
-        let mut rng = rand::rngs::StdRng::from_os_rng();
+        let mut rng = rand::rngs::StdRng::from_entropy();
         let mut crs = Block::default();
         rng.fill_bytes(&mut crs);
 
@@ -64,7 +64,7 @@ where
         let crss: Vec<Block> =
             receive_from_parties(setup, tag1, BLOCK_SIZE, vec![2], relay).await?;
 
-        let mut rng = rand::rngs::StdRng::from_os_rng();
+        let mut rng = rand::rngs::StdRng::from_entropy();
         let seed = if party_id == 0 {
             let mut seed = [0u8; 32];
             rng.fill_bytes(&mut seed);

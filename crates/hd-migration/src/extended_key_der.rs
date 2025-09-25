@@ -36,7 +36,7 @@ where
 
     let mut relay = relay;
 
-    let mut rng = StdRng::from_os_rng();
+    let mut rng = StdRng::from_entropy();
     let mut seed = [0u8; 32];
     rng.fill_bytes(&mut seed);
 
@@ -175,7 +175,7 @@ mod tests {
         ]))
         .expect("Conversion Failed");
 
-        let mut rng = StdRng::from_os_rng();
+        let mut rng = StdRng::from_entropy();
         let mut s1_byt = [0u8; 32];
         rng.fill_bytes(&mut s1_byt);
         let mut s2_byt = [0u8; 32];

@@ -6,8 +6,8 @@ edition = "2024"
 
 [dependencies]
 garbled-circuit = { path = "../.." }
-rand = "0.9.1"
-rand_chacha = "0.9.0"
+rand = "0.8"
+rand_chacha = "0.3"
 num-bigint = "0.4"
 crypto-bigint = { version = "0.6.1", features = ["serde", "alloc"] }
 sha2 = "0.10.8"

@@ -781,7 +781,7 @@ where
     relay.ask_messages(setup, COMMON_RAND_MSG, true).await?;
 
     let mut rng = ChaCha20Rng::from_seed(*seed);
-    let key_next: [u8; 32] = rng.random();
+    let key_next: [u8; 32] = rng.gen();
 
     let key_prev =
         p2p_send_to_next_receive_from_prev(setup, COMMON_RAND_MSG, key_next, &mut relay).await?;

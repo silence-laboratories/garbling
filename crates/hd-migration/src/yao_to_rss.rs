@@ -302,7 +302,7 @@ pub fn get_private_key_shares_dkg_create_msg2_p3(
     // Step 5f
     let pk_tilde_star = ProjectivePoint::GENERATOR * sk_tilde_star;
 
-    let mut rng = rand::rngs::StdRng::from_os_rng();
+    let mut rng = rand::rngs::StdRng::from_entropy();
     let mut seed = [0u8; 32];
     rng.fill_bytes(&mut seed);
     let mut rng = ChaCha8Rng::from_seed(seed);
@@ -741,10 +741,10 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_yao_to_scalar_rss_keypair() {
-        let mut rng = rngs::StdRng::from_os_rng();
+        let mut rng = rngs::StdRng::from_entropy();
         let mut i1 = vec![false; 256];
         (0..i1.len()).for_each(|i| {
-            i1[i] = rng.random_bool(0.5);
+            i1[i] = rng.gen_bool(0.5);
         });
 
         let mut parties = tokio::task::JoinSet::new();
