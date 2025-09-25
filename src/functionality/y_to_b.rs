@@ -538,10 +538,9 @@ mod tests {
         let mut relay = relay;
 
         let mut init_seed = [0u8; 32];
-        let mut common_randomness_seed = [0u8; 32];
+        let common_randomness_seed = [setup.participant_index() as u8; 32];
         let mut transcript = Transcript::new(b"test");
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
-        transcript.challenge_bytes(b"common-randomness-seed", &mut common_randomness_seed);
 
         let mut tag_offset_counter = TagOffsetCounter::new();
 
@@ -729,10 +728,9 @@ mod tests {
         let mut relay = relay;
 
         let mut init_seed = [0u8; 32];
-        let mut common_randomness_seed = [0u8; 32];
+        let common_randomness_seed = [setup.participant_index() as u8; 32];
         let mut transcript = Transcript::new(b"test");
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
-        transcript.challenge_bytes(b"common-randomness-seed", &mut common_randomness_seed);
 
         let mut tag_offset_counter = TagOffsetCounter::new();
 
@@ -952,6 +950,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_y_to_b() {
         let batch = true;
+        let _ = sim_y_to_b(SimpleMessageRelay::new(), !batch).await;
         let _ = sim_y_to_b(SimpleMessageRelay::new(), batch).await;
     }
 }
