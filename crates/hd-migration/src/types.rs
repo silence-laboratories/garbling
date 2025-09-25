@@ -1,13 +1,17 @@
 use crypto_bigint::{Encoding, NonZero, U256};
-use garbled_circuit::functionality::{
-    utils::{FixedExternalSize, SetupMessage, Wrap},
-    utils_dep::{Error, ProtocolError},
+use garbled_circuit::{
+    functionality::{
+        utils::{FixedExternalSize, SetupMessage, Wrap},
+        utils_dep::{Error, ProtocolError},
+    },
+    utilities::types::YaoShare,
 };
-use group::ff::PrimeField;
-use k256::{Scalar, elliptic_curve::ops::Reduce};
+use group::{Group, GroupEncoding, ff::PrimeField};
+use k256::{FieldBytes, ProjectivePoint, Scalar, elliptic_curve::ops::Reduce};
+use sl_compute_common::CommonRandomness;
 use sl_messages::relay::MessageSendError;
 
-use crate::constants::X25519_Q;
+use crate::constants::{SECP256_K1_Q, X25519_Q};
 
 /// Trait to convert any random byte array into a Group scalar.
 /// The input bytes need not necessarily be the byte representation of the scalar.
@@ -130,3 +134,51 @@ pub trait ProtocolParticipant:
 }
 
 impl ProtocolParticipant for SetupMessage {}
+
+#[derive(Clone, Copy, Default, PartialEq, Debug)]
+pub struct PrivKeyShare<T: Group + GroupEncoding> {
+    pub prev_share: T::Scalar,
+    pub next_share: T::Scalar,
+}
+
+impl PrivKeyShare<ProjectivePoint> {
+    pub fn get_random_share(
+        common_randomness: &mut CommonRandomness,
+    ) -> PrivKeyShare<ProjectivePoint> {
+        let (prev_bytes, next_bytes) = common_randomness.random_32_bytes();
+        let mut hval = U256::from_be_bytes(prev_bytes);
+        hval = hval.rem(&NonZero::new(SECP256_K1_Q).unwrap());
+        let prev = k256::Scalar::from_repr(*FieldBytes::from_slice(&hval.to_be_bytes())).unwrap();
+        let mut hval = U256::from_be_bytes(next_bytes);
+        hval = hval.rem(&NonZero::new(SECP256_K1_Q).unwrap());
+        let next = k256::Scalar::from_repr(*FieldBytes::from_slice(&hval.to_be_bytes())).unwrap();
+
+        PrivKeyShare::<ProjectivePoint> {
+            prev_share: prev,
+            next_share: next,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrivKeyShareDkg<T: Group + GroupEncoding> {
+    pub keyshare: PrivKeyShare<T>,
+    pub pubkey: T,
+}
+
+/// Represents a share for secure hard derivation of child key shares as per
+/// BIP32
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrivKeyShareBip {
+    /// Yao shares of binary representation of the Private key
+    pub yao_share: [YaoShare; 256],
+
+    /// Yao shares of binary representation of the chain code
+    pub chain_share: [YaoShare; 256],
+
+    /// RSS shares of the private key
+    pub key_share: PrivKeyShare<ProjectivePoint>,
+
+    /// The public key corresponding to the private key
+    pub pubkey: ProjectivePoint,
+}

@@ -1,0 +1,207 @@
+use garbled_circuit::functionality::utils_dep::TagOffsetCounter;
+use k256::{NonZeroScalar, ProjectivePoint, Scalar};
+use sl_compute_common::ServerState;
+use sl_messages::relay::Relay;
+
+use crate::{
+    reconstruct_shamir::run_reconstruct_shamir,
+    types::{HardDerivationError, PrivKeyShare, ProtocolParticipant},
+};
+
+/// Converts an RSS-shared Scalar value (`PrivKeyShare`) to a shamir shared value
+/// for party with id `party_id` for a set of evaluation points.
+pub fn scalar_to_shamir(
+    inp: &PrivKeyShare<ProjectivePoint>,
+    party_id: &usize,
+    evaluation_points: &[NonZeroScalar],
+) -> Scalar {
+    assert!((1..=3).contains(party_id));
+
+    // helper closure f_A(j) = (j - m)/(-m)
+    let f = |j: NonZeroScalar, m: NonZeroScalar| -> Scalar {
+        let num = j.sub(&m);
+        let denom = -m;
+        num * denom.invert().unwrap()
+    };
+
+    match party_id {
+        1 => {
+            // subsets containing 1: {1,2} (next_share), {1,3} (prev_share)
+            let term12 = inp.next_share * f(evaluation_points[0], evaluation_points[2]);
+            let term13 = inp.prev_share * f(evaluation_points[0], evaluation_points[1]);
+            term12 + term13
+        }
+        2 => {
+            // subsets containing 2: {1,2} (prev_share), {2,3} (next_share)
+            let term12 = inp.prev_share * f(evaluation_points[1], evaluation_points[2]);
+            let term23 = inp.next_share * f(evaluation_points[1], evaluation_points[0]);
+            term12 + term23
+        }
+        3 => {
+            // subsets containing 3: {1,3} (next_share), {2,3} (prev_share)
+            let term13 = inp.next_share * f(evaluation_points[2], evaluation_points[1]);
+            let term23 = inp.prev_share * f(evaluation_points[2], evaluation_points[0]);
+            term13 + term23
+        }
+        _ => unreachable!(),
+    }
+}
+
+/// Converts a Shamir-shared Scalar valueto an RSS-shared Scalar value (`PrivKeyShare`)
+pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
+    setup: &S,
+    relay: &mut R,
+    tag_offset_counter: &mut TagOffsetCounter,
+    share: &Scalar,
+    evaluation_points: &[NonZeroScalar],
+    serverstate: &mut ServerState,
+) -> Result<PrivKeyShare<ProjectivePoint>, HardDerivationError> {
+    let my_party_id = setup.participant_index();
+
+    let r_scalar =
+        PrivKeyShare::<ProjectivePoint>::get_random_share(&mut serverstate.common_randomness);
+
+    let r_shamir = scalar_to_shamir(&r_scalar, &(my_party_id + 1), evaluation_points);
+
+    let padded_shamir = share + r_shamir;
+
+    let padded = run_reconstruct_shamir(
+        setup,
+        relay,
+        tag_offset_counter,
+        &padded_shamir,
+        evaluation_points,
+    )
+    .await?;
+
+    let out_rss = if my_party_id == 0 {
+        PrivKeyShare::<ProjectivePoint> {
+            prev_share: padded - r_scalar.prev_share,
+            next_share: -r_scalar.next_share,
+        }
+    } else if my_party_id == 1 {
+        PrivKeyShare::<ProjectivePoint> {
+            prev_share: -r_scalar.prev_share,
+            next_share: -r_scalar.next_share,
+        }
+    } else {
+        PrivKeyShare::<ProjectivePoint> {
+            prev_share: -r_scalar.prev_share,
+            next_share: padded - r_scalar.next_share,
+        }
+    };
+
+    Ok(out_rss)
+}
+
+#[cfg(test)]
+mod tests {
+    use garbled_circuit::functionality::{
+        utils::run_common_randomness, utils_dep::TagOffsetCounter,
+    };
+    use k256::{NonZeroScalar, ProjectivePoint, Scalar};
+    use rand::{
+        CryptoRng, RngCore, SeedableRng,
+        rngs::{self, StdRng},
+    };
+    use sl_compute_common::ServerState;
+    use sl_messages::relay::{Relay, SimpleMessageRelay};
+
+    use crate::{
+        shamir_to_rss::run_shamir_to_scalar_rss,
+        types::{HardDerivationError, PrivKeyShare, ProtocolParticipant, ScalarFromBytes},
+        utils::{get_evaluation, run_init},
+    };
+
+    async fn test_run_shamir_to_scalar_rss<S, R>(
+        setup: S,
+        share: Scalar,
+        evaluation_points: Vec<NonZeroScalar>,
+        relay: R,
+    ) -> Result<(usize, PrivKeyShare<ProjectivePoint>), HardDerivationError>
+    where
+        S: ProtocolParticipant,
+        R: Relay,
+    {
+        let mut relay = relay;
+
+        let mut cnt = TagOffsetCounter::new();
+
+        let mut seed = [0u8; 32];
+        let mut r = StdRng::from_os_rng();
+        r.fill_bytes(&mut seed);
+        let randomness = run_common_randomness(&setup, &seed, &mut relay).await?;
+
+        let mut serverstate = ServerState::new(randomness);
+
+        let output = run_shamir_to_scalar_rss(
+            &setup,
+            &mut relay,
+            &mut cnt,
+            &share,
+            &evaluation_points,
+            &mut serverstate,
+        )
+        .await?;
+
+        Ok((setup.participant_index(), output))
+    }
+
+    fn random_scalar<R: RngCore + CryptoRng>(r: &mut R) -> Scalar {
+        let mut bytes = [0u8; 32];
+        r.fill_bytes(&mut bytes);
+        Scalar::from_bytes(bytes)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_shamir_to_scalar_rss() {
+        let mut rng = rngs::StdRng::from_os_rng();
+
+        let x1 = NonZeroScalar::new(random_scalar(&mut rng)).unwrap();
+        let x2 = NonZeroScalar::new(random_scalar(&mut rng)).unwrap();
+        let x3 = NonZeroScalar::new(random_scalar(&mut rng)).unwrap();
+
+        let evaluationpoints = [x1, x2, x3];
+
+        let s1 = random_scalar(&mut rng);
+        let s2 = random_scalar(&mut rng);
+        let s3 = get_evaluation(&[x1, x2], &[s1, s2], &x3);
+
+        let shares = [s1, s2, s3];
+
+        let mut parties = tokio::task::JoinSet::new();
+        let coord = SimpleMessageRelay::new();
+        let mut s = 0;
+        #[allow(clippy::explicit_counter_loop)]
+        for (setup, _) in run_init(None) {
+            let relay = coord.connect();
+            parties.spawn(test_run_shamir_to_scalar_rss(
+                setup,
+                shares[s],
+                evaluationpoints.to_vec(),
+                relay,
+            ));
+            s += 1;
+        }
+
+        let mut shares = vec![];
+
+        while let Some(fini) = parties.join_next().await {
+            if let Err(ref err) = fini {
+                println!("error {err:?}");
+            } else {
+                match fini.unwrap() {
+                    Err(err) => panic!("err {:?}", err),
+                    Ok(share) => shares.push(share),
+                }
+            }
+        }
+
+        let output = shares[0].1.next_share + shares[1].1.next_share + shares[2].1.next_share;
+        let output2 = shares[0].1.prev_share + shares[1].1.prev_share + shares[2].1.prev_share;
+        let s = get_evaluation(&[x1, x2], &[s1, s2], &Scalar::ZERO);
+
+        assert_eq!(output, s);
+        assert_eq!(output2, s);
+    }
+}

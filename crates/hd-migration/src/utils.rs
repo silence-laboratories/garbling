@@ -1,5 +1,6 @@
 #[cfg(any(test, feature = "test-support"))]
 use garbled_circuit::functionality::utils::SetupMessage;
+use k256::{NonZeroScalar, Scalar, elliptic_curve::subtle::ConstantTimeEq};
 
 /// Converts a vector of `u8` values to a vector of `bool` values
 pub fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
@@ -11,6 +12,56 @@ pub fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
         }
     }
     output
+}
+
+/// Converts a vector of bytes to a vector of bool values in little endian
+pub fn bytes_to_bits_le(bytes: &[u8]) -> Vec<bool> {
+    let mut bits = Vec::with_capacity(bytes.len() * 8);
+    // go from least significant byte to most significant
+    for &byte in bytes.iter().rev() {
+        for i in 0..8 {
+            bits.push(((byte >> i) & 1) == 1);
+        }
+    }
+    bits
+}
+
+
+pub(crate) fn get_lagrange_coeff_list<'a, K, T>(
+    party_points: &'a [T],
+    eval_point: &'a Scalar,
+    k: K,
+) -> impl Iterator<Item = Scalar> + 'a
+where
+    K: Fn(&T) -> &NonZeroScalar + 'a,
+{
+    party_points.iter().map(move |x_i| {
+        let x_i = k(x_i);
+        let mut coeff = Scalar::ONE;
+        for x_j in party_points {
+            let x_j = k(x_j);
+            if x_i.ct_ne(x_j).into() {
+                let num = x_j.sub(eval_point);
+                let sub = x_j.sub(x_i);
+                // SAFETY: Invert is safe because we check x_j != x_i, so sub is not zero.
+                coeff *= num.as_ref() * &sub.invert().unwrap();
+            }
+        }
+        coeff
+    })
+}
+
+pub fn get_evaluation(
+    party_points: &[NonZeroScalar],
+    evals: &[Scalar],
+    eval_point: &Scalar,
+) -> Scalar {
+    let lcoeff = get_lagrange_coeff_list(party_points, eval_point, |x| x);
+
+    evals
+        .iter()
+        .zip(lcoeff)
+        .fold(Scalar::ZERO, |acc, (ev, lc)| acc + *ev * lc)
 }
 
 #[cfg(any(test, feature = "test-support"))]
