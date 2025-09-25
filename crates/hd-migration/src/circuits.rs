@@ -207,8 +207,6 @@ pub fn build_sha512_circuit(len: u128) -> BinaryCircuit {
         block_inp.reverse();
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../circuits/sha512.txt");
 
-        println!("{}", path.to_str().unwrap());
-
         let block_out = builder
             .parse(path.to_str().unwrap(), &block_inp, &chain_input)
             .unwrap();

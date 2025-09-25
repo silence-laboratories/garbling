@@ -1,6 +1,6 @@
 use garbled_circuit::functionality::utils_dep::TagOffsetCounter;
 use k256::{NonZeroScalar, ProjectivePoint, Scalar};
-use sl_compute_common::ServerState;
+use sl_compute_common::CommonRandomness;
 use sl_messages::relay::Relay;
 
 use crate::{
@@ -54,12 +54,11 @@ pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
     tag_offset_counter: &mut TagOffsetCounter,
     share: &Scalar,
     evaluation_points: &[NonZeroScalar],
-    serverstate: &mut ServerState,
+    randomness: &mut CommonRandomness,
 ) -> Result<PrivKeyShare<ProjectivePoint>, HardDerivationError> {
     let my_party_id = setup.participant_index();
 
-    let r_scalar =
-        PrivKeyShare::<ProjectivePoint>::get_random_share(&mut serverstate.common_randomness);
+    let r_scalar = PrivKeyShare::<ProjectivePoint>::get_random_share(randomness);
 
     let r_shamir = scalar_to_shamir(&r_scalar, &(my_party_id + 1), evaluation_points);
 
@@ -104,7 +103,7 @@ mod tests {
         CryptoRng, RngCore, SeedableRng,
         rngs::{self, StdRng},
     };
-    use sl_compute_common::ServerState;
+
     use sl_messages::relay::{Relay, SimpleMessageRelay};
 
     use crate::{
@@ -130,9 +129,7 @@ mod tests {
         let mut seed = [0u8; 32];
         let mut r = StdRng::from_os_rng();
         r.fill_bytes(&mut seed);
-        let randomness = run_common_randomness(&setup, &seed, &mut relay).await?;
-
-        let mut serverstate = ServerState::new(randomness);
+        let mut randomness = run_common_randomness(&setup, &seed, &mut relay).await?;
 
         let output = run_shamir_to_scalar_rss(
             &setup,
@@ -140,7 +137,7 @@ mod tests {
             &mut cnt,
             &share,
             &evaluation_points,
-            &mut serverstate,
+            &mut randomness,
         )
         .await?;
 

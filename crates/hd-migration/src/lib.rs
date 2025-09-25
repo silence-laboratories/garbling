@@ -17,3 +17,5 @@ pub mod shamir_to_rss;
 pub mod yao_to_rss;
 
 pub mod derive_child_key;
+
+pub mod extended_key_der;
