@@ -1,20 +1,17 @@
 use std::{collections::HashMap, vec};
 
 use rand::{CryptoRng, Rng, RngCore};
-use sl_compute::{
-    transport::{
-        proto::{FilteredMsgRelay, MessageTag, Relay, Wrap},
-        setup::{common::MPCEncryption, CommonSetupMessage},
-        types::ProtocolError,
-        utils::{receive_from_parties, send_to_party, TagOffsetCounter},
-    },
-    types::BinaryString,
-};
+use sl_compute_common::BinaryString;
+use sl_messages::{message::MessageTag, relay::Relay};
 
 use crate::{
     circuitop::circuit_builder::CircuitBuilder,
     config::constants::{INPUT_YAO_FROM_FUNC_MSG1, INPUT_YAO_FROM_FUNC_MSG2, INPUT_YAO_FUNC_MSG1},
-    functionality::evaluate::evaluate_functionality,
+    functionality::{
+        evaluate::evaluate_functionality,
+        utils::{receive_from_parties, send_to_party},
+        utils_dep::{FilteredMsgRelay, ProtocolError, ProtocolParticipant, TagOffsetCounter, Wrap},
+    },
     utilities::{
         commitments::Commitment,
         hash_function::HashFunction,
@@ -55,7 +52,6 @@ where
 
 pub async fn input_yao_functionality<T, R, G>(
     setup: &T,
-    mpc_encryption: &mut MPCEncryption,
     tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut FilteredMsgRelay<R>,
     input: &bool,
@@ -63,7 +59,7 @@ pub async fn input_yao_functionality<T, R, G>(
     yao_setup: &YaoSetup,
 ) -> Result<YaoShare, ProtocolError>
 where
-    T: CommonSetupMessage,
+    T: ProtocolParticipant,
     R: Relay,
     G: RngCore + CryptoRng,
 {
@@ -80,7 +76,7 @@ where
         let (msg1, share) =
             input_yao_functionality_create_msg1(r, input, &yao_setup.g_setup.clone().unwrap());
 
-        send_to_party(setup, mpc_encryption, tag1, msg1, 2, relay).await?;
+        send_to_party(setup, tag1, msg1, 2, relay).await?;
 
         output = YaoShare {
             g_share: Some(share),
@@ -89,7 +85,6 @@ where
     } else {
         let msg1s: Vec<Block> = receive_from_parties(
             setup,
-            mpc_encryption,
             tag1,
             Block::default().external_size(),
             vec![0, 1],
@@ -112,7 +107,6 @@ where
 
 pub async fn batch_input_yao_functionality<T, R, G>(
     setup: &T,
-    mpc_encryption: &mut MPCEncryption,
     tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut FilteredMsgRelay<R>,
     input: &[bool],
@@ -120,7 +114,7 @@ pub async fn batch_input_yao_functionality<T, R, G>(
     yao_setup: &YaoSetup,
 ) -> Result<Vec<YaoShare>, ProtocolError>
 where
-    T: CommonSetupMessage,
+    T: ProtocolParticipant,
     R: Relay,
     G: RngCore + CryptoRng,
 {
@@ -153,11 +147,10 @@ where
             }
         }
 
-        send_to_party(setup, mpc_encryption, tag1, msg1, 2, relay).await?;
+        send_to_party(setup, tag1, msg1, 2, relay).await?;
     } else {
         let msg1s: Vec<Vec<u8>> = receive_from_parties(
             setup,
-            mpc_encryption,
             tag1,
             batch_len * Block::default().external_size(),
             vec![0, 1],
@@ -269,7 +262,6 @@ where
 #[allow(clippy::too_many_arguments)]
 pub async fn input_yao_from_functionality<T, C, R, G, H>(
     setup: &T,
-    mpc_encryption: &mut MPCEncryption,
     tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut FilteredMsgRelay<R>,
     input: &Option<bool>,
@@ -280,7 +272,7 @@ pub async fn input_yao_from_functionality<T, C, R, G, H>(
     yao_setup: &YaoSetup,
 ) -> Result<YaoShare, ProtocolError>
 where
-    T: CommonSetupMessage,
+    T: ProtocolParticipant,
     R: Relay,
     G: RngCore + CryptoRng,
     C: Commitment,
@@ -329,7 +321,7 @@ where
                 }
             }
 
-            send_to_party(setup, mpc_encryption, tag1, send, 2, relay).await?;
+            send_to_party(setup, tag1, send, 2, relay).await?;
 
             output = YaoShare {
                 g_share: Some(YaoGarblerShare {
@@ -341,7 +333,6 @@ where
         } else {
             let com_decom: Vec<[u8; BLOCK_SIZE * 4]> = receive_from_parties(
                 setup,
-                mpc_encryption,
                 tag1,
                 4 * Block::default().external_size(),
                 vec![0, 1],
@@ -385,18 +376,11 @@ where
         if x2 {
             val2 += 1;
         }
-        send_to_party(setup, mpc_encryption, tag1, val1, 0, relay).await?;
-        send_to_party(setup, mpc_encryption, tag1, val2, 1, relay).await?;
+        send_to_party(setup, tag1, val1, 0, relay).await?;
+        send_to_party(setup, tag1, val2, 1, relay).await?;
 
-        let msg: Vec<[u8; 6 * BLOCK_SIZE]> = receive_from_parties(
-            setup,
-            mpc_encryption,
-            tag2,
-            6 * BLOCK_SIZE,
-            vec![0, 1],
-            relay,
-        )
-        .await?;
+        let msg: Vec<[u8; 6 * BLOCK_SIZE]> =
+            receive_from_parties(setup, tag2, 6 * BLOCK_SIZE, vec![0, 1], relay).await?;
 
         let mut allcoms_p1 = [0u8; 4 * BLOCK_SIZE];
         allcoms_p1.copy_from_slice(&msg[0][0..4 * BLOCK_SIZE]);
@@ -456,8 +440,7 @@ where
             e_share: Some(outmap.get(&circuit.output_gate_ids[0]).unwrap().clone()),
         }
     } else {
-        let xs: Vec<u8> =
-            receive_from_parties(setup, mpc_encryption, tag1, 1, vec![2], relay).await?;
+        let xs: Vec<u8> = receive_from_parties(setup, tag1, 1, vec![2], relay).await?;
         let x_val = xs[0] % 2 == 1;
 
         let ysetup: GarblerSetup = yao_setup.g_setup.clone().unwrap();
@@ -487,7 +470,7 @@ where
         msg[BLOCK_SIZE * 4..BLOCK_SIZE * 5].copy_from_slice(&label);
         msg[BLOCK_SIZE * 5..BLOCK_SIZE * 6].copy_from_slice(&wit);
 
-        send_to_party(setup, mpc_encryption, tag2, msg, 2, relay).await?;
+        send_to_party(setup, tag2, msg, 2, relay).await?;
 
         let mut gin = HashMap::new();
         gin.insert(
@@ -521,7 +504,6 @@ where
 #[allow(clippy::too_many_arguments)]
 pub async fn batch_input_yao_from_functionality<T, C, R, G, H>(
     setup: &T,
-    mpc_encryption: &mut MPCEncryption,
     tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut FilteredMsgRelay<R>,
     input: &[Option<bool>],
@@ -532,7 +514,7 @@ pub async fn batch_input_yao_from_functionality<T, C, R, G, H>(
     yao_setup: &YaoSetup,
 ) -> Result<Vec<YaoShare>, ProtocolError>
 where
-    T: CommonSetupMessage,
+    T: ProtocolParticipant,
     R: Relay,
     G: RngCore + CryptoRng,
     C: Commitment,
@@ -600,11 +582,10 @@ where
                 };
             }
 
-            send_to_party(setup, mpc_encryption, tag1, send, 2, relay).await?;
+            send_to_party(setup, tag1, send, 2, relay).await?;
         } else {
             let com_decom: Vec<Vec<u8>> = receive_from_parties(
                 setup,
-                mpc_encryption,
                 tag1,
                 batch_size * 4 * Block::default().external_size(),
                 vec![0, 1],
@@ -659,18 +640,12 @@ where
             val1.push(x1);
             val2.push(x2);
         });
-        send_to_party(setup, mpc_encryption, tag1, val1.value.clone(), 0, relay).await?;
-        send_to_party(setup, mpc_encryption, tag1, val2.value.clone(), 1, relay).await?;
+        send_to_party(setup, tag1, val1.value.clone(), 0, relay).await?;
+        send_to_party(setup, tag1, val2.value.clone(), 1, relay).await?;
 
-        let msg: Vec<Vec<u8>> = receive_from_parties(
-            setup,
-            mpc_encryption,
-            tag2,
-            batch_size * 6 * BLOCK_SIZE,
-            vec![0, 1],
-            relay,
-        )
-        .await?;
+        let msg: Vec<Vec<u8>> =
+            receive_from_parties(setup, tag2, batch_size * 6 * BLOCK_SIZE, vec![0, 1], relay)
+                .await?;
 
         (0..batch_size).for_each(|i| {
             let mut allcoms_p1 = [0u8; 4 * BLOCK_SIZE];
@@ -761,15 +736,8 @@ where
             recv.push(false);
         }
 
-        let xs: Vec<Vec<u8>> = receive_from_parties(
-            setup,
-            mpc_encryption,
-            tag1,
-            recv.value.len(),
-            vec![2],
-            relay,
-        )
-        .await?;
+        let xs: Vec<Vec<u8>> =
+            receive_from_parties(setup, tag1, recv.value.len(), vec![2], relay).await?;
 
         recv.value = xs[0].clone();
 
@@ -833,7 +801,7 @@ where
             };
         }
 
-        send_to_party(setup, mpc_encryption, tag2, msg, 2, relay).await?;
+        send_to_party(setup, tag2, msg, 2, relay).await?;
     }
 
     Ok(output)

@@ -1,17 +1,13 @@
 use std::collections::HashMap;
 
-use rand::{CryptoRng, RngCore};
-use sl_compute::transport::{
-    proto::{FilteredMsgRelay, MessageTag, Relay},
-    setup::{common::MPCEncryption, CommonSetupMessage},
-    types::ProtocolError,
-    utils::{receive_from_parties, send_to_party, TagOffsetCounter},
-};
-
 use crate::{
     circuitop::circuit::BinaryCircuit,
     config::constants::YAO_CIRC_EVAL_FUNC_MSG1,
-    functionality::evaluate::evaluate_functionality,
+    functionality::{
+        evaluate::evaluate_functionality,
+        utils::{receive_from_parties, send_to_party},
+        utils_dep::{FilteredMsgRelay, ProtocolError, ProtocolParticipant, TagOffsetCounter},
+    },
     utilities::{
         hash_function::HashFunction,
         types::{
@@ -20,6 +16,8 @@ use crate::{
         },
     },
 };
+use rand::{CryptoRng, RngCore};
+use sl_messages::{message::MessageTag, relay::Relay};
 
 use super::garble::garble_functionality;
 
@@ -123,7 +121,6 @@ where
 #[allow(clippy::too_many_arguments)]
 pub async fn yao_circuit_eval_functionality<T, R, G, H>(
     setup: &T,
-    mpc_encryption: &mut MPCEncryption,
     tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut FilteredMsgRelay<R>,
     g_input: &HashMap<usize, YaoShare>,
@@ -134,7 +131,7 @@ pub async fn yao_circuit_eval_functionality<T, R, G, H>(
     yao_setup: &YaoSetup,
 ) -> Result<HashMap<usize, YaoShare>, ProtocolError>
 where
-    T: CommonSetupMessage,
+    T: ProtocolParticipant,
     R: Relay,
     G: RngCore + CryptoRng,
     H: HashFunction,
@@ -150,7 +147,7 @@ where
         let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len()) * BLOCK_SIZE;
 
         let tfs: Vec<Vec<TBlock>> =
-            receive_from_parties(setup, mpc_encryption, tag1, len, vec![0, 1], relay).await?;
+            receive_from_parties(setup, tag1, len, vec![0, 1], relay).await?;
 
         let fs: Vec<Vec<Block>> = tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
 
@@ -162,7 +159,7 @@ where
             yao_circuit_eval_create_msg1_p01(g_input, e_input, yao_setup, circuit, rng, hash);
         let tf = block_vec2tblock_vec(&f);
 
-        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+        send_to_party(setup, tag1, tf, 2, relay).await?;
 
         output = out;
     }
@@ -172,7 +169,6 @@ where
 #[allow(clippy::too_many_arguments)]
 pub async fn yao_map_circuit_eval_functionality<T, R, G, H>(
     setup: &T,
-    mpc_encryption: &mut MPCEncryption,
     tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut FilteredMsgRelay<R>,
     g_inputs: &MapArg<HashMap<usize, YaoShare>>,
@@ -183,7 +179,7 @@ pub async fn yao_map_circuit_eval_functionality<T, R, G, H>(
     yao_setup: &YaoSetup,
 ) -> Result<Vec<HashMap<usize, YaoShare>>, ProtocolError>
 where
-    T: CommonSetupMessage,
+    T: ProtocolParticipant,
     R: Relay,
     G: RngCore + CryptoRng,
     H: HashFunction,
@@ -204,15 +200,8 @@ where
                         let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                             * BLOCK_SIZE;
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, tag1, len, vec![0, 1], relay).await?;
 
                         let fs: Vec<Vec<Block>> =
                             tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
@@ -230,23 +219,15 @@ where
                             * BLOCK_SIZE
                             * e_inputs.len();
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, tag1, len, vec![0, 1], relay).await?;
 
                         let fs: Vec<Vec<Block>> =
                             tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
 
                         assert_eq!(fs[0], fs[1]);
 
-                        let complen =
-                            2 * circuit.num_nonfree_gates + circuit.constant_map.len();
+                        let complen = 2 * circuit.num_nonfree_gates + circuit.constant_map.len();
                         let mut temp = Vec::new();
                         (0..e_inputs.len()).for_each(|i| {
                             let f = fs[0][complen * i..complen * (i + 1)].to_vec();
@@ -268,23 +249,15 @@ where
                             * BLOCK_SIZE
                             * g_inputs.len();
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, tag1, len, vec![0, 1], relay).await?;
 
                         let fs: Vec<Vec<Block>> =
                             tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
 
                         assert_eq!(fs[0], fs[1]);
 
-                        let complen =
-                            2 * circuit.num_nonfree_gates + circuit.constant_map.len();
+                        let complen = 2 * circuit.num_nonfree_gates + circuit.constant_map.len();
                         let mut temp = Vec::new();
                         (0..g_inputs.len()).for_each(|i| {
                             let f = fs[0][complen * i..complen * (i + 1)].to_vec();
@@ -305,23 +278,15 @@ where
                             * BLOCK_SIZE
                             * g_inputs.len();
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, tag1, len, vec![0, 1], relay).await?;
 
                         let fs: Vec<Vec<Block>> =
                             tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
 
                         assert_eq!(fs[0], fs[1]);
 
-                        let complen =
-                            2 * circuit.num_nonfree_gates + circuit.constant_map.len();
+                        let complen = 2 * circuit.num_nonfree_gates + circuit.constant_map.len();
                         let mut temp = Vec::new();
                         (0..g_inputs.len()).for_each(|i| {
                             let f = fs[0][complen * i..complen * (i + 1)].to_vec();
@@ -343,20 +308,12 @@ where
                     MapArg::Scalar(e_input) => {
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, tag1, len, vec![0, 1], relay).await?;
 
                         let fs: Vec<Vec<Block>> =
                             tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
@@ -382,20 +339,12 @@ where
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, tag1, len, vec![0, 1], relay).await?;
 
                         let fs: Vec<Vec<Block>> =
                             tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
@@ -426,20 +375,12 @@ where
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, tag1, len, vec![0, 1], relay).await?;
 
                         let fs: Vec<Vec<Block>> =
                             tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
@@ -469,20 +410,12 @@ where
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, tag1, len, vec![0, 1], relay).await?;
 
                         let fs: Vec<Vec<Block>> =
                             tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
@@ -518,7 +451,7 @@ where
                         );
                         let tf = block_vec2tblock_vec(&f);
 
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+                        send_to_party(setup, tag1, tf, 2, relay).await?;
 
                         let temp = out;
                         output.push(temp);
@@ -545,7 +478,7 @@ where
                         }
                         let tf = block_vec2tblock_vec(&fvec);
 
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+                        send_to_party(setup, tag1, tf, 2, relay).await?;
 
                         let temp = out;
                         output = temp;
@@ -574,7 +507,7 @@ where
                         }
                         let tf = block_vec2tblock_vec(&fvec);
 
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+                        send_to_party(setup, tag1, tf, 2, relay).await?;
 
                         let temp = out;
                         output = temp;
@@ -603,7 +536,7 @@ where
                         }
                         let tf = block_vec2tblock_vec(&fvec);
 
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+                        send_to_party(setup, tag1, tf, 2, relay).await?;
 
                         let temp = out;
                         output = temp;
@@ -624,8 +557,7 @@ where
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -637,7 +569,7 @@ where
                         }
                         let tf = block_vec2tblock_vec(&fvec);
 
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+                        send_to_party(setup, tag1, tf, 2, relay).await?;
 
                         let temp = out;
                         output = temp;
@@ -656,8 +588,7 @@ where
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -669,7 +600,7 @@ where
                         }
                         let tf = block_vec2tblock_vec(&fvec);
 
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+                        send_to_party(setup, tag1, tf, 2, relay).await?;
 
                         let temp = out;
                         output = temp;
@@ -690,8 +621,7 @@ where
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -703,7 +633,7 @@ where
                         }
                         let tf = block_vec2tblock_vec(&fvec);
 
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+                        send_to_party(setup, tag1, tf, 2, relay).await?;
 
                         let temp = out;
                         output = temp;
@@ -724,8 +654,7 @@ where
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -737,7 +666,7 @@ where
                         }
                         let tf = block_vec2tblock_vec(&fvec);
 
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+                        send_to_party(setup, tag1, tf, 2, relay).await?;
 
                         let temp = out;
                         output = temp;
@@ -756,17 +685,7 @@ mod tests {
     use merlin::Transcript;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
-    use sl_compute::{
-        mpc::preprocess::Seed,
-        transport::{
-            init::run_init,
-            proto::FilteredMsgRelay,
-            setup::{common::SetupMessage, CommonSetupMessage},
-            types::ProtocolError,
-            utils::TagOffsetCounter,
-        },
-    };
-    use sl_mpc_mate::coord::{MessageRelayService, Relay, SimpleMessageRelay};
+    use sl_messages::relay::{MessageRelayService, Relay, SimpleMessageRelay};
     use tokio::task::JoinSet;
 
     use crate::{
@@ -783,6 +702,10 @@ mod tests {
                 output_yao_functionality, output_yao_to_functionality, validate_yao_share,
             },
             setup::setup_yao_functionality,
+            utils_dep::{
+                FilteredMsgRelay, ProtocolError, ProtocolParticipant, SetupMessage,
+                TagOffsetCounter,
+            },
         },
         utilities::{
             commitments::HashCommitment, garble_hash::AesGarbleHash, shahash::Sha512Hash,
@@ -794,14 +717,13 @@ mod tests {
 
     async fn test_run_entire_flow<T, R>(
         setup: T,
-        seed: Seed,
         circuit: BinaryCircuit,
         garb_input: Vec<bool>,
         eval_input: Vec<bool>,
         relay: R,
     ) -> Result<(usize, Vec<bool>), ProtocolError>
     where
-        T: CommonSetupMessage,
+        T: ProtocolParticipant,
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
@@ -809,19 +731,12 @@ mod tests {
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
-        transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
         transcript.challenge_bytes(b"common-randomness-seed", &mut common_randomness_seed);
 
-        let (_sid, mut mpc_encryption) = run_init(&setup, init_seed, &mut relay).await?;
         let mut tag_offset_counter = TagOffsetCounter::new();
-        let yao_setup = setup_yao_functionality(
-            &setup,
-            &mut mpc_encryption,
-            &mut tag_offset_counter,
-            &mut relay,
-        )
-        .await?;
+        let yao_setup =
+            setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
 
         let mut gin = HashMap::new();
         let mut ein = HashMap::new();
@@ -847,7 +762,6 @@ mod tests {
             count += 1;
             let out = input_yao_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 &inp,
@@ -855,14 +769,7 @@ mod tests {
                 &yao_setup,
             )
             .await?;
-            let cor = validate_yao_share(
-                &setup,
-                &mut mpc_encryption,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
             assert!(cor);
             gin.insert(id, out);
         }
@@ -874,7 +781,6 @@ mod tests {
             let out = if setup.participant_index() == 0 {
                 input_yao_from_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     &Some(inp),
@@ -888,7 +794,6 @@ mod tests {
             } else {
                 input_yao_from_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     &None,
@@ -900,14 +805,7 @@ mod tests {
                 )
                 .await?
             };
-            let cor = validate_yao_share(
-                &setup,
-                &mut mpc_encryption,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
             assert!(cor);
             gin.insert(id, out);
         }
@@ -919,7 +817,6 @@ mod tests {
             let out = if setup.participant_index() == 1 {
                 input_yao_from_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     &Some(inp),
@@ -933,7 +830,6 @@ mod tests {
             } else {
                 input_yao_from_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     &None,
@@ -945,14 +841,7 @@ mod tests {
                 )
                 .await?
             };
-            let cor = validate_yao_share(
-                &setup,
-                &mut mpc_encryption,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
             assert!(cor);
             gin.insert(id, out);
         }
@@ -964,7 +853,6 @@ mod tests {
             let out = if setup.participant_index() == 2 {
                 input_yao_from_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     &Some(inp),
@@ -978,7 +866,6 @@ mod tests {
             } else {
                 input_yao_from_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     &None,
@@ -990,14 +877,7 @@ mod tests {
                 )
                 .await?
             };
-            let cor = validate_yao_share(
-                &setup,
-                &mut mpc_encryption,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
             assert!(cor);
             gin.insert(id, out);
         }
@@ -1005,7 +885,6 @@ mod tests {
         for (id, inp) in circuit.evaluator_input_ids.iter().zip(&eval_input) {
             let out = input_yao_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 inp,
@@ -1013,19 +892,11 @@ mod tests {
                 &yao_setup,
             )
             .await?;
-            let cor = validate_yao_share(
-                &setup,
-                &mut mpc_encryption,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
             assert!(cor);
             ein.insert(*id, out);
             let out = input_yao_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 &!inp,
@@ -1033,14 +904,7 @@ mod tests {
                 &yao_setup,
             )
             .await?;
-            let cor = validate_yao_share(
-                &setup,
-                &mut mpc_encryption,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
             assert!(cor);
             notein.insert(*id, out);
         }
@@ -1048,7 +912,6 @@ mod tests {
         for (id, inp) in circuit.garbler_input_ids.iter().zip(&garb_input) {
             let out = input_yao_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 &!inp,
@@ -1056,21 +919,13 @@ mod tests {
                 &yao_setup,
             )
             .await?;
-            let cor = validate_yao_share(
-                &setup,
-                &mut mpc_encryption,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
             assert!(cor);
             notgin.insert(*id, out);
         }
 
         let out_sh = yao_circuit_eval_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             &gin,
@@ -1084,7 +939,6 @@ mod tests {
 
         let outs_case1_sh = yao_map_circuit_eval_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             &MapArg::Scalar(gin.clone()),
@@ -1098,7 +952,6 @@ mod tests {
 
         let outs_case2_sh = yao_map_circuit_eval_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             &MapArg::Vector(vec![gin.clone(), notgin.clone()]),
@@ -1112,7 +965,6 @@ mod tests {
 
         let outs_case3_sh = yao_map_circuit_eval_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             &MapArg::Vector(vec![gin.clone(), notgin.clone()]),
@@ -1126,7 +978,6 @@ mod tests {
 
         let outs_case4_sh = yao_map_circuit_eval_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             &MapArg::Scalar(gin.clone()),
@@ -1140,7 +991,6 @@ mod tests {
 
         let outs_case5_sh = yao_map_circuit_eval_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             &MapArg::Scalar(gin.clone()),
@@ -1154,7 +1004,6 @@ mod tests {
 
         let outs_case6_sh = yao_map_circuit_eval_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             &MapArg::Vector(vec![gin.clone(), notgin.clone()]),
@@ -1168,7 +1017,6 @@ mod tests {
 
         let outs_case7_sh = yao_map_circuit_eval_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             &MapArg::Vector(vec![gin.clone(), notgin.clone()]),
@@ -1185,7 +1033,6 @@ mod tests {
         for i in &circuit.output_gate_ids {
             let cor: bool = validate_yao_share(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 out_sh.get(i).unwrap(),
@@ -1194,7 +1041,6 @@ mod tests {
             assert!(cor);
             let output = output_yao_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 out_sh.get(i).unwrap(),
@@ -1204,7 +1050,6 @@ mod tests {
 
             let op1 = output_yao_to_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 0,
@@ -1217,7 +1062,6 @@ mod tests {
 
             let op2 = output_yao_to_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 1,
@@ -1230,7 +1074,6 @@ mod tests {
 
             let op3 = output_yao_to_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 2,
@@ -1249,7 +1092,6 @@ mod tests {
             for i in &circuit.output_gate_ids {
                 let cor: bool = validate_yao_share(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1258,7 +1100,6 @@ mod tests {
                 assert!(cor);
                 let output = output_yao_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1279,7 +1120,6 @@ mod tests {
             for i in &circuit.output_gate_ids {
                 let cor: bool = validate_yao_share(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1288,7 +1128,6 @@ mod tests {
                 assert!(cor);
                 let output = output_yao_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1309,7 +1148,6 @@ mod tests {
             for i in &circuit.output_gate_ids {
                 let cor: bool = validate_yao_share(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1318,7 +1156,6 @@ mod tests {
                 assert!(cor);
                 let output = output_yao_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1339,7 +1176,6 @@ mod tests {
             for i in &circuit.output_gate_ids {
                 let cor: bool = validate_yao_share(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1348,7 +1184,6 @@ mod tests {
                 assert!(cor);
                 let output = output_yao_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1369,7 +1204,6 @@ mod tests {
             for i in &circuit.output_gate_ids {
                 let cor: bool = validate_yao_share(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1378,7 +1212,6 @@ mod tests {
                 assert!(cor);
                 let output = output_yao_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1399,7 +1232,6 @@ mod tests {
             for i in &circuit.output_gate_ids {
                 let cor: bool = validate_yao_share(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1408,7 +1240,6 @@ mod tests {
                 assert!(cor);
                 let output = output_yao_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1429,7 +1260,6 @@ mod tests {
             for i in &circuit.output_gate_ids {
                 let cor: bool = validate_yao_share(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1438,7 +1268,6 @@ mod tests {
                 assert!(cor);
                 let output = output_yao_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
@@ -1457,14 +1286,13 @@ mod tests {
 
     async fn batched_test_run_entire_flow<T, R>(
         setup: T,
-        seed: Seed,
         circuit: BinaryCircuit,
         garb_input: Vec<bool>,
         eval_input: Vec<bool>,
         relay: R,
     ) -> Result<(usize, Vec<bool>), ProtocolError>
     where
-        T: CommonSetupMessage,
+        T: ProtocolParticipant,
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
@@ -1472,19 +1300,12 @@ mod tests {
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
-        transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
         transcript.challenge_bytes(b"common-randomness-seed", &mut common_randomness_seed);
 
-        let (_sid, mut mpc_encryption) = run_init(&setup, init_seed, &mut relay).await?;
         let mut tag_offset_counter = TagOffsetCounter::new();
-        let yao_setup = setup_yao_functionality(
-            &setup,
-            &mut mpc_encryption,
-            &mut tag_offset_counter,
-            &mut relay,
-        )
-        .await?;
+        let yao_setup =
+            setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
 
         let mut gin = HashMap::new();
         let mut ein = HashMap::new();
@@ -1511,7 +1332,6 @@ mod tests {
         }
         let outs = batch_input_yao_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             &inps,
@@ -1535,7 +1355,6 @@ mod tests {
         let outs = if setup.participant_index() == 0 {
             batch_input_yao_from_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 &inps,
@@ -1549,7 +1368,6 @@ mod tests {
         } else {
             batch_input_yao_from_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 &vec![None; inps.len()],
@@ -1577,7 +1395,6 @@ mod tests {
         let outs = if setup.participant_index() == 1 {
             batch_input_yao_from_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 &inps,
@@ -1591,7 +1408,6 @@ mod tests {
         } else {
             batch_input_yao_from_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 &vec![None; inps.len()],
@@ -1619,7 +1435,6 @@ mod tests {
         let outs = if setup.participant_index() == 2 {
             batch_input_yao_from_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 &inps,
@@ -1633,7 +1448,6 @@ mod tests {
         } else {
             batch_input_yao_from_functionality(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 &vec![None; inps.len()],
@@ -1659,7 +1473,6 @@ mod tests {
         }
         let outs = batch_input_yao_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             &inps,
@@ -1675,7 +1488,6 @@ mod tests {
 
         let out_sh = yao_circuit_eval_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             &gin,
@@ -1692,7 +1504,6 @@ mod tests {
         for i in circuit.output_gate_ids {
             let cor: bool = validate_yao_share(
                 &setup,
-                &mut mpc_encryption,
                 &mut tag_offset_counter,
                 &mut relay,
                 out_sh.get(&i).unwrap(),
@@ -1702,18 +1513,12 @@ mod tests {
             shares.push(out_sh.get(&i).unwrap().clone());
         }
 
-        let op = batch_output_yao_functionality(
-            &setup,
-            &mut mpc_encryption,
-            &mut tag_offset_counter,
-            &mut relay,
-            &shares,
-        )
-        .await?;
+        let op =
+            batch_output_yao_functionality(&setup, &mut tag_offset_counter, &mut relay, &shares)
+                .await?;
 
         let op1 = batch_output_yao_to_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             0,
@@ -1723,7 +1528,6 @@ mod tests {
 
         let op2 = batch_output_yao_to_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             1,
@@ -1733,7 +1537,6 @@ mod tests {
 
         let op3 = batch_output_yao_to_functionality(
             &setup,
-            &mut mpc_encryption,
             &mut tag_offset_counter,
             &mut relay,
             2,
@@ -1758,9 +1561,9 @@ mod tests {
     #[cfg(any(test, feature = "test-support"))]
     fn setup_entire_flow(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
         use sha2::{Digest, Sha256};
-        use sl_compute::transport::setup::{NoSigningKey, NoVerifyingKey, ProtocolParticipant};
-        use sl_mpc_mate::message::InstanceId;
         use std::time::Duration;
+
+        use crate::functionality::utils_dep::{NoSigningKey, NoVerifyingKey};
 
         let instance = instance.unwrap_or_else(rand::random);
 
@@ -1779,6 +1582,8 @@ mod tests {
             .into_iter()
             .enumerate()
             .map(|(party_id, sk)| {
+                use sl_messages::message::InstanceId;
+
                 SetupMessage::new(InstanceId::new(instance), sk, party_id, party_vk.clone())
                     .with_ttl(Duration::from_secs(1000))
             })
@@ -1826,13 +1631,12 @@ mod tests {
         R: Send + Relay + 'static,
     {
         let mut jset = JoinSet::new();
-        for (setup, seed) in parties {
+        for (setup, _) in parties {
             let relay = coord.connect().await.unwrap();
 
             if batched {
                 jset.spawn(batched_test_run_entire_flow(
                     setup,
-                    seed,
                     circuit.clone(),
                     gin.clone(),
                     ein.clone(),
@@ -1841,7 +1645,6 @@ mod tests {
             } else {
                 jset.spawn(test_run_entire_flow(
                     setup,
-                    seed,
                     circuit.clone(),
                     gin.clone(),
                     ein.clone(),

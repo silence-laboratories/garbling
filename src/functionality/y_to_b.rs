@@ -1,17 +1,13 @@
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
-use sl_compute::{
-    transport::{
-        proto::FilteredMsgRelay,
-        setup::{common::MPCEncryption, CommonSetupMessage},
-        types::ProtocolError,
-        utils::{receive_from_parties, send_to_party, TagOffsetCounter},
-    },
-    types::BinaryShare,
-};
-use sl_mpc_mate::{coord::Relay, message::MessageTag};
+use sl_compute_common::BinaryShare;
+use sl_messages::{message::MessageTag, relay::Relay};
 
 use crate::{
     config::constants::{Y2B_FUNC_MSG1, Y2B_FUNC_MSG2, Y2B_FUNC_MSG3, Y2B_FUNC_MSG4},
+    functionality::{
+        utils::{receive_from_parties, send_to_party},
+        utils_dep::{FilteredMsgRelay, ProtocolError, ProtocolParticipant, TagOffsetCounter},
+    },
     utilities::{
         commitments::Commitment,
         types::{Block, GarblerSetup, YaoGarblerShare, YaoSetup, YaoShare, BLOCK_SIZE},
@@ -65,7 +61,6 @@ where
 #[allow(clippy::too_many_arguments)]
 pub async fn yao_to_binary_functionality<T, G, C, R>(
     setup: &T,
-    mpc_encryption: &mut MPCEncryption,
     tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut FilteredMsgRelay<R>,
     input: &YaoShare,
@@ -74,7 +69,7 @@ pub async fn yao_to_binary_functionality<T, G, C, R>(
     yao_setup: &YaoSetup,
 ) -> Result<BinaryShare, ProtocolError>
 where
-    T: CommonSetupMessage,
+    T: ProtocolParticipant,
     R: Relay,
     C: Commitment,
     G: RngCore + CryptoRng,
@@ -102,8 +97,8 @@ where
             if y {
                 msg[BLOCK_SIZE] = 1;
             }
-            send_to_party(setup, mpc_encryption, tag1, msg, 2, relay).await?;
-            send_to_party(setup, mpc_encryption, tag1, wr0, 1, relay).await?;
+            send_to_party(setup, tag1, msg, 2, relay).await?;
+            send_to_party(setup, tag1, wr0, 1, relay).await?;
 
             let r = rng.as_mut().unwrap();
 
@@ -116,7 +111,7 @@ where
             msg[BLOCK_SIZE * 2..BLOCK_SIZE * 3].copy_from_slice(&wit0);
             msg[BLOCK_SIZE * 3..BLOCK_SIZE * 4].copy_from_slice(&wit1);
 
-            send_to_party(setup, mpc_encryption, tag2, msg, 2, relay).await?;
+            send_to_party(setup, tag2, msg, 2, relay).await?;
             let p = lsb(input.clone().g_share.unwrap().f_label) != 0;
             Ok(BinaryShare {
                 value1: p ^ y,
@@ -125,8 +120,7 @@ where
         }
         1 => {
             let msg1s: Vec<Block> =
-                receive_from_parties(setup, mpc_encryption, tag1, BLOCK_SIZE, vec![0], relay)
-                    .await?;
+                receive_from_parties(setup, tag1, BLOCK_SIZE, vec![0], relay).await?;
             let mut wr0 = Block::default();
             wr0.copy_from_slice(&msg1s[0]);
 
@@ -139,11 +133,10 @@ where
             msg[0..BLOCK_SIZE].copy_from_slice(&com0);
             msg[BLOCK_SIZE..BLOCK_SIZE * 2].copy_from_slice(&com1);
 
-            send_to_party(setup, mpc_encryption, tag2, msg, 2, relay).await?;
+            send_to_party(setup, tag2, msg, 2, relay).await?;
 
             let msg2s: Vec<Block> =
-                receive_from_parties(setup, mpc_encryption, tag3, BLOCK_SIZE, vec![2], relay)
-                    .await?;
+                receive_from_parties(setup, tag3, BLOCK_SIZE, vec![2], relay).await?;
             let mut wxz = Block::default();
             wxz.copy_from_slice(&msg2s[0]);
 
@@ -165,8 +158,7 @@ where
         }
         _ => {
             let msg1s: Vec<[u8; BLOCK_SIZE + 1]> =
-                receive_from_parties(setup, mpc_encryption, tag1, BLOCK_SIZE + 1, vec![0], relay)
-                    .await?;
+                receive_from_parties(setup, tag1, BLOCK_SIZE + 1, vec![0], relay).await?;
             let mut wyr = Block::default();
             wyr.copy_from_slice(&msg1s[0][0..BLOCK_SIZE]);
             let y = msg1s[0][BLOCK_SIZE] != 0;
@@ -175,17 +167,10 @@ where
 
             let wxz = xor_blocks(yaoshare.label, wyr);
 
-            send_to_party(setup, mpc_encryption, tag3, wxz, 1, relay).await?;
+            send_to_party(setup, tag3, wxz, 1, relay).await?;
 
-            let msg2s: Vec<Vec<u8>> = receive_from_parties(
-                setup,
-                mpc_encryption,
-                tag2,
-                BLOCK_SIZE * 4,
-                vec![0, 1],
-                relay,
-            )
-            .await?;
+            let msg2s: Vec<Vec<u8>> =
+                receive_from_parties(setup, tag2, BLOCK_SIZE * 4, vec![0, 1], relay).await?;
 
             let mut com0 = Block::default();
             let mut com1 = Block::default();
@@ -223,7 +208,6 @@ where
 #[allow(clippy::too_many_arguments)]
 pub async fn batch_yao_to_binary_functionality<T, G, C, R>(
     setup: &T,
-    mpc_encryption: &mut MPCEncryption,
     tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut FilteredMsgRelay<R>,
     input: &[YaoShare],
@@ -232,7 +216,7 @@ pub async fn batch_yao_to_binary_functionality<T, G, C, R>(
     yao_setup: &YaoSetup,
 ) -> Result<Vec<BinaryShare>, ProtocolError>
 where
-    T: CommonSetupMessage,
+    T: ProtocolParticipant,
     R: Relay,
     C: Commitment,
     G: RngCore + CryptoRng,
@@ -305,24 +289,17 @@ where
 
                 outputs.push(op);
             });
-            send_to_party(setup, mpc_encryption, tag1, msgs, 2, relay).await?;
-            send_to_party(setup, mpc_encryption, tag1, wr0msgs, 1, relay).await?;
+            send_to_party(setup, tag1, msgs, 2, relay).await?;
+            send_to_party(setup, tag1, wr0msgs, 1, relay).await?;
 
-            send_to_party(setup, mpc_encryption, tag2, msg2s, 2, relay).await?;
+            send_to_party(setup, tag2, msg2s, 2, relay).await?;
             Ok(outputs)
         }
         1 => {
             let r = rng.as_mut().unwrap();
 
-            let msg1s: Vec<Vec<u8>> = receive_from_parties(
-                setup,
-                mpc_encryption,
-                tag1,
-                BLOCK_SIZE * batch_size,
-                vec![0],
-                relay,
-            )
-            .await?;
+            let msg1s: Vec<Vec<u8>> =
+                receive_from_parties(setup, tag1, BLOCK_SIZE * batch_size, vec![0], relay).await?;
 
             let mut outputs = Vec::new();
             let mut msgs = Vec::new();
@@ -346,17 +323,10 @@ where
                 wz0s.push(wz0);
                 wz1s.push(wz1);
             });
-            send_to_party(setup, mpc_encryption, tag4, msgs, 2, relay).await?;
+            send_to_party(setup, tag4, msgs, 2, relay).await?;
 
-            let msg2s: Vec<Vec<u8>> = receive_from_parties(
-                setup,
-                mpc_encryption,
-                tag3,
-                BLOCK_SIZE * batch_size,
-                vec![2],
-                relay,
-            )
-            .await?;
+            let msg2s: Vec<Vec<u8>> =
+                receive_from_parties(setup, tag3, BLOCK_SIZE * batch_size, vec![2], relay).await?;
 
             for i in 0..batch_size {
                 let mut wxz = Block::default();
@@ -378,15 +348,9 @@ where
             Ok(outputs)
         }
         _ => {
-            let msg1s: Vec<Vec<u8>> = receive_from_parties(
-                setup,
-                mpc_encryption,
-                tag1,
-                (BLOCK_SIZE + 1) * batch_size,
-                vec![0],
-                relay,
-            )
-            .await?;
+            let msg1s: Vec<Vec<u8>> =
+                receive_from_parties(setup, tag1, (BLOCK_SIZE + 1) * batch_size, vec![0], relay)
+                    .await?;
 
             let mut wxzs = Vec::new();
             let mut outputs = Vec::new();
@@ -408,27 +372,15 @@ where
                 ys.push(y);
             });
 
-            send_to_party(setup, mpc_encryption, tag3, wxzs, 1, relay).await?;
+            send_to_party(setup, tag3, wxzs, 1, relay).await?;
 
-            let msg2s_0: Vec<Vec<u8>> = receive_from_parties(
-                setup,
-                mpc_encryption,
-                tag2,
-                BLOCK_SIZE * 4 * batch_size,
-                vec![0],
-                relay,
-            )
-            .await?;
+            let msg2s_0: Vec<Vec<u8>> =
+                receive_from_parties(setup, tag2, BLOCK_SIZE * 4 * batch_size, vec![0], relay)
+                    .await?;
 
-            let msg2s_1: Vec<Vec<u8>> = receive_from_parties(
-                setup,
-                mpc_encryption,
-                tag4,
-                BLOCK_SIZE * 2 * batch_size,
-                vec![1],
-                relay,
-            )
-            .await?;
+            let msg2s_1: Vec<Vec<u8>> =
+                receive_from_parties(setup, tag4, BLOCK_SIZE * 2 * batch_size, vec![1], relay)
+                    .await?;
 
             for i in 0..batch_size {
                 let yaoshare = input[i].e_share.clone().unwrap();
@@ -489,31 +441,30 @@ where
 mod tests {
     use std::collections::HashMap;
 
+    /// OPEN_MSG
+    pub const OPEN_MSG: u32 = 3;
     use merlin::Transcript;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
-    use sl_compute::{
-        mpc::{
-            common_randomness::run_common_randomness, open_protocol::run_batch_open_binary_share,
-            preprocess::Seed,
-        },
-        transport::{
-            init::run_init,
-            proto::FilteredMsgRelay,
-            setup::{common::SetupMessage, CommonSetupMessage},
-            types::ProtocolError,
-            utils::TagOffsetCounter,
-        },
-        types::ServerState,
+    use sl_compute_common::{Binary, BinaryShare, ServerState};
+    use sl_messages::{
+        message::MessageTag,
+        relay::{MessageRelayService, Relay, SimpleMessageRelay},
     };
-    use sl_mpc_mate::coord::{MessageRelayService, Relay, SimpleMessageRelay};
     use tokio::task::JoinSet;
 
     use crate::{
         circuitop::circuit::BinaryCircuit,
         functionality::{
-            circuit_eval::yao_circuit_eval_functionality, input::batch_input_yao_functionality,
-            output::validate_yao_share, setup::setup_yao_functionality,
+            circuit_eval::yao_circuit_eval_functionality,
+            input::batch_input_yao_functionality,
+            output::validate_yao_share,
+            setup::setup_yao_functionality,
+            utils::{p2p_send_to_next_receive_from_prev, run_common_randomness},
+            utils_dep::{
+                FilteredMsgRelay, ProtocolError, ProtocolParticipant, SetupMessage,
+                TagOffsetCounter,
+            },
         },
         utilities::{
             commitments::HashCommitment, garble_hash::AesGarbleHash, shahash::Sha512Hash,
@@ -523,13 +474,9 @@ mod tests {
 
     use super::{batch_yao_to_binary_functionality, yao_to_binary_functionality};
 
-    async fn test_run_y_to_b<T, R>(
-        setup: T,
-        seed: Seed,
-        relay: R,
-    ) -> Result<(usize, Vec<bool>), ProtocolError>
+    async fn test_run_y_to_b<T, R>(setup: T, relay: R) -> Result<(usize, Vec<bool>), ProtocolError>
     where
-        T: CommonSetupMessage,
+        T: ProtocolParticipant,
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
@@ -537,30 +484,18 @@ mod tests {
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
-        transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
         transcript.challenge_bytes(b"common-randomness-seed", &mut common_randomness_seed);
 
-        let (_sid, mut mpc_encryption) = run_init(&setup, init_seed, &mut relay).await?;
         let mut tag_offset_counter = TagOffsetCounter::new();
 
-        let common_randomness = run_common_randomness(
-            &setup,
-            common_randomness_seed,
-            &mut mpc_encryption,
-            &mut relay,
-        )
-        .await?;
+        let common_randomness =
+            run_common_randomness(&setup, &common_randomness_seed, &mut relay).await?;
 
         let mut serverstate = ServerState::new(common_randomness);
 
-        let yao_setup = setup_yao_functionality(
-            &setup,
-            &mut mpc_encryption,
-            &mut tag_offset_counter,
-            &mut relay,
-        )
-        .await?;
+        let yao_setup =
+            setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
 
         let (mut rng, hash, comm) = if setup.participant_index() == 2 {
             let hash = AesGarbleHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
@@ -586,7 +521,6 @@ mod tests {
 
                 let jointsh = batch_input_yao_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     &joint,
@@ -596,14 +530,8 @@ mod tests {
                 .await?;
 
                 for i in jointsh.clone() {
-                    let val = validate_yao_share(
-                        &setup,
-                        &mut mpc_encryption,
-                        &mut tag_offset_counter,
-                        &mut relay,
-                        &i,
-                    )
-                    .await?;
+                    let val =
+                        validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &i).await?;
                     assert!(val);
                 }
 
@@ -619,7 +547,6 @@ mod tests {
 
                 let output = yao_circuit_eval_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     &keysh,
@@ -638,18 +565,11 @@ mod tests {
 
                 let mut out_bin = vec![];
                 for i in &out_yao {
-                    let val = validate_yao_share(
-                        &setup,
-                        &mut mpc_encryption,
-                        &mut tag_offset_counter,
-                        &mut relay,
-                        i,
-                    )
-                    .await?;
+                    let val =
+                        validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, i).await?;
                     assert!(val);
                     let temp = yao_to_binary_functionality(
                         &setup,
-                        &mut mpc_encryption,
                         &mut tag_offset_counter,
                         &mut relay,
                         i,
@@ -663,7 +583,6 @@ mod tests {
 
                 let act_out = run_batch_open_binary_share(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     &out_bin,
@@ -701,13 +620,54 @@ mod tests {
         Ok((setup.participant_index(), op))
     }
 
+    /// Run batch Open Binary Share protocol
+    pub async fn run_batch_open_binary_share<T, R>(
+        setup: &T,
+        tag_offset_counter: &mut TagOffsetCounter,
+        relay: &mut FilteredMsgRelay<R>,
+        shares: &[BinaryShare],
+        serverstate: &mut ServerState,
+    ) -> Result<Vec<Binary>, ProtocolError>
+    where
+        T: ProtocolParticipant,
+        R: Relay,
+    {
+        let tag_offset = tag_offset_counter.next_value();
+        relay
+            .ask_messages(setup, MessageTag::tag1(OPEN_MSG, tag_offset), true)
+            .await?;
+
+        let msg: Vec<u8> = shares.iter().map(|share| share.value1 as u8).collect();
+
+        let msg_from_prev = p2p_send_to_next_receive_from_prev(
+            setup,
+            MessageTag::tag1(OPEN_MSG, tag_offset),
+            msg,
+            relay,
+        )
+        .await?;
+
+        let output: Vec<bool> = shares
+            .iter()
+            .zip(msg_from_prev.iter())
+            .map(|(share, v)| share.value2 ^ (*v == 1u8))
+            .collect();
+
+        // add to UnverifiedList
+        for v in output.iter() {
+            serverstate.unverified_list.push(*v);
+        }
+        // serverstate.unverified_list.append_bytes_with_padding(&vec_bool_to_vec_bytes(&output));
+
+        Ok(output)
+    }
+
     async fn batch_test_run_y_to_b<T, R>(
         setup: T,
-        seed: Seed,
         relay: R,
     ) -> Result<(usize, Vec<bool>), ProtocolError>
     where
-        T: CommonSetupMessage,
+        T: ProtocolParticipant,
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
@@ -715,30 +675,18 @@ mod tests {
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
-        transcript.append_message(b"seed", &seed);
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
         transcript.challenge_bytes(b"common-randomness-seed", &mut common_randomness_seed);
 
-        let (_sid, mut mpc_encryption) = run_init(&setup, init_seed, &mut relay).await?;
         let mut tag_offset_counter = TagOffsetCounter::new();
 
-        let common_randomness = run_common_randomness(
-            &setup,
-            common_randomness_seed,
-            &mut mpc_encryption,
-            &mut relay,
-        )
-        .await?;
+        let common_randomness =
+            run_common_randomness(&setup, &common_randomness_seed, &mut relay).await?;
 
         let mut serverstate = ServerState::new(common_randomness);
 
-        let yao_setup = setup_yao_functionality(
-            &setup,
-            &mut mpc_encryption,
-            &mut tag_offset_counter,
-            &mut relay,
-        )
-        .await?;
+        let yao_setup =
+            setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
 
         let (mut rng, hash, comm) = if setup.participant_index() == 2 {
             let hash = AesGarbleHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
@@ -764,7 +712,6 @@ mod tests {
 
                 let jointsh = batch_input_yao_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     &joint,
@@ -774,14 +721,8 @@ mod tests {
                 .await?;
 
                 for i in jointsh.clone() {
-                    let val = validate_yao_share(
-                        &setup,
-                        &mut mpc_encryption,
-                        &mut tag_offset_counter,
-                        &mut relay,
-                        &i,
-                    )
-                    .await?;
+                    let val =
+                        validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &i).await?;
                     assert!(val);
                 }
 
@@ -797,7 +738,6 @@ mod tests {
 
                 let output = yao_circuit_eval_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     &keysh,
@@ -816,7 +756,6 @@ mod tests {
 
                 let out_bin = batch_yao_to_binary_functionality(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     &out_yao,
@@ -828,7 +767,6 @@ mod tests {
 
                 let act_out = run_batch_open_binary_share(
                     &setup,
-                    &mut mpc_encryption,
                     &mut tag_offset_counter,
                     &mut relay,
                     &out_bin,
@@ -869,9 +807,10 @@ mod tests {
     #[cfg(any(test, feature = "test-support"))]
     fn setup_y_to_b(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
         use sha2::{Digest, Sha256};
-        use sl_compute::transport::setup::{NoSigningKey, NoVerifyingKey, ProtocolParticipant};
-        use sl_mpc_mate::message::InstanceId;
+        use sl_messages::message::InstanceId;
         use std::time::Duration;
+
+        use crate::functionality::utils_dep::{NoSigningKey, NoVerifyingKey};
 
         let instance = instance.unwrap_or_else(rand::random);
 
@@ -928,12 +867,12 @@ mod tests {
         R: Send + Relay + 'static,
     {
         let mut jset = JoinSet::new();
-        for (setup, seed) in parties {
+        for (setup, _) in parties {
             let relay = coord.connect().await.unwrap();
             if batch {
-                jset.spawn(batch_test_run_y_to_b(setup, seed, relay));
+                jset.spawn(batch_test_run_y_to_b(setup, relay));
             } else {
-                jset.spawn(test_run_y_to_b(setup, seed, relay));
+                jset.spawn(test_run_y_to_b(setup, relay));
             }
         }
 

@@ -1,4 +1,4 @@
-use sl_compute::transport::proto::{FixedExternalSize, Wrap};
+use crate::functionality::utils_dep::{FixedExternalSize, Wrap};
 
 pub const BLOCK_SIZE: usize = 16;
 
