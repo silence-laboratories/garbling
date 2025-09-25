@@ -9,8 +9,8 @@ use crate::{
     config::constants::{INPUT_YAO_FROM_FUNC_MSG1, INPUT_YAO_FROM_FUNC_MSG2, INPUT_YAO_FUNC_MSG1},
     functionality::{
         evaluate::evaluate_functionality,
-        utils::{receive_from_parties, send_to_party},
-        utils_dep::{FilteredMsgRelay, ProtocolError, ProtocolParticipant, TagOffsetCounter, Wrap},
+        utils::{receive_from_parties, send_to_party, FilteredMsgRelay},
+        utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter, Wrap},
     },
     utilities::{
         commitments::Commitment,
@@ -53,7 +53,7 @@ where
 pub async fn input_yao_functionality<T, R, G>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut FilteredMsgRelay<R>,
+    relay: &mut R,
     input: &bool,
     rng: &mut Option<G>,
     yao_setup: &YaoSetup,
@@ -63,12 +63,31 @@ where
     R: Relay,
     G: RngCore + CryptoRng,
 {
+    let mut r = FilteredMsgRelay::new(relay);
+    let tag_offset = tag_offset_counter.next_value();
+    let tag1 = MessageTag::tag1(INPUT_YAO_FUNC_MSG1.try_into().unwrap(), tag_offset);
+    r.ask_messages(setup, tag1, true).await?;
+
+    let output = input_yao_functionality_inner(setup, &mut r, input, rng, yao_setup, tag1).await?;
+    Ok(output)
+}
+
+pub async fn input_yao_functionality_inner<T, R, G>(
+    setup: &T,
+    relay: &mut FilteredMsgRelay<R>,
+    input: &bool,
+    rng: &mut Option<G>,
+    yao_setup: &YaoSetup,
+    tag1: MessageTag,
+) -> Result<YaoShare, ProtocolError>
+where
+    T: ProtocolParticipant,
+    R: Relay,
+    G: RngCore + CryptoRng,
+{
     let party_id = setup.participant_index();
 
     let output: YaoShare;
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(INPUT_YAO_FUNC_MSG1.try_into().unwrap(), tag_offset);
-    relay.ask_messages(setup, tag1, true).await?;
 
     if party_id == 0 || party_id == 1 {
         assert!(yao_setup.g_setup.is_some() && yao_setup.e_setup.is_none());
@@ -108,10 +127,33 @@ where
 pub async fn batch_input_yao_functionality<T, R, G>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
+    relay: &mut R,
+    input: &[bool],
+    rng: &mut Option<G>,
+    yao_setup: &YaoSetup,
+) -> Result<Vec<YaoShare>, ProtocolError>
+where
+    T: ProtocolParticipant,
+    R: Relay,
+    G: RngCore + CryptoRng,
+{
+    let mut r = FilteredMsgRelay::new(relay);
+    let tag_offset = tag_offset_counter.next_value();
+    let tag1 = MessageTag::tag1(INPUT_YAO_FUNC_MSG1.try_into().unwrap(), tag_offset);
+    r.ask_messages(setup, tag1, true).await?;
+
+    let output =
+        batch_input_yao_functionality_inner(setup, &mut r, input, rng, yao_setup, tag1).await?;
+    Ok(output)
+}
+
+pub async fn batch_input_yao_functionality_inner<T, R, G>(
+    setup: &T,
     relay: &mut FilteredMsgRelay<R>,
     input: &[bool],
     rng: &mut Option<G>,
     yao_setup: &YaoSetup,
+    tag1: MessageTag,
 ) -> Result<Vec<YaoShare>, ProtocolError>
 where
     T: ProtocolParticipant,
@@ -122,9 +164,6 @@ where
     let party_id = setup.participant_index();
 
     let mut output = vec![YaoShare::default(); batch_len];
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(INPUT_YAO_FUNC_MSG1.try_into().unwrap(), tag_offset);
-    relay.ask_messages(setup, tag1, true).await?;
 
     if party_id == 0 || party_id == 1 {
         assert!(yao_setup.g_setup.is_some() && yao_setup.e_setup.is_none());
@@ -263,6 +302,40 @@ where
 pub async fn input_yao_from_functionality<T, C, R, G, H>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
+    relay: &mut R,
+    input: &Option<bool>,
+    pid: usize,
+    rng: &mut Option<G>,
+    hash: &H,
+    comm: &C,
+    yao_setup: &YaoSetup,
+) -> Result<YaoShare, ProtocolError>
+where
+    T: ProtocolParticipant,
+    R: Relay,
+    G: RngCore + CryptoRng,
+    C: Commitment,
+    H: HashFunction,
+{
+    let mut r = FilteredMsgRelay::new(relay);
+    let tag_offset = tag_offset_counter.next_value();
+    let tag1 = MessageTag::tag1(INPUT_YAO_FROM_FUNC_MSG1.try_into().unwrap(), tag_offset);
+    r.ask_messages(setup, tag1, true).await?;
+
+    let tag_offset = tag_offset_counter.next_value();
+    let tag2 = MessageTag::tag1(INPUT_YAO_FROM_FUNC_MSG2.try_into().unwrap(), tag_offset);
+    r.ask_messages(setup, tag2, true).await?;
+
+    let output = input_yao_from_functionality_inner(
+        setup, &mut r, input, pid, rng, hash, comm, yao_setup, tag1, tag2,
+    )
+    .await?;
+    Ok(output)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn input_yao_from_functionality_inner<T, C, R, G, H>(
+    setup: &T,
     relay: &mut FilteredMsgRelay<R>,
     input: &Option<bool>,
     pid: usize,
@@ -270,6 +343,8 @@ pub async fn input_yao_from_functionality<T, C, R, G, H>(
     hash: &H,
     comm: &C,
     yao_setup: &YaoSetup,
+    tag1: MessageTag,
+    tag2: MessageTag,
 ) -> Result<YaoShare, ProtocolError>
 where
     T: ProtocolParticipant,
@@ -287,14 +362,6 @@ where
     let out = builder.xor(x1, x2);
     builder.output(out);
     let circuit = builder.finish();
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(INPUT_YAO_FROM_FUNC_MSG1.try_into().unwrap(), tag_offset);
-    relay.ask_messages(setup, tag1, true).await?;
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag2 = MessageTag::tag1(INPUT_YAO_FROM_FUNC_MSG2.try_into().unwrap(), tag_offset);
-    relay.ask_messages(setup, tag2, true).await?;
 
     if pid == 0 || pid == 1 {
         if party_id == 0 || party_id == 1 {
@@ -505,6 +572,40 @@ where
 pub async fn batch_input_yao_from_functionality<T, C, R, G, H>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
+    relay: &mut R,
+    input: &[Option<bool>],
+    pid: usize,
+    rng: &mut Option<G>,
+    hash: &H,
+    comm: &C,
+    yao_setup: &YaoSetup,
+) -> Result<Vec<YaoShare>, ProtocolError>
+where
+    T: ProtocolParticipant,
+    R: Relay,
+    G: RngCore + CryptoRng,
+    C: Commitment,
+    H: HashFunction,
+{
+    let mut r = FilteredMsgRelay::new(relay);
+    let tag_offset = tag_offset_counter.next_value();
+    let tag1 = MessageTag::tag1(INPUT_YAO_FROM_FUNC_MSG1.try_into().unwrap(), tag_offset);
+    r.ask_messages(setup, tag1, true).await?;
+
+    let tag_offset = tag_offset_counter.next_value();
+    let tag2 = MessageTag::tag1(INPUT_YAO_FROM_FUNC_MSG2.try_into().unwrap(), tag_offset);
+    r.ask_messages(setup, tag2, true).await?;
+
+    let output = batch_input_yao_from_functionality_inner(
+        setup, &mut r, input, pid, rng, hash, comm, yao_setup, tag1, tag2,
+    )
+    .await?;
+    Ok(output)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn batch_input_yao_from_functionality_inner<T, C, R, G, H>(
+    setup: &T,
     relay: &mut FilteredMsgRelay<R>,
     input: &[Option<bool>],
     pid: usize,
@@ -512,6 +613,8 @@ pub async fn batch_input_yao_from_functionality<T, C, R, G, H>(
     hash: &H,
     comm: &C,
     yao_setup: &YaoSetup,
+    tag1: MessageTag,
+    tag2: MessageTag,
 ) -> Result<Vec<YaoShare>, ProtocolError>
 where
     T: ProtocolParticipant,
@@ -530,14 +633,6 @@ where
     let out = builder.xor(x1, x2);
     builder.output(out);
     let circuit = builder.finish();
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(INPUT_YAO_FROM_FUNC_MSG1.try_into().unwrap(), tag_offset);
-    relay.ask_messages(setup, tag1, true).await?;
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag2 = MessageTag::tag1(INPUT_YAO_FROM_FUNC_MSG2.try_into().unwrap(), tag_offset);
-    relay.ask_messages(setup, tag2, true).await?;
 
     if pid == 0 || pid == 1 {
         if party_id == 0 || party_id == 1 {

@@ -10,10 +10,9 @@ use crate::{
     functionality::{
         evaluate::evaluate_functionality,
         garble::garble_functionality,
-        utils::{receive_from_parties, send_to_party},
+        utils::{receive_from_parties, send_to_party, FilteredMsgRelay},
         utils_dep::{
-            FilteredMsgRelay, FixedExternalSize, ProtocolError, ProtocolParticipant,
-            TagOffsetCounter, Wrap,
+            FixedExternalSize, ProtocolError, ProtocolParticipant, TagOffsetCounter, Wrap,
         },
     },
     utilities::{
@@ -293,12 +292,44 @@ where
 pub async fn binary_to_yao_functionality<T, R, C, G, H>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
+    relay: &mut R,
+    share: &BinaryShare,
+    yao_setup: &YaoSetup,
+    rng: &mut Option<G>,
+    hash: &H,
+    comm: &C,
+) -> Result<YaoShare, ProtocolError>
+where
+    T: ProtocolParticipant,
+    R: Relay,
+    G: RngCore + CryptoRng,
+    C: Commitment,
+    H: HashFunction,
+{
+    let mut relay = FilteredMsgRelay::new(relay);
+
+    let tag_offset = tag_offset_counter.next_value();
+    let tag = MessageTag::tag1(B2Y_FUNC_MSG1, tag_offset);
+    relay.ask_messages(setup, tag, true).await?;
+
+    let output = binary_to_yao_functionality_inner(
+        setup, &mut relay, share, yao_setup, rng, hash, comm, tag,
+    )
+    .await?;
+
+    Ok(output)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn binary_to_yao_functionality_inner<T, R, C, G, H>(
+    setup: &T,
     relay: &mut FilteredMsgRelay<R>,
     share: &BinaryShare,
     yao_setup: &YaoSetup,
     rng: &mut Option<G>,
     hash: &H,
     comm: &C,
+    tag: MessageTag,
 ) -> Result<YaoShare, ProtocolError>
 where
     T: ProtocolParticipant,
@@ -319,9 +350,6 @@ where
     builder.output(x5);
     let circuit = builder.finish();
 
-    let tag_offset = tag_offset_counter.next_value();
-    let tag = MessageTag::tag1(B2Y_FUNC_MSG1, tag_offset);
-    relay.ask_messages(setup, tag, true).await?;
     match party_id {
         0 => {
             assert!(yao_setup.g_setup.is_some());
@@ -400,12 +428,44 @@ where
 pub async fn batch_binary_to_yao_functionality<T, R, C, G, H>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
+    relay: &mut R,
+    share: &[BinaryShare],
+    yao_setup: &YaoSetup,
+    rng: &mut Option<G>,
+    hash: &H,
+    comm: &C,
+) -> Result<Vec<YaoShare>, ProtocolError>
+where
+    T: ProtocolParticipant,
+    R: Relay,
+    G: RngCore + CryptoRng,
+    C: Commitment,
+    H: HashFunction,
+{
+    let mut relay = FilteredMsgRelay::new(relay);
+
+    let tag_offset = tag_offset_counter.next_value();
+    let tag = MessageTag::tag1(B2Y_FUNC_MSG1, tag_offset);
+    relay.ask_messages(setup, tag, true).await?;
+
+    let output = batch_binary_to_yao_functionality_inner(
+        setup, &mut relay, share, yao_setup, rng, hash, comm, tag,
+    )
+    .await?;
+
+    Ok(output)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn batch_binary_to_yao_functionality_inner<T, R, C, G, H>(
+    setup: &T,
     relay: &mut FilteredMsgRelay<R>,
     share: &[BinaryShare],
     yao_setup: &YaoSetup,
     rng: &mut Option<G>,
     hash: &H,
     comm: &C,
+    tag: MessageTag,
 ) -> Result<Vec<YaoShare>, ProtocolError>
 where
     T: ProtocolParticipant,
@@ -428,9 +488,6 @@ where
     builder.output(x5);
     let circuit = builder.finish();
 
-    let tag_offset = tag_offset_counter.next_value();
-    let tag = MessageTag::tag1(B2Y_FUNC_MSG1, tag_offset);
-    relay.ask_messages(setup, tag, true).await?;
     match party_id {
         0 => {
             assert!(yao_setup.g_setup.is_some());
@@ -550,10 +607,7 @@ mod tests {
         functionality::{
             output::batch_output_yao_functionality,
             setup::setup_yao_functionality,
-            utils_dep::{
-                FilteredMsgRelay, ProtocolError, ProtocolParticipant, SetupMessage,
-                TagOffsetCounter,
-            },
+            utils_dep::{ProtocolError, ProtocolParticipant, SetupMessage, TagOffsetCounter},
         },
         utilities::{
             commitments::HashCommitment, garble_hash::AesGarbleHash, shahash::Sha512Hash,
@@ -572,7 +626,7 @@ mod tests {
         T: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = FilteredMsgRelay::new(relay);
+        let mut relay = relay;
 
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];
@@ -639,7 +693,7 @@ mod tests {
         T: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = FilteredMsgRelay::new(relay);
+        let mut relay = relay;
 
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];

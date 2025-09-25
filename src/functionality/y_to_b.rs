@@ -5,8 +5,8 @@ use sl_messages::{message::MessageTag, relay::Relay};
 use crate::{
     config::constants::{Y2B_FUNC_MSG1, Y2B_FUNC_MSG2, Y2B_FUNC_MSG3, Y2B_FUNC_MSG4},
     functionality::{
-        utils::{receive_from_parties, send_to_party},
-        utils_dep::{FilteredMsgRelay, ProtocolError, ProtocolParticipant, TagOffsetCounter},
+        utils::{receive_from_parties, send_to_party, FilteredMsgRelay},
+        utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
     },
     utilities::{
         commitments::Commitment,
@@ -62,7 +62,7 @@ where
 pub async fn yao_to_binary_functionality<T, G, C, R>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut FilteredMsgRelay<R>,
+    relay: &mut R,
     input: &YaoShare,
     rng: &mut Option<G>,
     comm: &C,
@@ -74,7 +74,7 @@ where
     C: Commitment,
     G: RngCore + CryptoRng,
 {
-    let party_id = setup.participant_index();
+    let mut relay = FilteredMsgRelay::new(relay);
 
     let tag_offset = tag_offset_counter.next_value();
     let tag1 = MessageTag::tag1(Y2B_FUNC_MSG1, tag_offset);
@@ -87,6 +87,35 @@ where
     let tag_offset = tag_offset_counter.next_value();
     let tag3 = MessageTag::tag1(Y2B_FUNC_MSG3, tag_offset);
     relay.ask_messages(setup, tag3, true).await?;
+
+    let output = yao_to_binary_functionality_inner(
+        setup, &mut relay, input, rng, comm, yao_setup, tag1, tag2, tag3,
+    )
+    .await?;
+
+    Ok(output)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn yao_to_binary_functionality_inner<T, G, C, R>(
+    setup: &T,
+    relay: &mut FilteredMsgRelay<R>,
+    input: &YaoShare,
+    rng: &mut Option<G>,
+    comm: &C,
+    yao_setup: &YaoSetup,
+    tag1: MessageTag,
+    tag2: MessageTag,
+    tag3: MessageTag,
+) -> Result<BinaryShare, ProtocolError>
+where
+    T: ProtocolParticipant,
+    R: Relay,
+    C: Commitment,
+    G: RngCore + CryptoRng,
+{
+    let party_id = setup.participant_index();
+
     match party_id {
         0 => {
             assert!(yao_setup.g_setup.is_some());
@@ -209,7 +238,7 @@ where
 pub async fn batch_yao_to_binary_functionality<T, G, C, R>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut FilteredMsgRelay<R>,
+    relay: &mut R,
     input: &[YaoShare],
     rng: &mut Option<G>,
     comm: &C,
@@ -221,8 +250,7 @@ where
     C: Commitment,
     G: RngCore + CryptoRng,
 {
-    let party_id = setup.participant_index();
-    let batch_size = input.len();
+    let mut relay = FilteredMsgRelay::new(relay);
 
     let tag_offset = tag_offset_counter.next_value();
     let tag1 = MessageTag::tag1(Y2B_FUNC_MSG1, tag_offset);
@@ -239,6 +267,37 @@ where
     let tag_offset = tag_offset_counter.next_value();
     let tag4 = MessageTag::tag1(Y2B_FUNC_MSG4, tag_offset);
     relay.ask_messages(setup, tag4, true).await?;
+
+    let output = batch_yao_to_binary_functionality_inner(
+        setup, &mut relay, input, rng, comm, yao_setup, tag1, tag2, tag3, tag4,
+    )
+    .await?;
+
+    Ok(output)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn batch_yao_to_binary_functionality_inner<T, G, C, R>(
+    setup: &T,
+    relay: &mut FilteredMsgRelay<R>,
+    input: &[YaoShare],
+    rng: &mut Option<G>,
+    comm: &C,
+    yao_setup: &YaoSetup,
+    tag1: MessageTag,
+    tag2: MessageTag,
+    tag3: MessageTag,
+    tag4: MessageTag,
+) -> Result<Vec<BinaryShare>, ProtocolError>
+where
+    T: ProtocolParticipant,
+    R: Relay,
+    C: Commitment,
+    G: RngCore + CryptoRng,
+{
+    let party_id = setup.participant_index();
+    let batch_size = input.len();
+
     match party_id {
         0 => {
             assert!(yao_setup.g_setup.is_some());
@@ -460,11 +519,8 @@ mod tests {
             input::batch_input_yao_functionality,
             output::validate_yao_share,
             setup::setup_yao_functionality,
-            utils::{p2p_send_to_next_receive_from_prev, run_common_randomness},
-            utils_dep::{
-                FilteredMsgRelay, ProtocolError, ProtocolParticipant, SetupMessage,
-                TagOffsetCounter,
-            },
+            utils::{p2p_send_to_next_receive_from_prev, run_common_randomness, FilteredMsgRelay},
+            utils_dep::{ProtocolError, ProtocolParticipant, SetupMessage, TagOffsetCounter},
         },
         utilities::{
             commitments::HashCommitment, garble_hash::AesGarbleHash, shahash::Sha512Hash,
@@ -479,7 +535,7 @@ mod tests {
         T: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = FilteredMsgRelay::new(relay);
+        let mut relay = relay;
 
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];
@@ -624,7 +680,7 @@ mod tests {
     pub async fn run_batch_open_binary_share<T, R>(
         setup: &T,
         tag_offset_counter: &mut TagOffsetCounter,
-        relay: &mut FilteredMsgRelay<R>,
+        relay: &mut R,
         shares: &[BinaryShare],
         serverstate: &mut ServerState,
     ) -> Result<Vec<Binary>, ProtocolError>
@@ -632,9 +688,9 @@ mod tests {
         T: ProtocolParticipant,
         R: Relay,
     {
+        let mut r = FilteredMsgRelay::new(relay);
         let tag_offset = tag_offset_counter.next_value();
-        relay
-            .ask_messages(setup, MessageTag::tag1(OPEN_MSG, tag_offset), true)
+        r.ask_messages(setup, MessageTag::tag1(OPEN_MSG, tag_offset), true)
             .await?;
 
         let msg: Vec<u8> = shares.iter().map(|share| share.value1 as u8).collect();
@@ -643,7 +699,7 @@ mod tests {
             setup,
             MessageTag::tag1(OPEN_MSG, tag_offset),
             msg,
-            relay,
+            &mut r,
         )
         .await?;
 
@@ -670,7 +726,7 @@ mod tests {
         T: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = FilteredMsgRelay::new(relay);
+        let mut relay = relay;
 
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];

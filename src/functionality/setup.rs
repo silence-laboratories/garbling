@@ -5,8 +5,8 @@ use sl_messages::{message::MessageTag, relay::Relay};
 use crate::{
     config::constants::{SETUP_YAO_FUNC_MSG1, SETUP_YAO_FUNC_MSG2},
     functionality::{
-        utils::{receive_from_parties, send_to_party},
-        utils_dep::{FilteredMsgRelay, ProtocolError, ProtocolParticipant, TagOffsetCounter},
+        utils::{receive_from_parties, send_to_party, FilteredMsgRelay},
+        utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
     },
     utilities::types::{Block, EvaluatorSetup, GarblerSetup, YaoSetup, BLOCK_SIZE},
 };
@@ -14,7 +14,31 @@ use crate::{
 pub async fn setup_yao_functionality<T, R>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
+    relay: &mut R,
+) -> Result<YaoSetup, ProtocolError>
+where
+    T: ProtocolParticipant,
+    R: Relay,
+{
+    let mut relay = FilteredMsgRelay::new(relay);
+
+    let tag_offset = tag_offset_counter.next_value();
+    let tag1 = MessageTag::tag1(SETUP_YAO_FUNC_MSG1.try_into().unwrap(), tag_offset);
+    relay.ask_messages(setup, tag1, true).await?;
+    let tag_offset = tag_offset_counter.next_value();
+    let tag2 = MessageTag::tag1(SETUP_YAO_FUNC_MSG2.try_into().unwrap(), tag_offset);
+    relay.ask_messages(setup, tag2, true).await?;
+
+    let output = setup_yao_functionality_inner(setup, &mut relay, tag1, tag2).await?;
+
+    Ok(output)
+}
+
+pub async fn setup_yao_functionality_inner<T, R>(
+    setup: &T,
     relay: &mut FilteredMsgRelay<R>,
+    tag1: MessageTag,
+    tag2: MessageTag,
 ) -> Result<YaoSetup, ProtocolError>
 where
     T: ProtocolParticipant,
@@ -26,13 +50,6 @@ where
         g_setup: None,
         e_setup: None,
     };
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(SETUP_YAO_FUNC_MSG1.try_into().unwrap(), tag_offset);
-    relay.ask_messages(setup, tag1, true).await?;
-    let tag_offset = tag_offset_counter.next_value();
-    let tag2 = MessageTag::tag1(SETUP_YAO_FUNC_MSG2.try_into().unwrap(), tag_offset);
-    relay.ask_messages(setup, tag2, true).await?;
 
     if party_id == 2 {
         let mut rng = rand::rngs::StdRng::from_os_rng();
