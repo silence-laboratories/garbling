@@ -519,8 +519,11 @@ mod tests {
             input::batch_input_yao_functionality,
             output::validate_yao_share,
             setup::setup_yao_functionality,
-            utils::{p2p_send_to_next_receive_from_prev, run_common_randomness, FilteredMsgRelay},
-            utils_dep::{ProtocolError, ProtocolParticipant, SetupMessage, TagOffsetCounter},
+            utils::{
+                p2p_send_to_next_receive_from_prev, run_common_randomness, FilteredMsgRelay,
+                SetupMessage,
+            },
+            utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
         },
         utilities::{
             commitments::HashCommitment, garble_hash::AesGarbleHash, shahash::Sha512Hash,
@@ -864,7 +867,7 @@ mod tests {
         use sl_messages::message::InstanceId;
         use std::time::Duration;
 
-        use crate::functionality::utils_dep::{NoSigningKey, NoVerifyingKey};
+        use crate::functionality::utils::{NoSigningKey, NoVerifyingKey};
 
         let instance = instance.unwrap_or_else(rand::random);
 

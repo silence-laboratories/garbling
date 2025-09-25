@@ -4,8 +4,8 @@ use sl_messages::{message::MessageTag, relay::Relay};
 use crate::{
     config::constants::{OUTPUT_YAO_FUNC_MSG1, OUTPUT_YAO_FUNC_MSG2, OUTPUT_YAO_TO_FUNC_MSG1},
     functionality::{
-        utils::{receive_from_parties, send_to_party, FilteredMsgRelay},
-        utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter, Wrap},
+        utils::{receive_from_parties, send_to_party, FilteredMsgRelay, Wrap},
+        utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
     },
     utilities::{
         types::{Block, YaoShare, BLOCK_SIZE},

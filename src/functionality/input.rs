@@ -9,8 +9,8 @@ use crate::{
     config::constants::{INPUT_YAO_FROM_FUNC_MSG1, INPUT_YAO_FROM_FUNC_MSG2, INPUT_YAO_FUNC_MSG1},
     functionality::{
         evaluate::evaluate_functionality,
-        utils::{receive_from_parties, send_to_party, FilteredMsgRelay},
-        utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter, Wrap},
+        utils::{receive_from_parties, send_to_party, FilteredMsgRelay, Wrap},
+        utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
     },
     utilities::{
         commitments::Commitment,

@@ -744,6 +744,8 @@ mod tests {
     use sl_messages::relay::{MessageRelayService, Relay, SimpleMessageRelay};
     use tokio::task::JoinSet;
 
+    #[cfg(any(test, feature = "test-support"))]
+    use crate::functionality::utils::SetupMessage;
     use crate::{
         circuitop::circuit::BinaryCircuit,
         customcircuits::comparison::build_comparison_circuit,
@@ -758,7 +760,7 @@ mod tests {
                 output_yao_functionality, output_yao_to_functionality, validate_yao_share,
             },
             setup::setup_yao_functionality,
-            utils_dep::{ProtocolError, ProtocolParticipant, SetupMessage, TagOffsetCounter},
+            utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
         },
         utilities::{
             commitments::HashCommitment, garble_hash::AesGarbleHash, shahash::Sha512Hash,
@@ -1616,7 +1618,7 @@ mod tests {
         use sha2::{Digest, Sha256};
         use std::time::Duration;
 
-        use crate::functionality::utils_dep::{NoSigningKey, NoVerifyingKey};
+        use crate::functionality::utils::{NoSigningKey, NoVerifyingKey};
 
         let instance = instance.unwrap_or_else(rand::random);
 
