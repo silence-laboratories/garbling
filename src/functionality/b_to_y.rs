@@ -844,7 +844,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_b_to_y() {
         let batch = true;
-        let mut rng = StdRng::from_os_rng();
+        let mut rng = StdRng::from_entropy();
         let mut s = Block::default();
         rng.fill_bytes(&mut s);
         let val = BinaryString {

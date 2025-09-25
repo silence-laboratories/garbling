@@ -1,6 +1,6 @@
 use std::{collections::HashMap, vec};
 
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{rngs::StdRng, CryptoRng, Rng, RngCore, SeedableRng};
 use sl_compute_common::BinaryString;
 use sl_messages::{message::MessageTag, relay::Relay};
 
@@ -260,8 +260,8 @@ where
 }
 
 fn input_yao_from_functionality_3_create_msg1(input: &bool) -> (bool, bool) {
-    let mut rng = rand::rng();
-    let x1 = rng.random_bool(0.5);
+    let mut rng = StdRng::from_entropy();
+    let x1 = rng.gen_bool(0.5);
     let x2 = x1 ^ input;
     (x1, x2)
 }
@@ -1264,11 +1264,11 @@ where
 }
 
 fn input_yao_from_all_functionality_3_create_msg1(input: &[bool]) -> (Vec<bool>, Vec<bool>) {
-    let mut rng = rand::rngs::StdRng::from_os_rng();
+    let mut rng = rand::rngs::StdRng::from_entropy();
     let mut x1vals = Vec::with_capacity(input.len());
     let mut x2vals = Vec::with_capacity(input.len());
     (0..input.len()).for_each(|i| {
-        let x1 = rng.random_bool(0.5);
+        let x1 = rng.gen_bool(0.5);
         let x2 = x1 ^ input[i];
         x1vals.push(x1);
         x2vals.push(x2);

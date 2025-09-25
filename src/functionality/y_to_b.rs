@@ -16,8 +16,8 @@ use crate::{
 };
 
 fn create_yao_to_binary_msg1(yao_setup: &GarblerSetup) -> (bool, Block, Block) {
-    let mut rng = rand::rngs::StdRng::from_os_rng();
-    let y = rng.random_bool(0.5);
+    let mut rng = rand::rngs::StdRng::from_entropy();
+    let y = rng.gen_bool(0.5);
     let mut wyr = Block::default();
     rng.fill_bytes(&mut wyr);
 
@@ -503,8 +503,7 @@ mod tests {
     /// OPEN_MSG
     pub const OPEN_MSG: u32 = 3;
     use merlin::Transcript;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
+    use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
     use sl_compute_common::{Binary, BinaryShare, ServerState};
     use sl_messages::{
         message::MessageTag,

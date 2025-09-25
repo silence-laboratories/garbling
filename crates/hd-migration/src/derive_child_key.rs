@@ -273,13 +273,13 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_derive_child_key() {
-        let mut rng = StdRng::from_os_rng();
+        let mut rng = StdRng::from_entropy();
 
-        let no: u32 = rng.random();
+        let no: u32 = rng.r#gen();
         let child_number = ChildIndex::Normal(no);
         test_derive_child_key_util(child_number).await;
 
-        let no: u32 = rng.random();
+        let no: u32 = rng.r#gen();
         let child_number = ChildIndex::Hardened(no);
         test_derive_child_key_util(child_number).await;
     }

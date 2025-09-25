@@ -212,7 +212,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_scalar_to_yao() {
-        let mut rng = rngs::StdRng::from_os_rng();
+        let mut rng = rngs::StdRng::from_entropy();
 
         let mut bytes = [0u8; 32];
         rng.fill_bytes(&mut bytes);

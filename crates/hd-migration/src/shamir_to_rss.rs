@@ -127,7 +127,7 @@ mod tests {
         let mut cnt = TagOffsetCounter::new();
 
         let mut seed = [0u8; 32];
-        let mut r = StdRng::from_os_rng();
+        let mut r = StdRng::from_entropy();
         r.fill_bytes(&mut seed);
         let mut randomness = run_common_randomness(&setup, &seed, &mut relay).await?;
 
@@ -152,7 +152,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_shamir_to_scalar_rss() {
-        let mut rng = rngs::StdRng::from_os_rng();
+        let mut rng = rngs::StdRng::from_entropy();
 
         let x1 = NonZeroScalar::new(random_scalar(&mut rng)).unwrap();
         let x2 = NonZeroScalar::new(random_scalar(&mut rng)).unwrap();
