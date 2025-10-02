@@ -3,10 +3,13 @@ use crate::circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder};
 pub fn build_comparison_circuit() -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
-    let eval_input_1 = builder.evaluator_input();
-    let garb_input_1 = builder.garbler_input();
-    let eval_input_2 = builder.evaluator_input();
-    let garb_input_2 = builder.garbler_input();
+    let garb = builder.new_inputs(2);
+    let eval = builder.new_inputs(2);
+
+    let eval_input_1 = eval[0];
+    let garb_input_1 = garb[0];
+    let eval_input_2 = eval[1];
+    let garb_input_2 = garb[1];
 
     // Compare the bits
     let eq0 = builder.xor(eval_input_1, garb_input_1);

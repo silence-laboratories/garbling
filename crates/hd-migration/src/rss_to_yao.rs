@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use garbled_circuit::{
     functionality::{
         circuit_eval::yao_circuit_eval_functionality, input::run_batch_input_from_all_yao,
@@ -60,36 +58,23 @@ where
     )
     .await?;
 
-    let mut gin = HashMap::new();
     let verification_circuit = build_verify_sharings_circuit();
-    for (cnt, val) in verification_circuit.garbler_input_ids.iter().enumerate() {
-        let v = if cnt < 256 {
-            i1_yao[256 + cnt].clone()
-        } else if cnt < 256 * 2 {
-            i2_yao[256 + cnt - 256].clone()
-        } else {
-            i3_yao[256 + cnt - (256 * 2)].clone()
-        };
-        gin.insert(*val, v);
-    }
-    let mut ein = HashMap::new();
-    for (cnt, val) in verification_circuit.evaluator_input_ids.iter().enumerate() {
-        let v = if cnt < 256 {
-            i1_yao[cnt].clone()
-        } else if cnt < 256 * 2 {
-            i2_yao[cnt - 256].clone()
-        } else {
-            i3_yao[cnt - (256 * 2)].clone()
-        };
-        ein.insert(*val, v);
-    }
+
+    let mut inputs = vec![vec![], vec![], vec![], vec![], vec![], vec![]];
+
+    inputs[0].extend_from_slice(&i1_yao[256..]);
+    inputs[1].extend_from_slice(&i2_yao[256..]);
+    inputs[2].extend_from_slice(&i3_yao[256..]);
+
+    inputs[3].extend_from_slice(&i1_yao[..256]);
+    inputs[4].extend_from_slice(&i2_yao[..256]);
+    inputs[5].extend_from_slice(&i3_yao[..256]);
 
     let outver = yao_circuit_eval_functionality(
         setup,
         tag_offset_counter,
         relay,
-        &gin,
-        &ein,
+        &inputs,
         &verification_circuit,
         rng,
         hash,
@@ -113,21 +98,17 @@ where
 
     let circ = build_scalar_to_y_circuit();
 
-    let mut gin = HashMap::new();
-    for (cnt, val) in circ.garbler_input_ids.iter().enumerate() {
-        gin.insert(*val, x_y[cnt].clone());
-    }
-    let mut ein = HashMap::new();
-    for (cnt, val) in circ.evaluator_input_ids.iter().enumerate() {
-        ein.insert(*val, i3_yao[cnt].clone());
-    }
+    let inputs = vec![
+        i1_yao[..256].to_vec(),
+        i2_yao[..256].to_vec(),
+        i3_yao[..256].to_vec(),
+    ];
 
     let out_hmap = yao_circuit_eval_functionality(
         setup,
         tag_offset_counter,
         relay,
-        &gin,
-        &ein,
+        &inputs,
         &circ,
         rng,
         hash,

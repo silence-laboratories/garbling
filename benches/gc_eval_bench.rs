@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use criterion::{criterion_group, criterion_main, Criterion};
 use garbled_circuit::{
     circuitop::circuit::BinaryCircuit,
@@ -25,41 +23,33 @@ pub fn eval_aes256_benchmark(c: &mut Criterion) {
 
     let hash = AesGarbleHash::new(AES_KEY);
 
-    let mut ggarin = HashMap::new();
-    let mut gevain = HashMap::new();
-    let mut egarin = HashMap::new();
-    let mut eevain = HashMap::new();
+    let zero = Block::default();
+    let gin: Vec<Vec<YaoGarblerShare>> = circuit
+        .get_input_ids()
+        .iter()
+        .map(|v| {
+            v.iter()
+                .map(|_| YaoGarblerShare {
+                    delta,
+                    f_label: zero,
+                })
+                .collect()
+        })
+        .collect();
 
-    for ind in &circuit.garbler_input_ids {
-        let mut zero = Block::default();
-        rng.fill_bytes(&mut zero);
-        ggarin.insert(
-            *ind,
-            YaoGarblerShare {
-                delta,
-                f_label: zero,
-            },
-        );
-        egarin.insert(*ind, YaoEvaluatorShare { label: zero });
-    }
-
-    for ind in &circuit.garbler_input_ids {
-        let mut zero = Block::default();
-        rng.fill_bytes(&mut zero);
-        gevain.insert(
-            *ind,
-            YaoGarblerShare {
-                delta,
-                f_label: zero,
-            },
-        );
-        eevain.insert(*ind, YaoEvaluatorShare { label: zero });
-    }
+    let ein: Vec<Vec<YaoEvaluatorShare>> = circuit
+        .get_input_ids()
+        .iter()
+        .map(|v| {
+            v.iter()
+                .map(|_| YaoEvaluatorShare { label: zero })
+                .collect()
+        })
+        .collect();
 
     let (gc, _) = garble_functionality(
         &circuit,
-        &ggarin,
-        &gevain,
+        &gin,
         &GarblerSetup {
             delta,
             comm_crs: Block::default(),
@@ -70,7 +60,7 @@ pub fn eval_aes256_benchmark(c: &mut Criterion) {
     );
     group.bench_function("aes256_eval", |b| {
         b.iter(|| {
-            let _ = evaluate_functionality(&circuit, &egarin, &eevain, &gc, &hash);
+            let _ = evaluate_functionality(&circuit, &ein, &gc, &hash);
         })
     });
     group.finish();
@@ -88,41 +78,33 @@ pub fn eval_aes128_benchmark(c: &mut Criterion) {
 
     let hash = AesGarbleHash::new(AES_KEY);
 
-    let mut ggarin = HashMap::new();
-    let mut gevain = HashMap::new();
-    let mut egarin = HashMap::new();
-    let mut eevain = HashMap::new();
+    let zero = Block::default();
+    let gin: Vec<Vec<YaoGarblerShare>> = circuit
+        .get_input_ids()
+        .iter()
+        .map(|v| {
+            v.iter()
+                .map(|_| YaoGarblerShare {
+                    delta,
+                    f_label: zero,
+                })
+                .collect()
+        })
+        .collect();
 
-    for ind in &circuit.garbler_input_ids {
-        let mut zero = Block::default();
-        rng.fill_bytes(&mut zero);
-        ggarin.insert(
-            *ind,
-            YaoGarblerShare {
-                delta,
-                f_label: zero,
-            },
-        );
-        egarin.insert(*ind, YaoEvaluatorShare { label: zero });
-    }
-
-    for ind in &circuit.garbler_input_ids {
-        let mut zero = Block::default();
-        rng.fill_bytes(&mut zero);
-        gevain.insert(
-            *ind,
-            YaoGarblerShare {
-                delta,
-                f_label: zero,
-            },
-        );
-        eevain.insert(*ind, YaoEvaluatorShare { label: zero });
-    }
+    let ein: Vec<Vec<YaoEvaluatorShare>> = circuit
+        .get_input_ids()
+        .iter()
+        .map(|v| {
+            v.iter()
+                .map(|_| YaoEvaluatorShare { label: zero })
+                .collect()
+        })
+        .collect();
 
     let (gc, _) = garble_functionality(
         &circuit,
-        &ggarin,
-        &gevain,
+        &gin,
         &GarblerSetup {
             delta,
             comm_crs: Block::default(),
@@ -133,7 +115,7 @@ pub fn eval_aes128_benchmark(c: &mut Criterion) {
     );
     group.bench_function("aes128_eval", |b| {
         b.iter(|| {
-            let _ = evaluate_functionality(&circuit, &egarin, &eevain, &gc, &hash);
+            let _ = evaluate_functionality(&circuit, &ein, &gc, &hash);
         })
     });
     group.finish();
@@ -150,41 +132,33 @@ pub fn eval_sha256_benchmark(c: &mut Criterion) {
 
     let hash = AesGarbleHash::new(AES_KEY);
 
-    let mut ggarin = HashMap::new();
-    let mut gevain = HashMap::new();
-    let mut egarin = HashMap::new();
-    let mut eevain = HashMap::new();
+    let zero = Block::default();
+    let gin: Vec<Vec<YaoGarblerShare>> = circuit
+        .get_input_ids()
+        .iter()
+        .map(|v| {
+            v.iter()
+                .map(|_| YaoGarblerShare {
+                    delta,
+                    f_label: zero,
+                })
+                .collect()
+        })
+        .collect();
 
-    for ind in &circuit.garbler_input_ids {
-        let mut zero = Block::default();
-        rng.fill_bytes(&mut zero);
-        ggarin.insert(
-            *ind,
-            YaoGarblerShare {
-                delta,
-                f_label: zero,
-            },
-        );
-        egarin.insert(*ind, YaoEvaluatorShare { label: zero });
-    }
-
-    for ind in &circuit.garbler_input_ids {
-        let mut zero = Block::default();
-        rng.fill_bytes(&mut zero);
-        gevain.insert(
-            *ind,
-            YaoGarblerShare {
-                delta,
-                f_label: zero,
-            },
-        );
-        eevain.insert(*ind, YaoEvaluatorShare { label: zero });
-    }
+    let ein: Vec<Vec<YaoEvaluatorShare>> = circuit
+        .get_input_ids()
+        .iter()
+        .map(|v| {
+            v.iter()
+                .map(|_| YaoEvaluatorShare { label: zero })
+                .collect()
+        })
+        .collect();
 
     let (gc, _) = garble_functionality(
         &circuit,
-        &ggarin,
-        &gevain,
+        &gin,
         &GarblerSetup {
             delta,
             comm_crs: Block::default(),
@@ -195,7 +169,7 @@ pub fn eval_sha256_benchmark(c: &mut Criterion) {
     );
     group.bench_function("sha256_eval", |b| {
         b.iter(|| {
-            let _ = evaluate_functionality(&circuit, &egarin, &eevain, &gc, &hash);
+            let _ = evaluate_functionality(&circuit, &ein, &gc, &hash);
         })
     });
     group.finish();

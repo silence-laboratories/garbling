@@ -13,8 +13,7 @@ use crate::{
 
 pub fn garble_functionality<R, H>(
     circuit: &BinaryCircuit,
-    garbler_input_shares: &HashMap<usize, YaoGarblerShare>,
-    evaluator_input_shares: &HashMap<usize, YaoGarblerShare>,
+    input_shares: &[Vec<YaoGarblerShare>],
     setup: &GarblerSetup,
     rng: &mut R,
     hash: &H,
@@ -29,16 +28,8 @@ where
 
     for (i, gate) in circuit.gates.iter().enumerate() {
         let (out_gate, f_label) = match *gate {
-            BinaryGate::GarblerInput { id, wire } => {
-                let label_option = garbler_input_shares.get(&id);
-                let label = label_option.unwrap();
-                assert_eq!(label.delta, setup.delta);
-                (wire, label.f_label)
-            }
-            BinaryGate::EvaluatorInput { id, wire } => {
-                let label_option = evaluator_input_shares.get(&id);
-                let label = label_option.unwrap();
-                assert_eq!(label.delta, setup.delta);
+            BinaryGate::Input { no, id, wire } => {
+                let label = &input_shares[no][id];
                 (wire, label.f_label)
             }
             BinaryGate::Constant { val, wire } => {
@@ -154,44 +145,21 @@ mod tests {
         let mut rng = ChaCha8Rng::from_seed(setup.prf_key);
         let hash = AesGarbleHash::new(Block::default());
 
-        let g = circuit
-            .garbler_input_ids
+        let gin: Vec<Vec<YaoGarblerShare>> = circuit
+            .input_gate_ids
             .iter()
-            .map(|&id| {
-                (
-                    id,
-                    YaoGarblerShare {
+            .map(|v| {
+                v.iter()
+                    .map(|_| YaoGarblerShare {
                         delta: setup.delta,
                         f_label: Block::default(),
-                    },
-                )
+                    })
+                    .collect()
             })
             .collect();
 
-        let e = circuit
-            .evaluator_input_ids
-            .iter()
-            .map(|&id| {
-                (
-                    id,
-                    YaoGarblerShare {
-                        delta: setup.delta,
-                        f_label: Block::default(),
-                    },
-                )
-            })
-            .collect();
+        let (f, _o) = garble_functionality(&circuit, &gin, &setup, &mut rng, &hash);
 
-        let (f, _o) = garble_functionality(&circuit, &g, &e, &setup, &mut rng, &hash);
-
-        println!(
-            "cir: garbler_input_ids.len() {}",
-            circuit.garbler_input_ids.len()
-        );
-        println!(
-            "cir: evaluator_input_ids.len() {}",
-            circuit.evaluator_input_ids.len()
-        );
         println!("cir: gates.len() {}", circuit.gates.len());
         println!("cir: num_nonfree_gates {}", circuit.num_nonfree_gates);
         println!("cir: constant_map.len() {}", circuit.constant_map.len());
@@ -213,44 +181,23 @@ mod tests {
         let mut rng = ChaCha8Rng::from_seed(setup.prf_key);
         let hash = AesGarbleHash::new(Block::default());
 
-        let g = circuit
-            .garbler_input_ids
+        let gin: Vec<Vec<YaoGarblerShare>> = circuit
+            .input_gate_ids
             .iter()
-            .map(|&id| {
-                (
-                    id,
-                    YaoGarblerShare {
+            .map(|v| {
+                v.iter()
+                    .map(|_| YaoGarblerShare {
                         delta: setup.delta,
                         f_label: Block::default(),
-                    },
-                )
+                    })
+                    .collect()
             })
             .collect();
 
-        let e = circuit
-            .evaluator_input_ids
-            .iter()
-            .map(|&id| {
-                (
-                    id,
-                    YaoGarblerShare {
-                        delta: setup.delta,
-                        f_label: Block::default(),
-                    },
-                )
-            })
-            .collect();
+        circuit.print_circuit();
 
-        let (f, _o) = garble_functionality(&circuit, &g, &e, &setup, &mut rng, &hash);
+        let (f, _o) = garble_functionality(&circuit, &gin, &setup, &mut rng, &hash);
 
-        println!(
-            "cir: garbler_input_ids.len() {}",
-            circuit.garbler_input_ids.len()
-        );
-        println!(
-            "cir: evaluator_input_ids.len() {}",
-            circuit.evaluator_input_ids.len()
-        );
         println!("cir: gates.len() {}", circuit.gates.len());
         println!("cir: num_nonfree_gates {}", circuit.num_nonfree_gates);
         println!("cir: constant_map.len() {}", circuit.constant_map.len());

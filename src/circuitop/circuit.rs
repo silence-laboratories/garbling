@@ -13,11 +13,11 @@ pub struct BinaryCircuit {
     /// A list of all gates in the circuit.
     pub gates: Vec<BinaryGate>,
 
-    /// A list of gate IDs corresponding to the garbler's input wires.
-    pub garbler_input_ids: Vec<usize>,
+    /// A number of inputs in the circuit.
+    pub num_inputs: usize,
 
-    /// A list of gate IDs corresponding to the evaluator's input wires.
-    pub evaluator_input_ids: Vec<usize>,
+    /// The list of gate IDs corresponding to the circuit's input wires.
+    pub input_gate_ids: Vec<Vec<usize>>,
 
     /// A list of gate IDs corresponding to the circuit's output wires.
     pub output_gate_ids: Vec<usize>,
@@ -64,35 +64,23 @@ impl BinaryCircuit {
         }
 
         let mut output_circuit = Self::new(num_gates);
-        let mut num_garbler_inputs = 0;
-        let mut num_evaluator_inputs = 0;
+        let mut input_sizes = Vec::new();
         let mut num_outputs = 0;
 
         if let Some(Ok(line1)) = reader.next() {
             let mut parts = line1.split(' ');
             if let Some(n_input_wires_str) = parts.next() {
-                if let Ok(_num_inp_wires) = n_input_wires_str.parse::<u64>() {
-                    if _num_inp_wires == 2 {
-                        if let Some(num_garbl_inputs) = parts.next() {
-                            if let Ok(_num_garbl_inputs) = num_garbl_inputs.parse::<usize>() {
-                                if let Some(num_eval_inputs) = parts.next() {
-                                    if let Ok(_num_eval_inputs) = num_eval_inputs.parse::<usize>() {
-                                        num_garbler_inputs = _num_garbl_inputs;
-                                        num_evaluator_inputs = _num_eval_inputs;
-                                    } else {
-                                        return Err(FileParsingError::InputNoParsingError());
-                                    }
-                                } else {
-                                    return Err(FileParsingError::InputNoParsingError());
-                                }
+                if let Ok(num_inp_wires) = n_input_wires_str.parse::<usize>() {
+                    for _ in 0..num_inp_wires {
+                        if let Some(num_iplen) = parts.next() {
+                            if let Ok(num_iplen) = num_iplen.parse::<usize>() {
+                                input_sizes.push(num_iplen);
                             } else {
                                 return Err(FileParsingError::InputNoParsingError());
                             }
                         } else {
                             return Err(FileParsingError::InputNoParsingError());
                         }
-                    } else {
-                        return Err(FileParsingError::InputCountError());
                     }
                 } else {
                     return Err(FileParsingError::InputNoParsingError());
@@ -123,17 +111,18 @@ impl BinaryCircuit {
 
         output_circuit.num_wires = num_wires;
 
-        for i in 0..num_garbler_inputs {
-            output_circuit.push_gate(BinaryGate::GarblerInput { id: i, wire: i });
-            output_circuit.push_garbler_input(i);
-        }
-
-        for i in 0..num_evaluator_inputs {
-            output_circuit.push_gate(BinaryGate::EvaluatorInput {
-                id: i,
-                wire: num_garbler_inputs + i,
-            });
-            output_circuit.push_evaluator_input(i);
+        let mut totalcount = 0;
+        for (ipcnt, i) in input_sizes.iter().enumerate() {
+            output_circuit.new_input();
+            for j in 0..*i {
+                output_circuit.push_gate(BinaryGate::Input {
+                    no: ipcnt,
+                    id: j,
+                    wire: totalcount,
+                });
+                output_circuit.push_nth_input(ipcnt, j);
+                totalcount += 1;
+            }
         }
 
         for i in 0..num_outputs {
@@ -204,8 +193,8 @@ impl BinaryCircuit {
         let gates: Vec<BinaryGate> = Vec::with_capacity(ngates);
         Self {
             gates,
-            garbler_input_ids: Vec::new(),
-            evaluator_input_ids: Vec::new(),
+            num_inputs: 0,
+            input_gate_ids: Vec::new(),
             output_gate_ids: Vec::new(),
             constant_map: HashMap::new(),
             num_nonfree_gates: 0,
@@ -237,20 +226,29 @@ impl BinaryCircuit {
         self.constant_map.insert(val, constant_gate_id);
     }
 
-    /// Adds a garbler input gate ID to the circuit.
+    /// Adds an input gate ID to the circuit.
     ///
     /// # Arguments
     /// * `garbler_input_id` - The ID of the garbler input gate.
-    pub fn push_garbler_input(&mut self, garbler_input_id: usize) {
-        self.garbler_input_ids.push(garbler_input_id);
+    pub fn new_input(&mut self) {
+        self.input_gate_ids.push(vec![]);
+        self.num_inputs += 1
     }
 
-    /// Adds an evaluator input gate ID to the circuit.
+    /// Adds an input gate ID to the circuit.
     ///
     /// # Arguments
-    /// * `evaluator_input_id` - The ID of the evaluator input gate.
-    pub fn push_evaluator_input(&mut self, evaluator_input_id: usize) {
-        self.evaluator_input_ids.push(evaluator_input_id);
+    /// * `garbler_input_id` - The ID of the garbler input gate.
+    pub fn push_nth_input(&mut self, n: usize, input_id: usize) {
+        self.input_gate_ids[n].push(input_id);
+    }
+
+    /// Adds an input gate ID to the circuit.
+    ///
+    /// # Arguments
+    /// * `garbler_input_id` - The ID of the garbler input gate.
+    pub fn push_nth_inputs(&mut self, n: usize, input_id: &[usize]) {
+        self.input_gate_ids[n].extend_from_slice(input_id);
     }
 
     /// Returns a reference to the list of output gate IDs.
@@ -261,25 +259,30 @@ impl BinaryCircuit {
         &self.output_gate_ids
     }
 
-    /// Returns a reference to the list of garbler input gate IDs.
+    /// Returns a reference to the list of n-th input gate IDs.
     ///
     /// # Returns
-    /// * A slice containing the IDs of all garbler input gates.
-    pub fn get_garbler_input_ids(&self) -> &[usize] {
-        &self.garbler_input_ids
+    /// * A slice containing the IDs of all n-th input gates.
+    pub fn get_nth_input_ids(&self, n: usize) -> &[usize] {
+        &self.input_gate_ids[n]
     }
 
-    /// Returns a reference to the list of evaluator input gate IDs.
+    /// Returns a reference to the list of all input gate IDs.
     ///
     /// # Returns
-    /// * A slice containing the IDs of all evaluator input gates.
-    pub fn get_evaluator_input_ids(&self) -> &[usize] {
-        &self.evaluator_input_ids
+    /// * A slice containing the Vectors of IDs of all input gates.
+    pub fn get_input_ids(&self) -> &[Vec<usize>] {
+        &self.input_gate_ids
     }
 
     /// Increments the count of non-free (AND) gates in the circuit.
     pub fn increment_nonfree_gates(&mut self) {
         self.num_nonfree_gates += 1;
+    }
+    
+    /// Increments the count of wires in the circuit.
+    pub fn increment_wires(&mut self) {
+        self.num_wires += 1;
     }
 
     /// Returns the number of non-free (AND) gates in the circuit.
@@ -290,31 +293,28 @@ impl BinaryCircuit {
         self.num_nonfree_gates
     }
 
-    /// Returns the number of garbler input gates in the circuit.
+    /// Returns the number of inputs in the circuit.
     ///
     /// # Returns
     /// * The total count of garbler input gates.
-    pub fn num_garbler_inputs(&self) -> usize {
-        self.get_garbler_input_ids().len()
+    pub fn num_inputs(&self) -> usize {
+        self.num_inputs
     }
 
-    /// Returns the number of evaluator input gates in the circuit.
+    /// Returns the number of input gate IDs in the n-th input in the circuit.
     ///
     /// # Returns
-    /// * The total count of evaluator input gates.
-    pub fn num_evaluator_inputs(&self) -> usize {
-        self.get_evaluator_input_ids().len()
+    /// * The total count of garbler input gates.
+    pub fn num_nth_inputs(&self, n: usize) -> usize {
+        self.input_gate_ids[n].len()
     }
 
     /// Prints a textual representation of the circuit.
     pub fn print_circuit(&self) {
         for gate in self.gates.iter() {
             match *gate {
-                BinaryGate::GarblerInput { id, wire: _ } => {
-                    println!("GarblerInput: id: {}", self.garbler_input_ids[id])
-                }
-                BinaryGate::EvaluatorInput { id, wire: _ } => {
-                    println!("EvaluatorInput: id: {}", self.evaluator_input_ids[id])
+                BinaryGate::Input { no, id, wire } => {
+                    println!("Input: no: {} id: {} wire: {}", no, id, wire)
                 }
                 BinaryGate::Constant { val, wire: _ } => println!("Constantinput: val: {}", val),
                 BinaryGate::Inv { xid, out } => {
@@ -339,6 +339,7 @@ impl BinaryCircuit {
 
 #[cfg(test)]
 mod tests {
+
     use std::collections::HashMap;
 
     use crate::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
@@ -349,10 +350,26 @@ mod tests {
 
         let required_circuit = BinaryCircuit {
             gates: vec![
-                BinaryGate::GarblerInput { id: 0, wire: 0 },
-                BinaryGate::GarblerInput { id: 1, wire: 1 },
-                BinaryGate::EvaluatorInput { id: 0, wire: 2 },
-                BinaryGate::EvaluatorInput { id: 1, wire: 3 },
+                BinaryGate::Input {
+                    no: 0,
+                    id: 0,
+                    wire: 0,
+                },
+                BinaryGate::Input {
+                    no: 0,
+                    id: 1,
+                    wire: 1,
+                },
+                BinaryGate::Input {
+                    no: 1,
+                    id: 0,
+                    wire: 2,
+                },
+                BinaryGate::Input {
+                    no: 1,
+                    id: 1,
+                    wire: 3,
+                },
                 BinaryGate::And {
                     xid: 0,
                     yid: 2,
@@ -388,8 +405,8 @@ mod tests {
                     out: 9,
                 },
             ],
-            garbler_input_ids: vec![0, 1],
-            evaluator_input_ids: vec![0, 1],
+            num_inputs: 2,
+            input_gate_ids: vec![vec![0, 1], vec![0, 1]],
             output_gate_ids: vec![8, 9],
             constant_map: HashMap::new(),
             num_nonfree_gates: 4,

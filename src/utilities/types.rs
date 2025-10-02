@@ -1,4 +1,7 @@
-use crate::functionality::utils::{FixedExternalSize, Wrap};
+use crate::{
+    functionality::utils::{FixedExternalSize, Wrap},
+    utilities::utils::xor_blocks,
+};
 
 pub const BLOCK_SIZE: usize = 16;
 
@@ -51,15 +54,55 @@ pub struct YaoGarblerShare {
     pub f_label: Block,
 }
 
+impl YaoGarblerShare {
+    pub fn xor(&self, other: &Self) -> Self {
+        assert_eq!(self.delta, other.delta);
+        Self {
+            delta: self.delta,
+            f_label: xor_blocks(self.f_label, other.f_label),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct YaoEvaluatorShare {
     pub label: Block,
+}
+
+impl YaoEvaluatorShare {
+    pub fn xor(&self, other: &Self) -> Self {
+        Self {
+            label: xor_blocks(self.label, other.label),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct YaoShare {
     pub g_share: Option<YaoGarblerShare>,
     pub e_share: Option<YaoEvaluatorShare>,
+}
+
+impl YaoShare {
+    pub fn xor(&self, other: &Self) -> Self {
+        if self.g_share.is_some() {
+            assert!(other.g_share.is_some());
+            let s = self.g_share.clone().unwrap();
+            let o = other.g_share.clone().unwrap();
+            YaoShare {
+                g_share: Some(s.xor(&o)),
+                e_share: None,
+            }
+        } else {
+            assert!(other.e_share.is_some());
+            let s = self.e_share.clone().unwrap();
+            let o = other.e_share.clone().unwrap();
+            YaoShare {
+                g_share: None,
+                e_share: Some(s.xor(&o)),
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]

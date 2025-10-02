@@ -4,17 +4,9 @@
 /// can appear in a circuit.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BinaryGate {
-    /// Represents an input gate for the garbler (party 1).
-    ///
-    /// # Fields
-    /// * `id` - The unique identifier of the garbler's input gate.
-    GarblerInput { id: usize, wire: usize },
 
-    /// Represents an input gate for the evaluator (party 2).
-    ///
-    /// # Fields
-    /// * `id` - The unique identifier of the evaluator's input gate.
-    EvaluatorInput { id: usize, wire: usize },
+    /// Represents an input gate.
+    Input { no: usize, id: usize, wire: usize },
 
     /// Represents a constant value gate.
     ///

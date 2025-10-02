@@ -1,15 +1,10 @@
-use std::collections::HashMap;
-
 use rand::{CryptoRng, RngCore};
 use sl_compute_common::BinaryShare;
 use sl_messages::{message::MessageTag, relay::Relay};
 
 use crate::{
-    circuitop::circuit_builder::CircuitBuilder,
     config::constants::B2Y_FUNC_MSG1,
     functionality::{
-        evaluate::evaluate_functionality,
-        garble::garble_functionality,
         utils::{receive_from_parties, send_to_party, FilteredMsgRelay, FixedExternalSize, Wrap},
         utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
     },
@@ -287,14 +282,13 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn binary_to_yao_functionality<T, R, C, G, H>(
+pub async fn binary_to_yao_functionality<T, R, C, G>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut R,
     share: &BinaryShare,
     yao_setup: &YaoSetup,
     rng: &mut Option<G>,
-    hash: &H,
     comm: &C,
 ) -> Result<YaoShare, ProtocolError>
 where
@@ -302,7 +296,6 @@ where
     R: Relay,
     G: RngCore + CryptoRng,
     C: Commitment,
-    H: HashFunction,
 {
     let mut relay = FilteredMsgRelay::new(relay);
 
@@ -310,22 +303,20 @@ where
     let tag = MessageTag::tag1(B2Y_FUNC_MSG1, tag_offset);
     relay.ask_messages(setup, tag, true).await?;
 
-    let output = binary_to_yao_functionality_inner(
-        setup, &mut relay, share, yao_setup, rng, hash, comm, tag,
-    )
-    .await?;
+    let output =
+        binary_to_yao_functionality_inner(setup, &mut relay, share, yao_setup, rng, comm, tag)
+            .await?;
 
     Ok(output)
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn binary_to_yao_functionality_inner<T, R, C, G, H>(
+pub async fn binary_to_yao_functionality_inner<T, R, C, G>(
     setup: &T,
     relay: &mut FilteredMsgRelay<R>,
     share: &BinaryShare,
     yao_setup: &YaoSetup,
     rng: &mut Option<G>,
-    hash: &H,
     comm: &C,
     tag: MessageTag,
 ) -> Result<YaoShare, ProtocolError>
@@ -334,19 +325,9 @@ where
     R: Relay,
     G: RngCore + CryptoRng,
     C: Commitment,
-    H: HashFunction,
 {
     let party_id = setup.participant_index();
     assert!(yao_setup.e_setup.is_some() | yao_setup.g_setup.is_some());
-
-    let mut builder = CircuitBuilder::new();
-    let x1 = builder.garbler_input();
-    let x2 = builder.garbler_input();
-    let x3 = builder.garbler_input();
-    let x4 = builder.xor(x1, x2);
-    let x5 = builder.xor(x4, x3);
-    builder.output(x5);
-    let circuit = builder.finish();
 
     match party_id {
         0 => {
@@ -358,16 +339,11 @@ where
 
             send_to_party(setup, tag, msg1, 2, relay).await?;
 
-            let mut gin = HashMap::new();
-            gin.insert(circuit.garbler_input_ids[0], share_x1);
-            gin.insert(circuit.garbler_input_ids[1], share_x2);
-            gin.insert(circuit.garbler_input_ids[2], share_x3);
-
-            let (_, outshares) =
-                garble_functionality(&circuit, &gin, &HashMap::new(), &yaosetup, &mut r, hash);
+            let temp = share_x1.xor(&share_x2);
+            let out = temp.xor(&share_x3);
 
             Ok(YaoShare {
-                g_share: Some(outshares.get(&circuit.output_gate_ids[0]).unwrap().clone()),
+                g_share: Some(out),
                 e_share: None,
             })
         }
@@ -380,16 +356,11 @@ where
 
             send_to_party(setup, tag, msg1, 2, relay).await?;
 
-            let mut gin = HashMap::new();
-            gin.insert(circuit.garbler_input_ids[0], share_x1);
-            gin.insert(circuit.garbler_input_ids[1], share_x2);
-            gin.insert(circuit.garbler_input_ids[2], share_x3);
-
-            let (_, outshares) =
-                garble_functionality(&circuit, &gin, &HashMap::new(), &yaosetup, &mut r, hash);
+            let temp = share_x1.xor(&share_x2);
+            let out = temp.xor(&share_x3);
 
             Ok(YaoShare {
-                g_share: Some(outshares.get(&circuit.output_gate_ids[0]).unwrap().clone()),
+                g_share: Some(out),
                 e_share: None,
             })
         }
@@ -407,30 +378,25 @@ where
             let (share_x1, share_x2, share_x3) =
                 bit_to_yao_process_msg1_p3(share, &msg1_p1, &msg1_p2, comm);
 
-            let mut gin = HashMap::new();
-            gin.insert(circuit.garbler_input_ids[0], share_x1);
-            gin.insert(circuit.garbler_input_ids[1], share_x2);
-            gin.insert(circuit.garbler_input_ids[2], share_x3);
-
-            let outshares = evaluate_functionality(&circuit, &gin, &HashMap::new(), &[], hash);
+            let temp = share_x1.xor(&share_x2);
+            let out = temp.xor(&share_x3);
 
             Ok(YaoShare {
                 g_share: None,
-                e_share: Some(outshares.get(&circuit.output_gate_ids[0]).unwrap().clone()),
+                e_share: Some(out),
             })
         }
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn batch_binary_to_yao_functionality<T, R, C, G, H>(
+pub async fn batch_binary_to_yao_functionality<T, R, C, G>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut R,
     share: &[BinaryShare],
     yao_setup: &YaoSetup,
     rng: &mut Option<G>,
-    hash: &H,
     comm: &C,
 ) -> Result<Vec<YaoShare>, ProtocolError>
 where
@@ -438,7 +404,6 @@ where
     R: Relay,
     G: RngCore + CryptoRng,
     C: Commitment,
-    H: HashFunction,
 {
     let mut relay = FilteredMsgRelay::new(relay);
 
@@ -447,7 +412,7 @@ where
     relay.ask_messages(setup, tag, true).await?;
 
     let output = batch_binary_to_yao_functionality_inner(
-        setup, &mut relay, share, yao_setup, rng, hash, comm, tag,
+        setup, &mut relay, share, yao_setup, rng, comm, tag,
     )
     .await?;
 
@@ -455,13 +420,12 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn batch_binary_to_yao_functionality_inner<T, R, C, G, H>(
+pub async fn batch_binary_to_yao_functionality_inner<T, R, C, G>(
     setup: &T,
     relay: &mut FilteredMsgRelay<R>,
     share: &[BinaryShare],
     yao_setup: &YaoSetup,
     rng: &mut Option<G>,
-    hash: &H,
     comm: &C,
     tag: MessageTag,
 ) -> Result<Vec<YaoShare>, ProtocolError>
@@ -470,21 +434,11 @@ where
     R: Relay,
     G: RngCore + CryptoRng,
     C: Commitment,
-    H: HashFunction,
 {
     let party_id = setup.participant_index();
     assert!(yao_setup.e_setup.is_some() | yao_setup.g_setup.is_some());
 
     let batch_size = share.len();
-
-    let mut builder = CircuitBuilder::new();
-    let x1 = builder.garbler_input();
-    let x2 = builder.garbler_input();
-    let x3 = builder.garbler_input();
-    let x4 = builder.xor(x1, x2);
-    let x5 = builder.xor(x4, x3);
-    builder.output(x5);
-    let circuit = builder.finish();
 
     match party_id {
         0 => {
@@ -501,16 +455,11 @@ where
                     bit_to_yao_create_msg1_p1(&share[i], &yaosetup.delta, &mut r, comm);
                 msg1s.push(msg1);
 
-                let mut gin = HashMap::new();
-                gin.insert(circuit.garbler_input_ids[0], share_x1);
-                gin.insert(circuit.garbler_input_ids[1], share_x2);
-                gin.insert(circuit.garbler_input_ids[2], share_x3);
-
-                let (_, outshares) =
-                    garble_functionality(&circuit, &gin, &HashMap::new(), &yaosetup, &mut r, hash);
+                let temp = share_x1.xor(&share_x2);
+                let out = temp.xor(&share_x3);
 
                 let output = YaoShare {
-                    g_share: Some(outshares.get(&circuit.output_gate_ids[0]).unwrap().clone()),
+                    g_share: Some(out),
                     e_share: None,
                 };
                 outputs.push(output);
@@ -534,16 +483,11 @@ where
                     bit_to_yao_create_msg1_p2(&share[i], &yaosetup.delta, &mut r, comm);
                 msg1s.push(msg1);
 
-                let mut gin = HashMap::new();
-                gin.insert(circuit.garbler_input_ids[0], share_x1);
-                gin.insert(circuit.garbler_input_ids[1], share_x2);
-                gin.insert(circuit.garbler_input_ids[2], share_x3);
-
-                let (_, outshares) =
-                    garble_functionality(&circuit, &gin, &HashMap::new(), &yaosetup, &mut r, hash);
+                let temp = share_x1.xor(&share_x2);
+                let out = temp.xor(&share_x3);
 
                 let output = YaoShare {
-                    g_share: Some(outshares.get(&circuit.output_gate_ids[0]).unwrap().clone()),
+                    g_share: Some(out),
                     e_share: None,
                 };
                 outputs.push(output);
@@ -574,16 +518,13 @@ where
             for i in 0..batch_size {
                 let (share_x1, share_x2, share_x3) =
                     bit_to_yao_process_msg1_p3(&share[i], &msg1_p1[i], &msg1_p2[i], comm);
-                let mut gin = HashMap::new();
-                gin.insert(circuit.garbler_input_ids[0], share_x1);
-                gin.insert(circuit.garbler_input_ids[1], share_x2);
-                gin.insert(circuit.garbler_input_ids[2], share_x3);
 
-                let outshares = evaluate_functionality(&circuit, &gin, &HashMap::new(), &[], hash);
+                let temp = share_x1.xor(&share_x2);
+                let out = temp.xor(&share_x3);
 
                 let output = YaoShare {
                     g_share: None,
-                    e_share: Some(outshares.get(&circuit.output_gate_ids[0]).unwrap().clone()),
+                    e_share: Some(out),
                 };
                 outputs.push(output);
             }
@@ -639,7 +580,7 @@ mod tests {
         let yao_setup =
             setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
 
-        let (mut rng, hash, comm) = if setup.participant_index() == 2 {
+        let (mut rng, _, comm) = if setup.participant_index() == 2 {
             let hash = AesGarbleHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
             let comm = HashCommitment::new(Sha512Hash::new());
             (None, hash, comm)
@@ -662,7 +603,6 @@ mod tests {
                 &share,
                 &yao_setup,
                 &mut rng,
-                &hash,
                 &comm,
             )
             .await?;
@@ -706,7 +646,7 @@ mod tests {
         let yao_setup =
             setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
 
-        let (mut rng, hash, comm) = if setup.participant_index() == 2 {
+        let (mut rng, _, comm) = if setup.participant_index() == 2 {
             let hash = AesGarbleHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
             let comm = HashCommitment::new(Sha512Hash::new());
             (None, hash, comm)
@@ -731,7 +671,6 @@ mod tests {
             &yao_bin,
             &yao_setup,
             &mut rng,
-            &hash,
             &comm,
         )
         .await?;

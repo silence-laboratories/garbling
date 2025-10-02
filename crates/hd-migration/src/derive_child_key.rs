@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use derivation_path::ChildIndex;
 use garbled_circuit::{
     functionality::{circuit_eval::yao_circuit_eval_functionality, utils_dep::TagOffsetCounter},
@@ -37,21 +35,16 @@ where
 {
     let circuit = build_child_key_der_hmac_circuit(&parent_key.pubkey, index_child);
 
-    let mut gin = HashMap::new();
-    for (cnt, val) in circuit.garbler_input_ids.iter().enumerate() {
-        gin.insert(*val, parent_key.yao_share[cnt].clone());
-    }
-    let mut ein = HashMap::new();
-    for (cnt, val) in circuit.evaluator_input_ids.iter().enumerate() {
-        ein.insert(*val, parent_key.chain_share[cnt].clone());
-    }
+    let inputs = vec![
+        parent_key.yao_share.to_vec(),
+        parent_key.chain_share.to_vec(),
+    ];
 
     let hashed_vals = yao_circuit_eval_functionality(
         setup,
         tag_offset_counter,
         relay,
-        &gin,
-        &ein,
+        &inputs,
         &circuit,
         rng,
         hash,

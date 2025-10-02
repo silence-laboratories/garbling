@@ -25,8 +25,8 @@ pub fn build_child_key_der_hmac_circuit(
     index_child: &ChildIndex,
 ) -> garbled_circuit::circuitop::circuit::BinaryCircuit {
     let mut builder = CircuitBuilder::new();
-    let key_par_ids = builder.garbler_inputs(256);
-    let chain_par_ids = builder.evaluator_inputs(256);
+    let key_par_ids = builder.new_inputs(256);
+    let chain_par_ids = builder.new_inputs(256);
 
     let mut data_ids = Vec::new();
     // key = chain_par
@@ -56,7 +56,7 @@ pub fn build_child_key_der_hmac_circuit(
     data_ids.extend_from_slice(&index_ids);
 
     let hmac_circuit = build_hmac_512_circuit(chain_par_ids.len(), data_ids.len());
-    let mut hmac_outputs = builder.add_circuit(&hmac_circuit, &chain_par_ids, &data_ids);
+    let mut hmac_outputs = builder.add_circuit(&hmac_circuit, &[chain_par_ids, data_ids]);
 
     let mut left = hmac_outputs[..256].to_vec();
     left.reverse();
@@ -65,7 +65,7 @@ pub fn build_child_key_der_hmac_circuit(
     parent_key.reverse();
 
     let add_circ = build_mod_add_circut(256, SECP256_K1_Q);
-    let out = builder.add_circuit(&add_circ, &parent_key, &left);
+    let out = builder.add_circuit(&add_circ, &[parent_key, left]);
 
     hmac_outputs[..256].copy_from_slice(&out);
 
@@ -81,13 +81,13 @@ pub fn build_child_key_der_hmac_circuit(
 pub fn build_hmac_512_circuit(key_length: usize, message_length: usize) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
-    let key_ids = builder.garbler_inputs(key_length as u16);
-    let msg_ids = builder.evaluator_inputs(message_length as u16);
+    let key_ids = builder.new_inputs(key_length as u16);
+    let msg_ids = builder.new_inputs(message_length as u16);
 
     let mut resized_key_ids;
     if key_length > 1024 {
         let sha_circuit = build_sha512_circuit(key_length as u128);
-        resized_key_ids = builder.add_circuit(&sha_circuit, &key_ids, &[]);
+        resized_key_ids = builder.add_circuit(&sha_circuit, &[key_ids]);
     } else {
         resized_key_ids = key_ids;
     }
@@ -114,13 +114,13 @@ pub fn build_hmac_512_circuit(key_length: usize, message_length: usize) -> Binar
     inner_msg.extend_from_slice(&msg_ids);
 
     let innersha = build_sha512_circuit(inner_msg.len() as u128);
-    let inner_hash_ids = builder.add_circuit(&innersha, &inner_msg, &[]);
+    let inner_hash_ids = builder.add_circuit(&innersha, &[inner_msg]);
 
     let mut outer_msg = o_key_pad_ids.clone();
     outer_msg.extend_from_slice(&inner_hash_ids);
 
     let outersha = build_sha512_circuit(outer_msg.len() as u128);
-    let output_ids = builder.add_circuit(&outersha, &outer_msg, &[]);
+    let output_ids = builder.add_circuit(&outersha, &[outer_msg]);
 
     for i in output_ids {
         builder.output(i);
@@ -173,7 +173,7 @@ pub fn build_sha512_circuit(len: u128) -> BinaryCircuit {
         }
     }
 
-    let inputs = builder.garbler_inputs(len as u16);
+    let inputs = builder.new_inputs(len as u16);
 
     let mut padded = inputs.clone();
 
@@ -226,14 +226,14 @@ pub fn build_sha512_circuit(len: u128) -> BinaryCircuit {
 pub fn build_scalar_to_y_circuit() -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
-    let x1_ids = builder.garbler_inputs(256);
-    let x2_ids = builder.garbler_inputs(256);
-    let x3_ids = builder.evaluator_inputs(256);
+    let x1_ids = builder.new_inputs(256);
+    let x2_ids = builder.new_inputs(256);
+    let x3_ids = builder.new_inputs(256);
 
     let circ = build_mod_add_circut(x1_ids.len(), SECP256_K1_Q);
 
-    let temp = builder.add_circuit(&circ, &x1_ids, &x2_ids);
-    let res3_ids = builder.add_circuit(&circ, &temp, &x3_ids);
+    let temp = builder.add_circuit(&circ, &[x1_ids, x2_ids]);
+    let res3_ids = builder.add_circuit(&circ, &[temp, x3_ids]);
 
     (0..256).for_each(|i| {
         builder.output(res3_ids[i]);
@@ -245,8 +245,8 @@ pub fn build_scalar_to_y_circuit() -> BinaryCircuit {
 fn build_compare_eq_circuit(input_len: usize) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
-    let input1 = builder.garbler_inputs(input_len as u16);
-    let input2 = builder.evaluator_inputs(input_len as u16);
+    let input1 = builder.new_inputs(input_len as u16);
+    let input2 = builder.new_inputs(input_len as u16);
 
     let xors: Vec<usize> = input1
         .iter()
@@ -271,17 +271,17 @@ fn build_compare_eq_circuit(input_len: usize) -> BinaryCircuit {
 pub fn build_verify_sharings_circuit() -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
-    let p1_next = builder.garbler_inputs(256);
-    let p2_next = builder.garbler_inputs(256);
-    let p3_next = builder.garbler_inputs(256);
-    let p1_prev = builder.evaluator_inputs(256);
-    let p2_prev = builder.evaluator_inputs(256);
-    let p3_prev = builder.evaluator_inputs(256);
+    let p1_next = builder.new_inputs(256);
+    let p2_next = builder.new_inputs(256);
+    let p3_next = builder.new_inputs(256);
+    let p1_prev = builder.new_inputs(256);
+    let p2_prev = builder.new_inputs(256);
+    let p3_prev = builder.new_inputs(256);
 
     let comp_eq_circ = build_compare_eq_circuit(256);
-    let op1 = builder.add_circuit(&comp_eq_circ, &p1_next, &p2_prev)[0];
-    let op2 = builder.add_circuit(&comp_eq_circ, &p2_next, &p3_prev)[0];
-    let op3 = builder.add_circuit(&comp_eq_circ, &p3_next, &p1_prev)[0];
+    let op1 = builder.add_circuit(&comp_eq_circ, &[p1_next, p2_prev])[0];
+    let op2 = builder.add_circuit(&comp_eq_circ, &[p2_next, p3_prev])[0];
+    let op3 = builder.add_circuit(&comp_eq_circ, &[p3_next, p1_prev])[0];
 
     let temp = builder.and(op1, op2);
     let output = builder.and(temp, op3);
@@ -314,26 +314,26 @@ pub fn build_mod_add_circut(size: usize, prime: U256) -> BinaryCircuit {
         ps.push(builder.constant(if pbin.get(i) { 1 } else { 0 }));
     }
 
-    let x = builder.garbler_inputs(size as u16);
-    let y = builder.evaluator_inputs(size as u16);
+    let x = builder.new_inputs(size as u16);
+    let y = builder.new_inputs(size as u16);
 
     let add_circuit = build_ppa_circuit(size);
 
-    let add = builder.add_circuit(&add_circuit, &x, &y);
+    let add = builder.add_circuit(&add_circuit, &[x, y]);
 
     let comp_circ = build_compare_ge_circuit(size + 1);
-    let comp = builder.add_circuit(&comp_circ, &add, &ps);
+    let comp = builder.add_circuit(&comp_circ, &[add.clone(), ps]);
 
     let sub_circ = build_subtract_order_circuit(size + 1, prime);
-    let sub = builder.add_circuit(&sub_circ, &add, &[]);
+    let sub = builder.add_circuit(&sub_circ, &[add.clone()]);
 
-    let mut gin = vec![comp[0]; size];
-    for i in &sub[..size] {
-        gin.push(*i);
-    }
+    let comps = vec![comp[0]; size];
 
     let ifthenelse_circ = build_if_then_else_circuit(size);
-    let out = builder.add_circuit(&ifthenelse_circ, &gin, &add[..size]);
+    let out = builder.add_circuit(
+        &ifthenelse_circ,
+        &[comps, sub[..size].to_vec(), add[..size].to_vec()],
+    );
 
     for i in out {
         builder.output(i);
@@ -349,7 +349,7 @@ pub fn build_mod_add_circut(size: usize, prime: U256) -> BinaryCircuit {
 pub fn build_subtract_order_circuit(size: usize, prime: U256) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
-    let gin = builder.garbler_inputs(size as u16);
+    let gin = builder.new_inputs(size as u16);
 
     let mut pbin = BinaryString {
         length: prime.to_le_bytes().len() as u64,
@@ -389,7 +389,7 @@ pub fn build_subtract_order_circuit(size: usize, prime: U256) -> BinaryCircuit {
     }
 
     let ppa_circuit = build_ppa_circuit(size);
-    let ppaout = builder.add_circuit(&ppa_circuit, &gin, &pbin_ids);
+    let ppaout = builder.add_circuit(&ppa_circuit, &[gin, pbin_ids]);
 
     (0..size).for_each(|i| {
         builder.output(ppaout[i]);
@@ -406,8 +406,8 @@ pub fn build_subtract_order_circuit(size: usize, prime: U256) -> BinaryCircuit {
 pub fn build_ppa_circuit(size: usize) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
-    let inp1 = builder.garbler_inputs(size as u16);
-    let inp2 = builder.evaluator_inputs(size as u16);
+    let inp1 = builder.new_inputs(size as u16);
+    let inp2 = builder.new_inputs(size as u16);
 
     let mut g = Vec::new();
     let mut p = Vec::new();
@@ -484,12 +484,12 @@ pub fn build_ppa_circuit(size: usize) -> BinaryCircuit {
 pub fn build_compare_ge_circuit(size: usize) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
-    let x = builder.garbler_inputs(size as u16);
-    let y = builder.evaluator_inputs(size as u16);
+    let x = builder.new_inputs(size as u16);
+    let y = builder.new_inputs(size as u16);
 
     let rec_circ = build_compare_ge_rec_circuit(size, 0, size - 1);
 
-    let ops = builder.add_circuit(&rec_circ, &x, &y);
+    let ops = builder.add_circuit(&rec_circ, &[x, y]);
 
     builder.output(ops[0]);
 
@@ -501,8 +501,8 @@ pub fn build_compare_ge_circuit(size: usize) -> BinaryCircuit {
 pub fn build_compare_ge_rec_circuit(size: usize, lo: usize, hi: usize) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
-    let xvals = builder.garbler_inputs(size as u16);
-    let yvals = builder.evaluator_inputs(size as u16);
+    let xvals = builder.new_inputs(size as u16);
+    let yvals = builder.new_inputs(size as u16);
 
     if lo == hi {
         let a = builder.xor(xvals[lo], yvals[lo]);
@@ -519,14 +519,17 @@ pub fn build_compare_ge_rec_circuit(size: usize, lo: usize, hi: usize) -> Binary
     let circ_low = build_compare_ge_rec_circuit(size, lo, m);
     let circ_high = build_compare_ge_rec_circuit(size, m + 1, hi);
 
-    let lowout = builder.add_circuit(&circ_low, &xvals, &yvals);
-    let highout = builder.add_circuit(&circ_high, &xvals, &yvals);
+    let lowout = builder.add_circuit(&circ_low, &[xvals.clone(), yvals.clone()]);
+    let highout = builder.add_circuit(&circ_high, &[xvals, yvals]);
 
     let (subres_l, diff_l) = (lowout[0], lowout[1]);
     let (subres_h, diff_h) = (highout[0], highout[1]);
 
     let ifelse_circ = build_if_then_else_circuit(1);
-    let subres = builder.add_circuit(&ifelse_circ, &[diff_h, subres_h], &[subres_l]);
+    let subres = builder.add_circuit(
+        &ifelse_circ,
+        &[vec![diff_h], vec![subres_h], vec![subres_l]],
+    );
 
     let mut diff = builder.xor(diff_h, diff_l);
     let temp = builder.and(diff_h, diff_l);
@@ -545,9 +548,9 @@ pub fn build_compare_ge_rec_circuit(size: usize, lo: usize, hi: usize) -> Binary
 pub fn build_if_then_else_circuit(size: usize) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
-    let choice = builder.garbler_inputs(size as u16);
-    let gin = builder.garbler_inputs(size as u16);
-    let ein = builder.evaluator_inputs(size as u16);
+    let choice = builder.new_inputs(size as u16);
+    let gin = builder.new_inputs(size as u16);
+    let ein = builder.new_inputs(size as u16);
 
     let r: Vec<usize> = gin
         .iter()

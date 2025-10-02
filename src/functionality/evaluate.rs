@@ -11,8 +11,7 @@ use crate::{
 
 pub fn evaluate_functionality<H>(
     circuit: &BinaryCircuit,
-    garbler_input_encoding_shares: &HashMap<usize, YaoEvaluatorShare>,
-    evaluator_input_encoding_shares: &HashMap<usize, YaoEvaluatorShare>,
+    input_encoding_shares: &[Vec<YaoEvaluatorShare>],
     f: &[Block],
     hash: &H,
 ) -> HashMap<usize, YaoEvaluatorShare>
@@ -24,14 +23,8 @@ where
 
     for (i, gate) in circuit.gates.iter().enumerate() {
         let (out_gate, f_label) = match *gate {
-            BinaryGate::GarblerInput { id, wire } => {
-                let label_option = garbler_input_encoding_shares.get(&id);
-                let label = label_option.unwrap();
-                (wire, label.label)
-            }
-            BinaryGate::EvaluatorInput { id, wire } => {
-                let label_option = evaluator_input_encoding_shares.get(&id);
-                let label = label_option.unwrap();
+            BinaryGate::Input { no, id, wire } => {
+                let label = &input_encoding_shares[no][id];
                 (wire, label.label)
             }
             BinaryGate::Constant { val: _, wire } => {

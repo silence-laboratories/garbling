@@ -498,7 +498,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
 
     /// OPEN_MSG
     pub const OPEN_MSG: u32 = 3;
@@ -592,22 +591,15 @@ mod tests {
                     assert!(val);
                 }
 
-                let mut keysh = HashMap::new();
-                let mut msgsh = HashMap::new();
-
-                for (i, ind) in circuit.garbler_input_ids.iter().enumerate() {
-                    keysh.insert(i, jointsh[*ind].clone());
-                }
-                for (i, ind) in circuit.evaluator_input_ids.iter().enumerate() {
-                    msgsh.insert(i, jointsh[128 + ind].clone());
-                }
+                let mut inputs = vec![vec![], vec![]];
+                inputs[0].extend_from_slice(&jointsh[..128]);
+                inputs[1].extend_from_slice(&jointsh[128..]);
 
                 let output = yao_circuit_eval_functionality(
                     &setup,
                     &mut tag_offset_counter,
                     &mut relay,
-                    &keysh,
-                    &msgsh,
+                    &inputs,
                     &circuit,
                     &mut rng,
                     &hash,
@@ -782,22 +774,15 @@ mod tests {
                     assert!(val);
                 }
 
-                let mut keysh = HashMap::new();
-                let mut msgsh = HashMap::new();
-
-                for (i, ind) in circuit.garbler_input_ids.iter().enumerate() {
-                    keysh.insert(i, jointsh[*ind].clone());
-                }
-                for (i, ind) in circuit.evaluator_input_ids.iter().enumerate() {
-                    msgsh.insert(i, jointsh[128 + ind].clone());
-                }
+                let mut inputs = vec![vec![], vec![]];
+                inputs[0].extend_from_slice(&jointsh[..128]);
+                inputs[1].extend_from_slice(&jointsh[128..]);
 
                 let output = yao_circuit_eval_functionality(
                     &setup,
                     &mut tag_offset_counter,
                     &mut relay,
-                    &keysh,
-                    &msgsh,
+                    &inputs,
                     &circuit,
                     &mut rng,
                     &hash,
