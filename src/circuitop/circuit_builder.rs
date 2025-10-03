@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    fs::File,
-    io::{BufRead, BufReader},
-};
+use std::collections::HashMap;
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
@@ -169,17 +165,16 @@ impl CircuitBuilder<BinaryCircuit> {
     /// Returns the resultant output gate ids from the circuit file.
     pub fn parse(
         &mut self,
-        file_name: &str,
+        file: &str,
         garbler_input_ids: &[usize],
         evaluator_input_ids: &[usize],
     ) -> Result<Vec<usize>, FileParsingError> {
-        let file = File::open(file_name)?;
-        let mut reader = BufReader::new(file).lines();
+        let mut reader = file.lines();
 
         let mut num_gates: usize = 0;
         let mut num_wires: usize = 0;
 
-        if let Some(Ok(line1)) = reader.next() {
+        if let Some(line1) = reader.next() {
             let mut parts = line1.split(' ');
             num_gates = parts.next().unwrap().parse()?;
             num_wires = parts.next().unwrap().parse()?;
@@ -189,7 +184,7 @@ impl CircuitBuilder<BinaryCircuit> {
         let mut num_evaluator_inputs = 0;
         let mut num_outputs = 0;
 
-        if let Some(Ok(line1)) = reader.next() {
+        if let Some(line1) = reader.next() {
             let mut parts = line1.split(' ');
             if let Some(n_input_wires_str) = parts.next() {
                 if let Ok(_num_inp_wires) = n_input_wires_str.parse::<u64>() {
@@ -224,7 +219,7 @@ impl CircuitBuilder<BinaryCircuit> {
         assert_eq!(num_garbler_inputs, garbler_input_ids.len());
         assert_eq!(num_evaluator_inputs, evaluator_input_ids.len());
 
-        if let Some(Ok(line1)) = reader.next() {
+        if let Some(line1) = reader.next() {
             let mut parts = line1.split(' ');
             if let Some(n_output_usizes_str) = parts.next() {
                 if let Ok(n_output_usizes) = n_output_usizes_str.parse::<usize>() {
@@ -255,7 +250,7 @@ impl CircuitBuilder<BinaryCircuit> {
             let mut output: usize = 0;
             let mut gate = String::new();
 
-            if let Some(Ok(line1)) = reader.next() {
+            if let Some(line1) = reader.next() {
                 let mut parts = line1.split(' ');
                 if let Some(num_inputs_str) = parts.next() {
                     if let Ok(parsed_num_input) = num_inputs_str.parse::<usize>() {

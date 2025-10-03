@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn test_circuit_3pc() {
-        let circuit = BinaryCircuit::parse_threeparty("circuits/binmult.txt").unwrap();
+        let circuit = BinaryCircuit::parse_threeparty(BINMULT_CIRCUIT).unwrap();
 
         let required_circuit = BinaryCircuit {
             gates: vec![

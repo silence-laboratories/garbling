@@ -557,6 +557,7 @@ mod tests {
     use crate::functionality::utils::SetupMessage;
     use crate::{
         circuitop::circuit::BinaryCircuit,
+        config::constants::AES128_CIRCUIT,
         customcircuits::comparison::build_comparison_circuit,
         functionality::{
             circuit_eval::yao_map_circuit_eval_functionality,
@@ -1338,7 +1339,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_entire_flow() {
-        let circuit = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
+        let circuit = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
         let batched = false;
         for i in 0..2 {
             for j in 0..2 {

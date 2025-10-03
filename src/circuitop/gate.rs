@@ -4,7 +4,6 @@
 /// can appear in a circuit.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BinaryGate {
-
     /// Represents an input gate.
     Input { no: usize, id: usize, wire: usize },
 

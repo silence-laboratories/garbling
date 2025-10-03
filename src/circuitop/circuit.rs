@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 
 use crate::circuitop::gate::BinaryGate;
 use crate::config::errors::FileParsingError;
@@ -50,14 +48,13 @@ impl BinaryCircuit {
     /// # Returns
     /// * `Ok(Self)` if the file is successfully parsed into a `BinaryCircuit`.
     /// * `Err(FileParsingError)` if there is an issue reading or parsing the file.
-    pub fn parse(file_name: &str) -> Result<Self, FileParsingError> {
-        let file = File::open(file_name)?;
-        let mut reader = BufReader::new(file).lines();
+    pub fn parse(file: &str) -> Result<Self, FileParsingError> {
+        let mut reader = file.lines();
 
         let mut num_gates: usize = 0;
         let mut num_wires: usize = 0;
 
-        if let Some(Ok(line1)) = reader.next() {
+        if let Some(line1) = reader.next() {
             let mut parts = line1.split(' ');
             num_gates = parts.next().unwrap().parse()?;
             num_wires = parts.next().unwrap().parse()?;
@@ -67,7 +64,7 @@ impl BinaryCircuit {
         let mut input_sizes = Vec::new();
         let mut num_outputs = 0;
 
-        if let Some(Ok(line1)) = reader.next() {
+        if let Some(line1) = reader.next() {
             let mut parts = line1.split(' ');
             if let Some(n_input_wires_str) = parts.next() {
                 if let Ok(num_inp_wires) = n_input_wires_str.parse::<usize>() {
@@ -88,7 +85,7 @@ impl BinaryCircuit {
             }
         }
 
-        if let Some(Ok(line1)) = reader.next() {
+        if let Some(line1) = reader.next() {
             let mut parts = line1.split(' ');
             if let Some(n_output_usizes_str) = parts.next() {
                 if let Ok(n_output_usizes) = n_output_usizes_str.parse::<usize>() {
@@ -137,7 +134,7 @@ impl BinaryCircuit {
             let mut output: usize = 0;
             let mut gate = String::new();
 
-            if let Some(Ok(line1)) = reader.next() {
+            if let Some(line1) = reader.next() {
                 let mut parts = line1.split(' ');
                 if let Some(num_inputs_str) = parts.next() {
                     if let Ok(parsed_num_input) = num_inputs_str.parse::<usize>() {
@@ -279,7 +276,7 @@ impl BinaryCircuit {
     pub fn increment_nonfree_gates(&mut self) {
         self.num_nonfree_gates += 1;
     }
-    
+
     /// Increments the count of wires in the circuit.
     pub fn increment_wires(&mut self) {
         self.num_wires += 1;
@@ -342,11 +339,14 @@ mod tests {
 
     use std::collections::HashMap;
 
-    use crate::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
+    use crate::{
+        circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
+        config::constants::BINMULT_CIRCUIT,
+    };
 
     #[test]
     fn test_circuit() {
-        let circuit = BinaryCircuit::parse("circuits/binmult.txt");
+        let circuit = BinaryCircuit::parse(BINMULT_CIRCUIT);
 
         let required_circuit = BinaryCircuit {
             gates: vec![

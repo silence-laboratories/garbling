@@ -123,6 +123,7 @@ mod tests {
 
     use crate::{
         circuitop::circuit::BinaryCircuit,
+        config::constants::AES128_CIRCUIT,
         customcircuits::comparison::build_comparison_circuit,
         utilities::{
             garble_hash::AesGarbleHash,
@@ -134,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_garble_functionality() {
-        let circuit = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
+        let circuit = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
 
         let setup = GarblerSetup {
             comm_crs: Block::default(),

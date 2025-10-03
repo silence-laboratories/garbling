@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use garbled_circuit::{
     circuitop::circuit::BinaryCircuit,
-    config::constants::AES_KEY,
+    config::constants::{AES128_CIRCUIT, AES256_CIRCUIT, AES_KEY, SHA256_CIRCUIT},
     functionality::{evaluate::evaluate_functionality, garble::garble_functionality},
     utilities::{
         garble_hash::AesGarbleHash,
@@ -16,7 +16,7 @@ pub fn eval_aes256_benchmark(c: &mut Criterion) {
     let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
 
     // 8832 AND Gates
-    let circuit = BinaryCircuit::parse("circuits/aes256.txt").unwrap();
+    let circuit = BinaryCircuit::parse(AES256_CIRCUIT).unwrap();
 
     let mut delta = Block::default();
     rng.fill_bytes(&mut delta);
@@ -71,7 +71,7 @@ pub fn eval_aes128_benchmark(c: &mut Criterion) {
     let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
 
     // 6400 AND Gates
-    let circuit = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
+    let circuit = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
 
     let mut delta = Block::default();
     rng.fill_bytes(&mut delta);
@@ -126,7 +126,7 @@ pub fn eval_sha256_benchmark(c: &mut Criterion) {
     let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
 
     // 22573 AND Gates
-    let circuit = BinaryCircuit::parse("circuits/sha256.txt").unwrap();
+    let circuit = BinaryCircuit::parse(SHA256_CIRCUIT).unwrap();
     let mut delta = Block::default();
     rng.fill_bytes(&mut delta);
 

@@ -26,7 +26,6 @@ pub fn bytes_to_bits_le(bytes: &[u8]) -> Vec<bool> {
     bits
 }
 
-
 pub(crate) fn get_lagrange_coeff_list<'a, K, T>(
     party_points: &'a [T],
     eval_point: &'a Scalar,

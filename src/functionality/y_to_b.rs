@@ -512,6 +512,7 @@ mod tests {
 
     use crate::{
         circuitop::circuit::BinaryCircuit,
+        config::constants::AES128_CIRCUIT,
         functionality::{
             circuit_eval::yao_circuit_eval_functionality,
             input::batch_input_yao_functionality,
@@ -564,7 +565,7 @@ mod tests {
             (Some(r), hash, comm)
         };
 
-        let circuit = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
+        let circuit = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
 
         for x in 0..2 {
             for y in 0..2 {
@@ -747,7 +748,7 @@ mod tests {
             (Some(r), hash, comm)
         };
 
-        let circuit = BinaryCircuit::parse("circuits/aes128.txt").unwrap();
+        let circuit = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
 
         for x in 0..2 {
             for y in 0..2 {

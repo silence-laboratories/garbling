@@ -1,8 +1,9 @@
-use std::path::PathBuf;
-
 use crypto_bigint::U256;
 use derivation_path::ChildIndex;
-use garbled_circuit::circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder};
+use garbled_circuit::{
+    circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder},
+    config::constants::SHA512_CIRCUIT,
+};
 use k256::{ProjectivePoint, elliptic_curve::sec1::ToEncodedPoint};
 use sl_compute_common::BinaryString;
 
@@ -297,10 +298,9 @@ pub fn build_sha512_circuit(len: u128) -> BinaryCircuit {
     for i in 0..count {
         let mut block_inp = padded[1024 * i..1024 * (i + 1)].to_vec();
         block_inp.reverse();
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../circuits/sha512.txt");
 
         let block_out = builder
-            .parse(path.to_str().unwrap(), &block_inp, &chain_input)
+            .parse(SHA512_CIRCUIT, &block_inp, &chain_input)
             .unwrap();
 
         chain_input = block_out;
