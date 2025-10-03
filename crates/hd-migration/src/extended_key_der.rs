@@ -1,23 +1,149 @@
 use derivation_path::DerivationPath;
 use garbled_circuit::{
     functionality::{
-        input::batch_input_yao_functionality, setup::setup_yao_functionality,
+        circuit_eval::yao_circuit_eval_functionality, input::run_batch_input_from_all_yao,
+        output::output_yao_functionality, setup::setup_yao_functionality,
         utils::run_common_randomness, utils_dep::TagOffsetCounter,
     },
-    utilities::{commitments::HashCommitment, hash_function::AesHash},
+    utilities::{
+        commitments::{Commitment, HashCommitment},
+        hash_function::{AesHash, HashFunction},
+        types::YaoSetup,
+    },
 };
 use k256::{NonZeroScalar, ProjectivePoint, Scalar};
-use rand::{RngCore, SeedableRng, rngs::StdRng};
+use rand::{CryptoRng, RngCore, SeedableRng, rngs::StdRng};
 use rand_chacha::ChaCha8Rng;
+use sl_compute_common::CommonRandomness;
 use sl_messages::relay::Relay;
 
 use crate::{
+    circuits::build_child_key_der_hmac_round1_circuit,
     derive_child_key::run_derive_child_key,
-    rss_to_yao::run_scalar_rss_to_yao,
     shamir_to_rss::run_shamir_to_scalar_rss,
     types::{HardDerivationError, PrivKeyShareBip, PrivKeyShareDkg, ProtocolParticipant},
-    utils::u8_vec_to_bool_vec,
+    utils::bytes_to_bits_le,
+    yao_to_rss::run_yao_to_scalar_rss_keypair,
 };
+
+/// Implements the child key derivation protocol for BIP-32 on secret-shared inputs.
+#[allow(clippy::too_many_arguments)]
+pub async fn run_extended_key_derivation_round1<S, R, G, H, C>(
+    setup: &S,
+    relay: &mut R,
+    tag_offset_counter: &mut TagOffsetCounter,
+    share: Scalar,
+    evaluation_points: Vec<NonZeroScalar>,
+    derivation_path: DerivationPath,
+    chain_code: [u8; 32],
+    public_key: ProjectivePoint,
+    randomness: &mut CommonRandomness,
+    yao_setup: &YaoSetup,
+    rng: &mut Option<G>,
+    comm: &C,
+    hash: &H,
+) -> Result<(PrivKeyShareBip, PrivKeyShareBip), HardDerivationError>
+where
+    S: ProtocolParticipant,
+    R: Relay,
+    G: RngCore + CryptoRng,
+    H: HashFunction,
+    C: Commitment,
+{
+    // convert privkey in shamir to rss
+    let scalar_rss_privkey = run_shamir_to_scalar_rss(
+        setup,
+        relay,
+        tag_offset_counter,
+        &share,
+        &evaluation_points,
+        randomness,
+    )
+    .await?;
+
+    let prev = bytes_to_bits_le(&scalar_rss_privkey.prev_share.to_bytes());
+    let next = bytes_to_bits_le(&scalar_rss_privkey.next_share.to_bytes());
+
+    let mut all_ip = prev.clone();
+    all_ip.extend_from_slice(&next);
+
+    let (i1_yao, i2_yao, i3_yao) = run_batch_input_from_all_yao(
+        setup,
+        tag_offset_counter,
+        relay,
+        &all_ip,
+        all_ip.len(),
+        all_ip.len(),
+        all_ip.len(),
+        rng,
+        yao_setup,
+        comm,
+    )
+    .await?;
+
+    let mut inputs = vec![vec![], vec![], vec![], vec![], vec![], vec![]];
+
+    inputs[0].extend_from_slice(&i1_yao[256..]);
+    inputs[1].extend_from_slice(&i2_yao[256..]);
+    inputs[2].extend_from_slice(&i3_yao[256..]);
+
+    inputs[3].extend_from_slice(&i1_yao[..256]);
+    inputs[4].extend_from_slice(&i2_yao[..256]);
+    inputs[5].extend_from_slice(&i3_yao[..256]);
+
+    let child = derivation_path.path()[0];
+
+    let circ = build_child_key_der_hmac_round1_circuit(&public_key, &child, chain_code);
+
+    let output = yao_circuit_eval_functionality(
+        setup,
+        tag_offset_counter,
+        relay,
+        &inputs,
+        &circ,
+        rng,
+        hash,
+        yao_setup,
+    )
+    .await?;
+
+    let mut ops = Vec::new();
+    for i in circ.output_gate_ids {
+        ops.push(output.get(&i).unwrap().to_owned());
+    }
+
+    let ver = ops[0].clone();
+    let par_sk_yao = ops[1..257].to_vec();
+    let par_chain_yao = ops[257..513].to_vec();
+    let mut child_sk_yao = ops[513..513 + 256].to_vec();
+    let child_chain_yao = ops[513 + 256..].to_vec();
+
+    let verification = output_yao_functionality(setup, tag_offset_counter, relay, &ver).await?;
+
+    assert!(verification);
+
+    // set the input for child key derivation
+    let parent = PrivKeyShareBip {
+        yao_share: par_sk_yao.try_into().expect("Conversion failed"),
+        chain_share: par_chain_yao.try_into().expect("Conversion failed"),
+        key_share: scalar_rss_privkey,
+        pubkey: public_key,
+    };
+
+    let scalar_rss_child =
+        run_yao_to_scalar_rss_keypair(setup, relay, tag_offset_counter, &child_sk_yao, rng).await?;
+
+    child_sk_yao.reverse();
+
+    let child = PrivKeyShareBip {
+        yao_share: child_sk_yao.try_into().expect("Conversion failed"),
+        chain_share: child_chain_yao.try_into().expect("Conversion failed"),
+        key_share: scalar_rss_child.keyshare,
+        pubkey: scalar_rss_child.pubkey,
+    };
+
+    Ok((parent, child))
+}
 
 pub async fn run_extended_key_derivation<S, R>(
     setup: S,
@@ -57,61 +183,36 @@ where
         (Some(r), hash, comm)
     };
 
-    // convert privkey in shamir to rss
-    let scalar_rss_privkey = run_shamir_to_scalar_rss(
+    let (pa, ch) = run_extended_key_derivation_round1(
         &setup,
         &mut relay,
         &mut tag_offset_counter,
-        &share,
-        &evaluation_points,
+        share,
+        evaluation_points.clone(),
+        derivation_path.clone(),
+        chain_code,
+        public_key,
         &mut randomness,
-    )
-    .await?;
-
-    // convert rss to yao
-    let mut yao_privkey = run_scalar_rss_to_yao(
-        &setup,
-        &mut relay,
-        &mut tag_offset_counter,
-        &scalar_rss_privkey,
         &yao_setup,
         &mut rng,
         &comm,
         &hash,
     )
     .await?;
-    yao_privkey.reverse();
 
-    // convert public chain code to yao
-    let chain = u8_vec_to_bool_vec(chain_code.to_vec());
-    let yao_chain = batch_input_yao_functionality(
-        &setup,
-        &mut tag_offset_counter,
-        &mut relay,
-        &chain,
-        &mut rng,
-        &yao_setup,
-    )
-    .await?;
+    let mut temp = vec![pa, ch.clone()];
 
-    // set the input for child key derivation
-    let parent = PrivKeyShareBip {
-        yao_share: yao_privkey.try_into().expect("Conversion failed"),
-        chain_share: yao_chain.try_into().expect("Conversion failed"),
-        key_share: scalar_rss_privkey,
-        pubkey: public_key,
-    };
+    let mut output = vec![PrivKeyShareDkg {
+        keyshare: ch.key_share,
+        pubkey: ch.pubkey,
+    }];
 
-    let mut output = Vec::new();
-
-    let mut temp = vec![parent];
-
-    for (cnt, i) in derivation_path.path().iter().enumerate() {
+    for (cnt, i) in derivation_path.path()[1..].iter().enumerate() {
         let child_key = run_derive_child_key(
             &setup,
             &mut relay,
             &mut tag_offset_counter,
-            &temp[cnt],
+            &temp[cnt + 1],
             i,
             &yao_setup,
             &mut rng,
@@ -281,8 +382,8 @@ mod tests {
 
             let realp = ProjectivePoint::GENERATOR * reals;
 
-            assert_eq!(reals, is);
             assert_eq!(realp, shares[0][i].pubkey);
+            assert_eq!(reals, is);
 
             t.push((icc.try_into().expect("Conversion failed"), is, ip));
         }

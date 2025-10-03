@@ -8,6 +8,98 @@ use sl_compute_common::BinaryString;
 
 use crate::{constants::SECP256_K1_Q, utils::u8_vec_to_bool_vec};
 
+pub fn build_child_key_der_hmac_round1_circuit(
+    public_key_par: &ProjectivePoint,
+    index_child: &ChildIndex,
+    chain_code: [u8; 32],
+) -> garbled_circuit::circuitop::circuit::BinaryCircuit {
+    let mut builder = CircuitBuilder::new();
+
+    let p1_next = builder.new_inputs(256);
+    let p2_next = builder.new_inputs(256);
+    let p3_next = builder.new_inputs(256);
+    let p1_prev = builder.new_inputs(256);
+    let p2_prev = builder.new_inputs(256);
+    let p3_prev = builder.new_inputs(256);
+
+    let comp_eq_circ = build_compare_eq_circuit(256);
+    let op1 = builder.add_circuit(&comp_eq_circ, &[p1_next.clone(), p2_prev])[0];
+    let op2 = builder.add_circuit(&comp_eq_circ, &[p2_next.clone(), p3_prev])[0];
+    let op3 = builder.add_circuit(&comp_eq_circ, &[p3_next.clone(), p1_prev])[0];
+
+    let temp = builder.and(op1, op2);
+    let output = builder.and(temp, op3);
+
+    let circ = build_mod_add_circut(p1_next.len(), SECP256_K1_Q);
+
+    let temp = builder.add_circuit(&circ, &[p1_next, p2_next]);
+    let mut res3_ids = builder.add_circuit(&circ, &[temp, p3_next]);
+    res3_ids.reverse();
+
+    builder.output(output);
+    (0..256).for_each(|i| {
+        builder.output(res3_ids[i]);
+    });
+
+    let chain = u8_vec_to_bool_vec(chain_code.to_vec());
+    let mut chain_par_ids = Vec::new();
+    for i in chain {
+        let val = if i { 1 } else { 0 };
+        chain_par_ids.push(builder.constant(val));
+    }
+    for i in chain_par_ids.iter() {
+        builder.output(*i);
+    }
+    let key_par_ids = res3_ids;
+
+    let mut data_ids = Vec::new();
+    // key = chain_par
+
+    if index_child.is_hardened() {
+        // Hardened child
+        // data = 0x00 || privkey_par || index (all in big endian)
+        for _ in 0..8 {
+            data_ids.push(builder.constant(0));
+        }
+        data_ids.extend_from_slice(&key_par_ids);
+    } else {
+        // Normal child
+        // data = pubkey_par || index (all in big endian)
+        let pubkey_bytes = public_key_par.to_encoded_point(true).as_bytes().to_vec();
+        let pubkey_bool = u8_vec_to_bool_vec(pubkey_bytes);
+        for i in pubkey_bool {
+            data_ids.push(builder.constant(if i { 1 } else { 0 }));
+        }
+    }
+    let index_be = index_child.to_bits().to_be_bytes();
+    let index_bool = u8_vec_to_bool_vec(index_be.to_vec());
+    let mut index_ids = Vec::new();
+    for i in index_bool {
+        index_ids.push(builder.constant(if i { 1 } else { 0 }));
+    }
+    data_ids.extend_from_slice(&index_ids);
+
+    let hmac_circuit = build_hmac_512_circuit(chain_par_ids.len(), data_ids.len());
+    let mut hmac_outputs = builder.add_circuit(&hmac_circuit, &[chain_par_ids, data_ids]);
+
+    let mut left = hmac_outputs[..256].to_vec();
+    left.reverse();
+
+    let mut parent_key = key_par_ids.clone();
+    parent_key.reverse();
+
+    let add_circ = build_mod_add_circut(256, SECP256_K1_Q);
+    let out = builder.add_circuit(&add_circ, &[parent_key, left]);
+
+    hmac_outputs[..256].copy_from_slice(&out);
+
+    for i in hmac_outputs {
+        builder.output(i);
+    }
+
+    builder.finish()
+}
+
 /// Returns a `BinaryCircuit`, which takes the `key` as the garbler's inputs and the `chain code` as
 /// the evaluator's input, along with the `public key` and the child's `index`, and does the following.
 ///
