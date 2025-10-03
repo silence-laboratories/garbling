@@ -14,7 +14,7 @@ use rand::{CryptoRng, RngCore};
 use sl_messages::relay::Relay;
 
 use crate::{
-    circuits::{build_scalar_to_y_circuit, build_verify_sharings_circuit},
+    circuits::build_scalar_to_y_verification_circuit,
     types::{HardDerivationError, PrivKeyShare, ProtocolParticipant},
     utils::bytes_to_bits_le,
 };
@@ -58,8 +58,6 @@ where
     )
     .await?;
 
-    let verification_circuit = build_verify_sharings_circuit();
-
     let mut inputs = vec![vec![], vec![], vec![], vec![], vec![], vec![]];
 
     inputs[0].extend_from_slice(&i1_yao[256..]);
@@ -70,41 +68,9 @@ where
     inputs[4].extend_from_slice(&i2_yao[..256]);
     inputs[5].extend_from_slice(&i3_yao[..256]);
 
-    let outver = yao_circuit_eval_functionality(
-        setup,
-        tag_offset_counter,
-        relay,
-        &inputs,
-        &verification_circuit,
-        rng,
-        hash,
-        yao_setup,
-    )
-    .await?;
+    let circ = build_scalar_to_y_verification_circuit();
 
-    let ver: Vec<YaoShare> = verification_circuit
-        .output_gate_ids
-        .iter()
-        .map(|id| outver.get(id).unwrap().clone())
-        .collect();
-
-    let verification =
-        batch_output_yao_functionality(setup, tag_offset_counter, relay, &ver).await?;
-
-    assert!(verification[0]);
-
-    let mut x_y = i1_yao[..256].to_vec();
-    x_y.extend_from_slice(&i2_yao[..256]);
-
-    let circ = build_scalar_to_y_circuit();
-
-    let inputs = vec![
-        i1_yao[..256].to_vec(),
-        i2_yao[..256].to_vec(),
-        i3_yao[..256].to_vec(),
-    ];
-
-    let out_hmap = yao_circuit_eval_functionality(
+    let outp = yao_circuit_eval_functionality(
         setup,
         tag_offset_counter,
         relay,
@@ -116,11 +82,18 @@ where
     )
     .await?;
 
-    let out: Vec<YaoShare> = circ
+    let veradd: Vec<YaoShare> = circ
         .output_gate_ids
         .iter()
-        .map(|id| out_hmap.get(id).unwrap().clone())
+        .map(|id| outp.get(id).unwrap().clone())
         .collect();
+
+    let verification =
+        batch_output_yao_functionality(setup, tag_offset_counter, relay, &veradd[..1]).await?;
+
+    assert!(verification[0]);
+
+    let out = veradd[1..].to_vec();
 
     Ok(out)
 }

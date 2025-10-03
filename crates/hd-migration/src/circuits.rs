@@ -223,6 +223,37 @@ pub fn build_sha512_circuit(len: u128) -> BinaryCircuit {
     builder.finish()
 }
 
+pub fn build_scalar_to_y_verification_circuit() -> BinaryCircuit {
+    let mut builder = CircuitBuilder::new();
+
+    let p1_next = builder.new_inputs(256);
+    let p2_next = builder.new_inputs(256);
+    let p3_next = builder.new_inputs(256);
+    let p1_prev = builder.new_inputs(256);
+    let p2_prev = builder.new_inputs(256);
+    let p3_prev = builder.new_inputs(256);
+
+    let comp_eq_circ = build_compare_eq_circuit(256);
+    let op1 = builder.add_circuit(&comp_eq_circ, &[p1_next.clone(), p2_prev])[0];
+    let op2 = builder.add_circuit(&comp_eq_circ, &[p2_next.clone(), p3_prev])[0];
+    let op3 = builder.add_circuit(&comp_eq_circ, &[p3_next.clone(), p1_prev])[0];
+
+    let temp = builder.and(op1, op2);
+    let output = builder.and(temp, op3);
+
+    let circ = build_mod_add_circut(p1_next.len(), SECP256_K1_Q);
+
+    let temp = builder.add_circuit(&circ, &[p1_next, p2_next]);
+    let res3_ids = builder.add_circuit(&circ, &[temp, p3_next]);
+
+    builder.output(output);
+    (0..256).for_each(|i| {
+        builder.output(res3_ids[i]);
+    });
+
+    builder.finish()
+}
+
 pub fn build_scalar_to_y_circuit() -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
