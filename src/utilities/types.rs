@@ -48,7 +48,7 @@ pub fn tblock_vec2block_vec(x: &[TBlock]) -> Vec<Block> {
     out
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct YaoGarblerShare {
     pub delta: Block,
     pub f_label: Block,
@@ -59,12 +59,12 @@ impl YaoGarblerShare {
         assert_eq!(self.delta, other.delta);
         Self {
             delta: self.delta,
-            f_label: xor_blocks(self.f_label, other.f_label),
+            f_label: xor_blocks(&self.f_label, &other.f_label),
         }
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct YaoEvaluatorShare {
     pub label: Block,
 }
@@ -72,35 +72,51 @@ pub struct YaoEvaluatorShare {
 impl YaoEvaluatorShare {
     pub fn xor(&self, other: &Self) -> Self {
         Self {
-            label: xor_blocks(self.label, other.label),
+            label: xor_blocks(&self.label, &other.label),
         }
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct YaoShare {
-    pub g_share: Option<YaoGarblerShare>,
-    pub e_share: Option<YaoEvaluatorShare>,
+#[derive(Clone, Debug, PartialEq)]
+pub enum YaoShare {
+    G(YaoGarblerShare),
+    E(YaoEvaluatorShare),
 }
 
 impl YaoShare {
     pub fn xor(&self, other: &Self) -> Self {
-        if self.g_share.is_some() {
-            assert!(other.g_share.is_some());
-            let s = self.g_share.clone().unwrap();
-            let o = other.g_share.clone().unwrap();
-            YaoShare {
-                g_share: Some(s.xor(&o)),
-                e_share: None,
-            }
-        } else {
-            assert!(other.e_share.is_some());
-            let s = self.e_share.clone().unwrap();
-            let o = other.e_share.clone().unwrap();
-            YaoShare {
-                g_share: None,
-                e_share: Some(s.xor(&o)),
-            }
+        match (self, other) {
+            (YaoShare::G(lhs), YaoShare::G(rhs)) => YaoShare::G(lhs.xor(rhs)),
+            (YaoShare::E(lhs), YaoShare::E(rhs)) => YaoShare::E(lhs.xor(rhs)),
+            _ => panic!("YaoShare::xor requires matching share variants"),
+        }
+    }
+
+    pub fn as_garbler(&self) -> &YaoGarblerShare {
+        match self {
+            YaoShare::G(share) => share,
+            _ => panic!("Garbler must hold a garbler Yao share"),
+        }
+    }
+
+    pub fn as_evaluator(&self) -> &YaoEvaluatorShare {
+        match self {
+            YaoShare::E(share) => share,
+            _ => panic!("Evaluator must hold an evaluator Yao share"),
+        }
+    }
+
+    pub fn into_garbler(self) -> Option<YaoGarblerShare> {
+        match self {
+            YaoShare::G(share) => Some(share),
+            _ => None,
+        }
+    }
+
+    pub fn into_evaluator(self) -> Option<YaoEvaluatorShare> {
+        match self {
+            YaoShare::E(share) => Some(share),
+            _ => None,
         }
     }
 }
@@ -112,13 +128,29 @@ pub struct GarblerSetup {
     pub delta: Block,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct EvaluatorSetup {
     pub comm_crs: Block,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct YaoSetup {
-    pub g_setup: Option<GarblerSetup>,
-    pub e_setup: Option<EvaluatorSetup>,
+#[derive(Debug)]
+pub enum YaoSetup {
+    G(GarblerSetup),
+    E(EvaluatorSetup),
+}
+
+impl YaoSetup {
+    pub fn as_garbler(&self) -> Option<&GarblerSetup> {
+        match self {
+            YaoSetup::G(g) => Some(g),
+            _ => None,
+        }
+    }
+
+    pub fn as_evaluator(&self) -> Option<&EvaluatorSetup> {
+        match self {
+            YaoSetup::E(e) => Some(e),
+            _ => None,
+        }
+    }
 }

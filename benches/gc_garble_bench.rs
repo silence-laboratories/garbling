@@ -51,6 +51,7 @@ pub fn garble_aes256_benchmark(c: &mut Criterion) {
             );
         })
     });
+
     group.finish();
 }
 

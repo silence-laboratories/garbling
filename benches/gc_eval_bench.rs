@@ -8,7 +8,7 @@ use garbled_circuit::{
         types::{Block, GarblerSetup, YaoEvaluatorShare, YaoGarblerShare},
     },
 };
-use rand::{RngCore, SeedableRng};
+use rand::{prelude::*, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 pub fn eval_aes256_benchmark(c: &mut Criterion) {
@@ -18,8 +18,7 @@ pub fn eval_aes256_benchmark(c: &mut Criterion) {
     // 8832 AND Gates
     let circuit = BinaryCircuit::parse(AES256_CIRCUIT).unwrap();
 
-    let mut delta = Block::default();
-    rng.fill_bytes(&mut delta);
+    let delta = random();
 
     let hash = AesGarbleHash::new(AES_KEY);
 
@@ -58,11 +57,13 @@ pub fn eval_aes256_benchmark(c: &mut Criterion) {
         &mut rng,
         &hash,
     );
+
     group.bench_function("aes256_eval", |b| {
         b.iter(|| {
             let _ = evaluate_functionality(&circuit, &ein, &gc, &hash);
         })
     });
+
     group.finish();
 }
 

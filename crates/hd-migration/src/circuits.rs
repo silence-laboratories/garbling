@@ -295,15 +295,13 @@ pub fn build_sha512_circuit(len: u128) -> BinaryCircuit {
 
     let count = padded.len() / 1024;
 
+    let sha512_circuit = BinaryCircuit::parse(SHA512_CIRCUIT).unwrap();
+
     for i in 0..count {
         let mut block_inp = padded[1024 * i..1024 * (i + 1)].to_vec();
         block_inp.reverse();
 
-        let block_out = builder
-            .parse(SHA512_CIRCUIT, &block_inp, &chain_input)
-            .unwrap();
-
-        chain_input = block_out;
+        chain_input = builder.add_circuit(&sha512_circuit, &[block_inp.clone(), chain_input]);
     }
 
     chain_input.reverse();

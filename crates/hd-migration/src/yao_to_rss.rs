@@ -527,7 +527,7 @@ pub async fn run_yao_to_scalar_rss_keypair<S, G, R>(
     relay: &mut R,
     tag_offset_counter: &mut TagOffsetCounter,
     share: &[YaoShare],
-    rng: &mut Option<G>,
+    rng: Option<&mut G>,
 ) -> Result<PrivKeyShareDkg<k256::ProjectivePoint>, HardDerivationError>
 where
     S: ProtocolParticipant,
@@ -560,7 +560,7 @@ pub async fn run_yao_to_scalar_rss_keypair_inner<S, G, R>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
     share: &[YaoShare],
-    rng: &mut Option<G>,
+    rng: Option<&mut G>,
     tag1: MessageTag,
     tag2: MessageTag,
     tag3: MessageTag,
@@ -575,14 +575,15 @@ where
 
     if party_id == 2 {
         let msg1: Vec<YaoToScalarRssKeypairMsg1> =
-            receive_from_parties(setup, tag1, 32 * 257 * 2, vec![0, 1], relay).await?;
+            receive_from_parties(setup, tag1, 32 * 257 * 2, &[0, 1], relay).await?;
 
         let msg1_p3_from_p1 = msg1[0].clone();
         let msg1_p3_from_p2 = msg1[1].clone();
 
         let eins: Vec<YaoEvaluatorShare> = share
             .iter()
-            .map(|ins| ins.e_share.clone().unwrap())
+            .map(|ins| ins.as_evaluator())
+            .cloned()
             .collect();
 
         let (msg2_0, msg2_1, state2) =
@@ -597,7 +598,7 @@ where
         send_to_party(setup, tag3, msg3, 1, relay).await?;
 
         let msg3s: Vec<YaoToScalarRssKeypairMsg3p3> =
-            receive_from_parties(setup, tag3, 33 * 2 + 32, vec![0, 1], relay).await?;
+            receive_from_parties(setup, tag3, 33 * 2 + 32, &[0, 1], relay).await?;
 
         let msg3_0 = msg3s[0].clone();
         let msg3_1 = msg3s[1].clone();
@@ -605,7 +606,7 @@ where
         let alpha_p3 =
             get_private_key_shares_dkg_process_msg3_p3(&msg3_1, &msg3_0, &state2, &state3);
 
-        let pks: Vec<[u8; 33]> = receive_from_parties(setup, tag4, 33, vec![0, 1], relay).await?;
+        let pks: Vec<[u8; 33]> = receive_from_parties(setup, tag4, 33, &[0, 1], relay).await?;
 
         let encoded = EncodedPoint::from_bytes(pks[0]).unwrap();
         let affine = AffinePoint::from_encoded_point(&encoded).unwrap();
@@ -621,17 +622,15 @@ where
             &pk, &alpha_p3, &state2,
         ))
     } else {
-        let r = rng.as_mut().unwrap();
-        let gins: Vec<YaoGarblerShare> = share
-            .iter()
-            .map(|ins| ins.g_share.clone().unwrap())
-            .collect();
+        let r = rng.unwrap();
+        let gins: Vec<YaoGarblerShare> =
+            share.iter().map(|ins| ins.as_garbler()).cloned().collect();
         let (msg1, state1) = get_private_key_shares_dkg_create_msg1_p12(&gins, r);
 
         send_to_party(setup, tag1, msg1, 2, relay).await?;
 
         let msg2s: Vec<YaoToScalarRssKeypairMsg2> =
-            receive_from_parties(setup, tag2, 33 * 2 + 32 * 2, vec![2], relay).await?;
+            receive_from_parties(setup, tag2, 33 * 2 + 32 * 2, &[2], relay).await?;
 
         let msg2 = msg2s[0].clone();
 
@@ -641,7 +640,7 @@ where
         send_to_party(setup, tag3, msg3_2, 2, relay).await?;
 
         let msg3s: Vec<YaoToScalarRssKeypairMsg3p12> =
-            receive_from_parties(setup, tag3, 33 * 2, vec![1 - party_id, 2], relay).await?;
+            receive_from_parties(setup, tag3, 33 * 2, &[1 - party_id, 2], relay).await?;
 
         let msg3_01 = msg3s[0].clone();
         let msg3_2 = msg3s[1].clone();
@@ -677,7 +676,7 @@ mod tests {
             input::batch_input_yao_functionality, setup::setup_yao_functionality,
             utils_dep::TagOffsetCounter,
         },
-        utilities::{commitments::HashCommitment, hash_function::AesHash},
+        utilities::{commitments::HashCommitment, hash_function::AesHash, types::YaoSetup},
     };
     use k256::{ProjectivePoint, Scalar};
     use rand::{Rng, SeedableRng, rngs};
@@ -706,15 +705,18 @@ mod tests {
         let yao_setup =
             setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
 
-        let (mut rng, _, _) = if setup.participant_index() == 2 {
-            let hash = AesHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
-            (None, hash, comm)
-        } else {
-            let hash = AesHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
-            let r = ChaCha8Rng::from_seed(yao_setup.g_setup.clone().unwrap().prf_key);
-            (Some(r), hash, comm)
+        let (mut rng, _, _) = match &yao_setup {
+            YaoSetup::E(e) => {
+                let hash = AesHash::new(e.comm_crs);
+                let comm = HashCommitment::new(hash.clone());
+                (None, hash, comm)
+            }
+            YaoSetup::G(g) => {
+                let hash = AesHash::new(g.comm_crs);
+                let comm = HashCommitment::new(hash);
+                let r = ChaCha8Rng::from_seed(g.prf_key);
+                (Some(r), hash, comm)
+            }
         };
 
         let in_yao = batch_input_yao_functionality(
@@ -722,7 +724,7 @@ mod tests {
             &mut tag_offset_counter,
             &mut relay,
             &input,
-            &mut rng,
+            rng.as_mut(),
             &yao_setup,
         )
         .await?;
@@ -732,7 +734,7 @@ mod tests {
             &mut relay,
             &mut tag_offset_counter,
             &in_yao,
-            &mut rng,
+            rng.as_mut(),
         )
         .await?;
 

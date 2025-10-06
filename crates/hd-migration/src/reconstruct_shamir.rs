@@ -70,9 +70,9 @@ pub async fn run_reconstruct_shamir_inner<R: Relay, S: ProtocolParticipant>(
     send_to_party(setup, tag2, ScalarVal(*share), next_party, relay).await?;
 
     let shares_recv_n: Vec<ScalarVal> =
-        receive_from_parties(setup, tag1, ScalarVal::SIZE, vec![next_party], relay).await?;
+        receive_from_parties(setup, tag1, ScalarVal::SIZE, &[next_party], relay).await?;
     let shares_recv_p: Vec<ScalarVal> =
-        receive_from_parties(setup, tag2, ScalarVal::SIZE, vec![prev_party], relay).await?;
+        receive_from_parties(setup, tag2, ScalarVal::SIZE, &[prev_party], relay).await?;
 
     let share_prev = shares_recv_p[0].0;
     let share_next = shares_recv_n[0].0;

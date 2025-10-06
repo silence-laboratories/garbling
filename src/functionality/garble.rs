@@ -22,7 +22,7 @@ where
     R: RngCore + CryptoRng,
     H: HashFunction,
 {
-    let mut w: Vec<Option<Block>> = vec![None; circuit.gates.len()];
+    let mut w = vec![[0; BLOCK_SIZE]; circuit.gates.len()];
 
     let mut f: Vec<Block> = vec![];
 
@@ -38,15 +38,15 @@ where
                 zerowire[0] |= 1;
                 let mut newwire = zerowire;
                 if val == 1 {
-                    newwire = xor_blocks(newwire, setup.delta);
+                    newwire = xor_blocks(&newwire, &setup.delta);
                 }
                 f.push(newwire);
                 (wire, zerowire)
             }
             BinaryGate::Xor { xid, yid, out } => {
-                let x_label = w[xid].as_ref().unwrap();
-                let y_label = w[yid].as_ref().unwrap();
-                (out, xor_blocks(*x_label, *y_label))
+                let x_label = &w[xid];
+                let y_label = &w[yid];
+                (out, xor_blocks(x_label, y_label))
             }
             BinaryGate::And {
                 xid,
@@ -54,10 +54,10 @@ where
                 id: _,
                 out,
             } => {
-                let x_label = w[xid].as_ref().unwrap();
-                let xp_label = xor_blocks(*x_label, setup.delta);
-                let y_label = w[yid].as_ref().unwrap();
-                let yp_label = xor_blocks(*y_label, setup.delta);
+                let x_label = &w[xid];
+                let xp_label = xor_blocks(x_label, &setup.delta);
+                let y_label = &w[yid];
+                let yp_label = xor_blocks(y_label, &setup.delta);
                 let k0 = (2 * i - 1) as u128;
                 let k1 = 2 * i as u128;
                 let mut k0_bytes = Block::default();
@@ -65,49 +65,51 @@ where
                 k0_bytes[(BLOCK_SIZE - 16)..].copy_from_slice(&k0.to_le_bytes());
                 k1_bytes[(BLOCK_SIZE - 16)..].copy_from_slice(&k1.to_le_bytes());
 
-                let px = lsb(*x_label);
-                let py = lsb(*y_label);
+                let px = lsb(x_label);
+                let py = lsb(y_label);
 
                 let g0_p1 = hash.tccr_hash(x_label, &k0_bytes);
                 let g0_p2 = hash.tccr_hash(&xp_label, &k0_bytes);
                 let g0 = if py == 1 {
-                    xor_blocks(xor_blocks(g0_p1, g0_p2), setup.delta)
+                    xor_blocks(&xor_blocks(&g0_p1, &g0_p2), &setup.delta)
                 } else {
-                    xor_blocks(g0_p1, g0_p2)
+                    xor_blocks(&g0_p1, &g0_p2)
                 };
 
                 let g1_p1 = hash.tccr_hash(y_label, &k1_bytes);
                 let g1_p2 = hash.tccr_hash(&yp_label, &k1_bytes);
-                let g1 = xor_blocks(xor_blocks(g1_p1, g1_p2), *x_label);
+                let g1 = xor_blocks(&xor_blocks(&g1_p1, &g1_p2), x_label);
 
                 f.push(g0);
                 f.push(g1);
 
-                let w_out_p1 = if px == 1 { g0_p2 } else { g0_p1 };
-                let w_out_p2 = if py == 1 { g1_p2 } else { g1_p1 };
+                let w_out_p1 = if px == 1 { &g0_p2 } else { &g0_p1 };
+                let w_out_p2 = if py == 1 { &g1_p2 } else { &g1_p1 };
 
                 let w_out = if px * py == 1 {
-                    xor_blocks(xor_blocks(w_out_p1, w_out_p2), setup.delta)
+                    xor_blocks(&xor_blocks(w_out_p1, w_out_p2), &setup.delta)
                 } else {
                     xor_blocks(w_out_p1, w_out_p2)
                 };
                 (out, w_out)
             }
             BinaryGate::Inv { xid, out } => {
-                let x_label = w[xid].as_ref().unwrap();
-                (out, xor_blocks(*x_label, setup.delta))
+                let x_label = &w[xid];
+                (out, xor_blocks(x_label, &setup.delta))
             }
         };
-        w[out_gate] = Some(f_label);
+
+        w[out_gate] = f_label;
     }
+
     let mut outputs = HashMap::new();
-    for r in circuit.get_output_gate_ids().iter() {
-        let x = w[*r].as_ref().unwrap();
+    for &r in circuit.get_output_gate_ids() {
+        let f_label = w[r];
         outputs.insert(
-            *r,
+            r,
             YaoGarblerShare {
                 delta: setup.delta,
-                f_label: *x,
+                f_label,
             },
         );
     }

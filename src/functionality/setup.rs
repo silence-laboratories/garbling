@@ -23,10 +23,10 @@ where
     let mut relay = FilteredMsgRelay::new(relay);
 
     let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(SETUP_YAO_FUNC_MSG1.try_into().unwrap(), tag_offset);
+    let tag1 = MessageTag::tag1(SETUP_YAO_FUNC_MSG1, tag_offset);
     relay.ask_messages(setup, tag1, true).await?;
     let tag_offset = tag_offset_counter.next_value();
-    let tag2 = MessageTag::tag1(SETUP_YAO_FUNC_MSG2.try_into().unwrap(), tag_offset);
+    let tag2 = MessageTag::tag1(SETUP_YAO_FUNC_MSG2, tag_offset);
     relay.ask_messages(setup, tag2, true).await?;
 
     let output = setup_yao_functionality_inner(setup, &mut relay, tag1, tag2).await?;
@@ -46,11 +46,6 @@ where
 {
     let party_id = setup.participant_index();
 
-    let mut output = YaoSetup {
-        g_setup: None,
-        e_setup: None,
-    };
-
     if party_id == 2 {
         let mut rng = rand::rngs::StdRng::from_entropy();
         let mut crs = Block::default();
@@ -59,10 +54,9 @@ where
         send_to_party(setup, tag1, crs, 0, relay).await?;
         send_to_party(setup, tag1, crs, 1, relay).await?;
 
-        output.e_setup = Some(EvaluatorSetup { comm_crs: crs })
+        Ok(YaoSetup::E(EvaluatorSetup { comm_crs: crs }))
     } else {
-        let crss: Vec<Block> =
-            receive_from_parties(setup, tag1, BLOCK_SIZE, vec![2], relay).await?;
+        let crss: Vec<Block> = receive_from_parties(setup, tag1, BLOCK_SIZE, &[2], relay).await?;
 
         let mut rng = rand::rngs::StdRng::from_entropy();
         let seed = if party_id == 0 {
@@ -72,7 +66,7 @@ where
             send_to_party(setup, tag2, seed, 1, relay).await?;
             seed
         } else {
-            let seed: Vec<[u8; 32]> = receive_from_parties(setup, tag2, 32, vec![0], relay).await?;
+            let seed: Vec<[u8; 32]> = receive_from_parties(setup, tag2, 32, &[0], relay).await?;
             seed[0]
         };
 
@@ -82,12 +76,10 @@ where
         rng.fill_bytes(&mut delta);
         delta[0] |= 1;
 
-        output.g_setup = Some(GarblerSetup {
+        Ok(YaoSetup::G(GarblerSetup {
             comm_crs: crss[0],
             prf_key: seed,
             delta,
-        })
+        }))
     }
-
-    Ok(output)
 }

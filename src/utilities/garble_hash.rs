@@ -4,16 +4,13 @@ use aes::{
 };
 use aes_gcm::KeyInit;
 
-use crate::{
-    config::util_errors::HashError,
-    utilities::{
-        hash_function::HashFunction,
-        types::{Block, BLOCK_SIZE},
-        utils::xor_blocks,
-    },
+use crate::utilities::{
+    hash_function::HashFunction,
+    types::{Block, BLOCK_SIZE},
+    utils::xor_blocks,
 };
 
-pub fn double_gf2_128_bytes(x: Block) -> Block {
+pub fn double_gf2_128_bytes(x: &Block) -> Block {
     let mut result = [0u8; 16];
     let mut carry = 0u8;
 
@@ -86,8 +83,8 @@ impl HashFunction for AesGarbleHash {
     ///
     /// The function computes `H(x) ⊕ x`.
     fn cr_hash(&self, x: &Block) -> Block {
-        let hashval = self.get_hash(x).unwrap();
-        xor_blocks(hashval, x.to_owned())
+        let hashval = self.get_hash(x);
+        xor_blocks(&hashval, x)
     }
 
     /// Circular Correlation-robust hash function for 128-bit inputs (cf.
@@ -114,14 +111,12 @@ impl HashFunction for AesGarbleHash {
         // let kval = xval.mul(two).add(ival);
         // self.get_hash(&kval.0.to_be_bytes()).unwrap()
 
-        self.get_hash(&xor_blocks(double_gf2_128_bytes(*x), *i))
-            .unwrap()
+        self.get_hash(&xor_blocks(&double_gf2_128_bytes(x), i))
     }
 
     /// Implementation of the `get_hash` function for a `AesGarbleHash`.
-    fn get_hash(&self, input: &[u8]) -> Result<Block, HashError> {
-        let result = self.hash(input);
-        Ok(result)
+    fn get_hash(&self, input: &[u8]) -> Block {
+        self.hash(input)
     }
 
     /// Implementation of the `initialize` function for a `AesGarbleHash`.

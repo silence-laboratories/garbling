@@ -41,11 +41,6 @@ impl<R: Relay> FilteredMsgRelay<R> {
         }
     }
 
-    // /// Return underlying relay object
-    // pub fn into_inner(self) -> R {
-    //     self.relay
-    // }
-
     /// Mark message with ID as expected and associate pair (party-id,
     /// tag) with it.
     pub async fn expect_message(
@@ -491,7 +486,7 @@ pub async fn receive_from_parties<P, R, T>(
     setup: &P,
     tag: MessageTag,
     message_size: usize,
-    from_parties: Vec<usize>,
+    from_parties: &[usize],
     relay: &mut FilteredMsgRelay<R>,
 ) -> Result<Vec<T>, ProtocolError>
 where

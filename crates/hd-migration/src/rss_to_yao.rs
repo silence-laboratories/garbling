@@ -27,7 +27,7 @@ pub async fn run_scalar_rss_to_yao<S, R, C, G, H>(
     tag_offset_counter: &mut TagOffsetCounter,
     share: &PrivKeyShare<ProjectivePoint>,
     yao_setup: &YaoSetup,
-    rng: &mut Option<G>,
+    mut rng: Option<&mut G>,
     comm: &C,
     hash: &H,
 ) -> Result<Vec<YaoShare>, HardDerivationError>
@@ -52,7 +52,7 @@ where
         all_ip.len(),
         all_ip.len(),
         all_ip.len(),
-        rng,
+        rng.as_mut(),
         yao_setup,
         comm,
     )
@@ -105,7 +105,7 @@ mod tests {
             output::batch_output_yao_functionality, setup::setup_yao_functionality,
             utils_dep::TagOffsetCounter,
         },
-        utilities::{commitments::HashCommitment, hash_function::AesHash},
+        utilities::{commitments::HashCommitment, hash_function::AesHash, types::YaoSetup},
     };
     use k256::{ProjectivePoint, Scalar};
     use rand::{RngCore, SeedableRng, rngs};
@@ -133,19 +133,29 @@ mod tests {
 
         let yao_setup = setup_yao_functionality(&setup, &mut cnt, &mut relay).await?;
 
-        let (mut rng, hash, comm) = if setup.participant_index() == 2 {
-            let hash = AesHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
-            (None, hash, comm)
-        } else {
-            let hash = AesHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
-            let r = ChaCha8Rng::from_seed(yao_setup.g_setup.clone().unwrap().prf_key);
-            (Some(r), hash, comm)
+        let (mut rng, hash, comm) = match &yao_setup {
+            YaoSetup::E(e) => {
+                let hash = AesHash::new(e.comm_crs);
+                let comm = HashCommitment::new(hash.clone());
+                (None, hash, comm)
+            }
+            YaoSetup::G(g) => {
+                let hash = AesHash::new(g.comm_crs);
+                let comm = HashCommitment::new(hash);
+                let r = ChaCha8Rng::from_seed(g.prf_key);
+                (Some(r), hash, comm)
+            }
         };
 
         let output = run_scalar_rss_to_yao(
-            &setup, &mut relay, &mut cnt, &share, &yao_setup, &mut rng, &comm, &hash,
+            &setup,
+            &mut relay,
+            &mut cnt,
+            &share,
+            &yao_setup,
+            rng.as_mut(),
+            &comm,
+            &hash,
         )
         .await?;
 

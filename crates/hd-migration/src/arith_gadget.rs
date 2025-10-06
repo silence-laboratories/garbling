@@ -60,12 +60,12 @@ where
     let pub_times_a = get_pub_vec_times_a::<ProjectivePoint>(&a);
 
     for i in 0..eta {
-        let pi = lsb(garbled_inputs[i].f_label) != 0;
+        let pi = lsb(&garbled_inputs[i].f_label) != 0;
 
         let hk0 = kdf::<ProjectivePoint>(&i.to_be_bytes(), &garbled_inputs[i].f_label);
         let hk1 = kdf::<ProjectivePoint>(
             &i.to_be_bytes(),
-            &xor_blocks(garbled_inputs[i].f_label, garbled_inputs[i].delta),
+            &xor_blocks(&garbled_inputs[i].f_label, &garbled_inputs[i].delta),
         );
         let a_ui = &pub_times_a[i];
 
@@ -94,7 +94,7 @@ where
     let mut z = G::Scalar::ZERO;
 
     for i in 0..eta {
-        let lambda_i = lsb(garbled_inputs[i].label) != 0;
+        let lambda_i = lsb(&garbled_inputs[i].label) != 0;
 
         let hke = kdf::<G>(&i.to_be_bytes(), &garbled_inputs[i].label);
         let zi = if lambda_i {
@@ -132,7 +132,7 @@ mod tests {
         utilities::{
             commitments::HashCommitment,
             hash_function::AesHash,
-            types::{YaoEvaluatorShare, YaoGarblerShare},
+            types::{YaoEvaluatorShare, YaoGarblerShare, YaoSetup},
         },
     };
     use k256::{ProjectivePoint, Scalar};
@@ -170,15 +170,18 @@ mod tests {
         let yao_setup =
             setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
 
-        let (mut rng, _, _) = if setup.participant_index() == 2 {
-            let hash = AesHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
-            (None, hash, comm)
-        } else {
-            let hash = AesHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
-            let r = ChaCha8Rng::from_seed(yao_setup.g_setup.clone().unwrap().prf_key);
-            (Some(r), hash, comm)
+        let (mut rng, _, _) = match &yao_setup {
+            YaoSetup::E(e) => {
+                let hash = AesHash::new(e.comm_crs);
+                let comm = HashCommitment::new(hash);
+                (None, hash, comm)
+            }
+            YaoSetup::G(g) => {
+                let hash = AesHash::new(g.comm_crs);
+                let comm = HashCommitment::new(hash);
+                let r = ChaCha8Rng::from_seed(g.prf_key);
+                (Some(r), hash, comm)
+            }
         };
 
         let outputs = batch_input_yao_functionality(
@@ -186,7 +189,7 @@ mod tests {
             &mut tag_offset_counter,
             &mut relay,
             &garb_input,
-            &mut rng,
+            rng.as_mut(),
             &yao_setup,
         )
         .await?;
@@ -202,7 +205,7 @@ mod tests {
 
         let out = if setup.participant_index() == 2 {
             let svcvecs: Vec<Vec<ScalarVal>> =
-                receive_from_parties(&setup, tag1, 32 * 256, vec![0, 1], &mut r).await?;
+                receive_from_parties(&setup, tag1, 32 * 256, &[0, 1], &mut r).await?;
 
             let cvecs = [
                 vec_scalarval_2_scalars(&svcvecs[0]),
@@ -214,7 +217,8 @@ mod tests {
 
             let eins: Vec<YaoEvaluatorShare> = outputs
                 .iter()
-                .map(|ins| ins.e_share.clone().unwrap())
+                .map(|ins| ins.as_evaluator())
+                .cloned()
                 .collect();
 
             let z = evaluate_gadget::<ProjectivePoint>(&cvec, &eins);
@@ -223,14 +227,15 @@ mod tests {
             send_to_party(&setup, tag2, ScalarVal(z), 1, &mut r).await?;
 
             let outs: Vec<ScalarVal> =
-                receive_from_parties(&setup, tag3, 32, vec![0, 1], &mut r).await?;
+                receive_from_parties(&setup, tag3, 32, &[0, 1], &mut r).await?;
 
             assert_eq!(outs[0].0, outs[1].0);
             outs[0].0
         } else {
             let gins: Vec<YaoGarblerShare> = outputs
                 .iter()
-                .map(|ins| ins.g_share.clone().unwrap())
+                .map(|ins| ins.as_garbler())
+                .cloned()
                 .collect();
             let mut rn = rng.as_mut().unwrap();
             let (cvec, de) = garble_gadget(&gins, &mut rn);
@@ -239,8 +244,7 @@ mod tests {
 
             send_to_party(&setup, tag1, svcvec, 2, &mut r).await?;
 
-            let zs: Vec<ScalarVal> =
-                receive_from_parties(&setup, tag2, 32, vec![2], &mut r).await?;
+            let zs: Vec<ScalarVal> = receive_from_parties(&setup, tag2, 32, &[2], &mut r).await?;
 
             let out = decode_gadget::<ProjectivePoint>(&de, zs[0].0);
 

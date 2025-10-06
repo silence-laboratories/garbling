@@ -1,34 +1,31 @@
 use std::collections::HashMap;
 
-use crate::{
-    circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-    config::errors::FileParsingError,
-};
+use crate::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
 
 /// `CircuitBuilder` is a struct used to construct a `BinaryCircuit`.
-/// It maintains internal state during the circuit construction process.
-/// Once the circuit is built and returned, the builder can either be discarded
-/// or reused to construct a new circuit on top of the existing one.
-#[derive(Clone)]
-pub struct CircuitBuilder<BinaryCircuit> {
+/// It maintains internal state during the circuit construction
+/// process.  Once the circuit is built and returned, the builder can
+/// either be discarded or reused to construct a new circuit on top of
+/// the existing one.
+pub struct CircuitBuilder {
     /// Tracks the next available gate ID in the circuit.
-    pub next_ref_id: usize,
+    next_ref_id: usize,
 
     /// A mapping of constant values to their corresponding gate IDs.
-    /// This allows reuse of constant gates instead of creating duplicates.
-    pub const_map: HashMap<u16, usize>,
+    /// This allows reuse of constant gates instead of creating
+    /// duplicates.
+    const_map: HashMap<u16, usize>,
 
-    /// The binary circuit being constructed.
-    /// This is incrementally updated as new gates and inputs are added.
-    /// Once the construction is complete, the circuit can be extracted from the builder.
-    pub circ: BinaryCircuit,
+    /// The binary circuit being constructed.  This is incrementally
+    /// updated as new gates and inputs are added.  Once the
+    /// construction is complete, the circuit can be extracted from
+    /// the builder.
+    circ: BinaryCircuit,
 }
 
-/// Implementation of the `CircuitBuilder` struct.
-/// Provides methods to construct and output a `BinaryCircuit`.
-impl CircuitBuilder<BinaryCircuit> {
-    /// Creates a new, empty `CircuitBuilder` instance.
-    /// Initializes all tracking counters to zero and sets up an empty circuit.
+impl CircuitBuilder {
+    /// Creates a new, empty `CircuitBuilder` instance.  Initializes
+    /// all tracking counters to zero and sets up an empty circuit.
     pub fn new() -> Self {
         CircuitBuilder {
             next_ref_id: 0,
@@ -44,8 +41,7 @@ impl CircuitBuilder<BinaryCircuit> {
 
     /// Retrieves the next available input ID for the n-th input.
     fn get_next_nth_input_id(&mut self, n: usize) -> usize {
-        let current = self.circ.get_input_ids()[n].len();
-        current
+        self.circ.get_nth_input_ids(n).len()
     }
 
     /// Retrieves the next available ciphertext ID for non-free gates.
@@ -56,7 +52,8 @@ impl CircuitBuilder<BinaryCircuit> {
         current
     }
 
-    /// Retrieves the next available reference ID for a gate and increments the counter.
+    /// Retrieves the next available reference ID for a gate and
+    /// increments the counter.
     fn get_next_ref_id(&mut self) -> usize {
         let current = self.next_ref_id;
         self.next_ref_id += 1;
@@ -68,14 +65,17 @@ impl CircuitBuilder<BinaryCircuit> {
     pub fn new_input(&mut self) -> usize {
         let id = self.get_next_nth_input_id(self.circ.num_inputs());
         let gate_id = self.get_next_ref_id();
+
         self.circ.push_gate(BinaryGate::Input {
             no: self.circ.num_inputs(),
             id,
             wire: gate_id,
         });
+
         self.circ.new_input();
         self.circ.push_nth_input(self.circ.num_inputs() - 1, id);
         self.circ.increment_wires();
+
         gate_id
     }
 
@@ -99,8 +99,8 @@ impl CircuitBuilder<BinaryCircuit> {
         output
     }
 
-    /// Adds an XOR gate to the circuit.
-    /// Returns the reference ID of the resulting gate.
+    /// Adds an XOR gate to the circuit.  Returns the reference ID of
+    /// the resulting gate.
     pub fn xor(&mut self, xid: usize, yid: usize) -> usize {
         let out_id = self.get_next_ref_id();
         let gate = BinaryGate::Xor {
@@ -113,8 +113,8 @@ impl CircuitBuilder<BinaryCircuit> {
         out_id
     }
 
-    /// Adds a NOT gate (negation) to the circuit.
-    /// Returns the reference ID of the resulting gate.
+    /// Adds a NOT gate (negation) to the circuit.  Returns the
+    /// reference ID of the resulting gate.
     pub fn negate(&mut self, xid: usize) -> usize {
         let out_id = self.get_next_ref_id();
         let gate = BinaryGate::Inv { xid, out: out_id };
@@ -123,8 +123,8 @@ impl CircuitBuilder<BinaryCircuit> {
         out_id
     }
 
-    /// Adds an AND gate to the circuit.
-    /// Returns the reference ID of the resulting gate.
+    /// Adds an AND gate to the circuit.  Returns the reference ID of
+    /// the resulting gate.
     pub fn and(&mut self, xid: usize, yid: usize) -> usize {
         let out_id = self.get_next_ref_id();
         let gate = BinaryGate::And {
@@ -138,9 +138,10 @@ impl CircuitBuilder<BinaryCircuit> {
         out_id
     }
 
-    /// Adds a constant gate to the circuit.
-    /// If the constant already exists in the circuit, returns its reference ID.
-    /// Otherwise, creates a new constant gate, stores it in `const_map`, and returns its reference ID.
+    /// Adds a constant gate to the circuit.  If the constant already
+    /// exists in the circuit, returns its reference ID.  Otherwise,
+    /// creates a new constant gate, stores it in `const_map`, and
+    /// returns its reference ID.
     pub fn constant(&mut self, val: u16) -> usize {
         match self.const_map.get(&val) {
             Some(&r) => r,
@@ -159,191 +160,6 @@ impl CircuitBuilder<BinaryCircuit> {
     /// Marks a gate as an output in the circuit.
     pub fn output(&mut self, id: usize) {
         self.circ.push_output_gate(id);
-    }
-
-    /// Takes a file, the input ids and adds the circuit in the file to the circuit.
-    /// Returns the resultant output gate ids from the circuit file.
-    pub fn parse(
-        &mut self,
-        file: &str,
-        garbler_input_ids: &[usize],
-        evaluator_input_ids: &[usize],
-    ) -> Result<Vec<usize>, FileParsingError> {
-        let mut reader = file.lines();
-
-        let mut num_gates: usize = 0;
-        let mut num_wires: usize = 0;
-
-        if let Some(line1) = reader.next() {
-            let mut parts = line1.split(' ');
-            num_gates = parts.next().unwrap().parse()?;
-            num_wires = parts.next().unwrap().parse()?;
-        }
-
-        let mut num_garbler_inputs = 0;
-        let mut num_evaluator_inputs = 0;
-        let mut num_outputs = 0;
-
-        if let Some(line1) = reader.next() {
-            let mut parts = line1.split(' ');
-            if let Some(n_input_wires_str) = parts.next() {
-                if let Ok(_num_inp_wires) = n_input_wires_str.parse::<u64>() {
-                    if _num_inp_wires == 2 {
-                        if let Some(num_garbl_inputs) = parts.next() {
-                            if let Ok(_num_garbl_inputs) = num_garbl_inputs.parse::<usize>() {
-                                if let Some(num_eval_inputs) = parts.next() {
-                                    if let Ok(_num_eval_inputs) = num_eval_inputs.parse::<usize>() {
-                                        num_garbler_inputs = _num_garbl_inputs;
-                                        num_evaluator_inputs = _num_eval_inputs;
-                                    } else {
-                                        return Err(FileParsingError::InputNoParsingError());
-                                    }
-                                } else {
-                                    return Err(FileParsingError::InputNoParsingError());
-                                }
-                            } else {
-                                return Err(FileParsingError::InputNoParsingError());
-                            }
-                        } else {
-                            return Err(FileParsingError::InputNoParsingError());
-                        }
-                    } else {
-                        return Err(FileParsingError::InputCountError());
-                    }
-                } else {
-                    return Err(FileParsingError::InputNoParsingError());
-                }
-            }
-        }
-
-        assert_eq!(num_garbler_inputs, garbler_input_ids.len());
-        assert_eq!(num_evaluator_inputs, evaluator_input_ids.len());
-
-        if let Some(line1) = reader.next() {
-            let mut parts = line1.split(' ');
-            if let Some(n_output_usizes_str) = parts.next() {
-                if let Ok(n_output_usizes) = n_output_usizes_str.parse::<usize>() {
-                    if n_output_usizes == 1 {
-                        if let Some(n_outputs) = parts.next() {
-                            if let Ok(n_output) = n_outputs.parse::<usize>() {
-                                num_outputs = n_output;
-                            }
-                        }
-                    } else {
-                        return Err(FileParsingError::OutputCountError());
-                    }
-                } else {
-                    return Err(FileParsingError::OutputNoParsingError());
-                }
-            }
-        }
-
-        let mut id: usize = 0;
-        let latest_ref = self.next_ref_id;
-        let sub_val = num_garbler_inputs + num_evaluator_inputs;
-
-        for i in 0..num_gates {
-            let num_input: usize;
-            let mut _num_output = 0;
-            let mut input0: usize = 0;
-            let mut input1: usize = 0;
-            let mut output: usize = 0;
-            let mut gate = String::new();
-
-            if let Some(line1) = reader.next() {
-                let mut parts = line1.split(' ');
-                if let Some(num_inputs_str) = parts.next() {
-                    if let Ok(parsed_num_input) = num_inputs_str.parse::<usize>() {
-                        num_input = parsed_num_input;
-                        _num_output = parts.next().unwrap().parse::<usize>()?;
-                        input0 = parts.next().unwrap().parse::<usize>()?;
-                        if num_input == 2 {
-                            input1 = parts.next().unwrap().parse::<usize>()?
-                        }
-                        output = parts.next().unwrap().parse::<usize>()?;
-                        if let Some(gate_str) = parts.next() {
-                            gate = gate_str.to_string();
-                        }
-                    }
-                }
-            }
-            if gate == "AND" {
-                let newinput0: usize;
-                if input0 >= sub_val {
-                    newinput0 = input0 + latest_ref - sub_val;
-                } else if input0 >= num_garbler_inputs {
-                    newinput0 = evaluator_input_ids[input0 - num_garbler_inputs];
-                } else {
-                    newinput0 = garbler_input_ids[input0];
-                }
-
-                let newinput1: usize;
-                if input1 >= sub_val {
-                    newinput1 = input1 + latest_ref - sub_val;
-                } else if input1 >= num_garbler_inputs {
-                    newinput1 = evaluator_input_ids[input1 - num_garbler_inputs];
-                } else {
-                    newinput1 = garbler_input_ids[input1];
-                }
-                self.circ.push_gate(BinaryGate::And {
-                    xid: newinput0,
-                    yid: newinput1,
-                    id,
-                    out: output + latest_ref - sub_val,
-                });
-                self.circ.increment_nonfree_gates();
-                id += 1;
-            } else if gate == "XOR" {
-                let newinput0: usize;
-                if input0 >= sub_val {
-                    newinput0 = input0 + latest_ref - sub_val;
-                } else if input0 >= num_garbler_inputs {
-                    newinput0 = evaluator_input_ids[input0 - num_garbler_inputs];
-                } else {
-                    newinput0 = garbler_input_ids[input0];
-                }
-
-                let newinput1: usize;
-                if input1 >= sub_val {
-                    newinput1 = input1 + latest_ref - sub_val;
-                } else if input1 >= num_garbler_inputs {
-                    newinput1 = evaluator_input_ids[input1 - num_garbler_inputs];
-                } else {
-                    newinput1 = garbler_input_ids[input1];
-                }
-                self.circ.push_gate(BinaryGate::Xor {
-                    xid: newinput0,
-                    yid: newinput1,
-                    out: output + latest_ref - sub_val,
-                });
-            } else if gate == "INV" {
-                let newinput0: usize;
-                if input0 >= sub_val {
-                    newinput0 = input0 + latest_ref - sub_val;
-                } else if input0 >= num_garbler_inputs {
-                    newinput0 = evaluator_input_ids[input0 - num_garbler_inputs];
-                } else {
-                    newinput0 = garbler_input_ids[input0];
-                }
-
-                self.circ.push_gate(BinaryGate::Inv {
-                    xid: newinput0,
-                    out: output + latest_ref - sub_val,
-                });
-            } else {
-                return Err(FileParsingError::FileFormatError(i));
-            }
-        }
-
-        let mut output_wire_ids = vec![];
-
-        for i in 0..num_outputs {
-            output_wire_ids.push(num_wires - num_outputs + latest_ref - sub_val + i);
-        }
-
-        self.next_ref_id = num_wires + latest_ref - sub_val;
-
-        Ok(output_wire_ids)
     }
 
     pub fn add_circuit(
@@ -365,6 +181,7 @@ impl CircuitBuilder<BinaryCircuit> {
                     let newz = self.xor(*newx, *newy);
                     old_to_new_map.insert(*out, newz);
                 }
+
                 BinaryGate::And {
                     xid,
                     yid,
@@ -376,33 +193,28 @@ impl CircuitBuilder<BinaryCircuit> {
                     let newz = self.and(*newx, *newy);
                     old_to_new_map.insert(*out, newz);
                 }
+
                 BinaryGate::Inv { xid, out } => {
                     let newx = old_to_new_map.get(xid).unwrap();
                     let newz = self.negate(*newx);
                     old_to_new_map.insert(*out, newz);
                 }
-                BinaryGate::Input { no, id, wire } => {
-                    old_to_new_map.insert(*wire, input_ids[*no][*id]);
+
+                &BinaryGate::Input { no, id, wire } => {
+                    old_to_new_map.insert(wire, input_ids[no][id]);
                 }
-                BinaryGate::Constant { val, wire } => {
-                    old_to_new_map.insert(*wire, self.constant(*val));
+
+                &BinaryGate::Constant { val, wire } => {
+                    old_to_new_map.insert(wire, self.constant(val));
                 }
             }
         }
 
-        let mut outputs = Vec::new();
-        for out in &other_circuit.output_gate_ids {
-            outputs.push(*old_to_new_map.get(out).unwrap());
-        }
-
-        outputs
-    }
-}
-
-/// Implements the `Default` trait for `CircuitBuilder<BinaryCircuit>`.
-impl Default for CircuitBuilder<BinaryCircuit> {
-    fn default() -> Self {
-        Self::new()
+        other_circuit
+            .output_gate_ids
+            .iter()
+            .map(|out| *old_to_new_map.get(out).unwrap())
+            .collect()
     }
 }
 
