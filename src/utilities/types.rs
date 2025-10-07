@@ -1,7 +1,4 @@
-use crate::{
-    functionality::utils::{FixedExternalSize, Wrap},
-    utilities::utils::xor_blocks,
-};
+use crate::utilities::utils::xor_blocks;
 
 pub const BLOCK_SIZE: usize = 16;
 
@@ -11,41 +8,9 @@ pub const BLOCK_SIZE: usize = 16;
 /// the garbled circuit.
 pub type Block = [u8; BLOCK_SIZE];
 
-pub enum MapArg<T> {
+pub enum MapArg<'a, T> {
     Scalar(T),
-    Vector(Vec<T>),
-}
-
-pub struct TBlock(Block);
-
-impl Wrap for TBlock {
-    fn external_size(&self) -> usize {
-        TBlock::SIZE
-    }
-
-    fn write(&self, buffer: &mut [u8]) {
-        buffer[0..BLOCK_SIZE].copy_from_slice(&self.0);
-    }
-
-    fn read(buffer: &[u8]) -> Option<Self> {
-        let mut block = Block::default();
-        block.copy_from_slice(&buffer[0..BLOCK_SIZE]);
-        Some(TBlock(block))
-    }
-}
-
-impl FixedExternalSize for TBlock {
-    const SIZE: usize = BLOCK_SIZE;
-}
-
-pub fn block_vec2tblock_vec(x: &[Block]) -> Vec<TBlock> {
-    let out: Vec<TBlock> = x.iter().map(|item| TBlock(*item)).collect();
-    out
-}
-
-pub fn tblock_vec2block_vec(x: &[TBlock]) -> Vec<Block> {
-    let out: Vec<Block> = x.iter().map(|item| item.0).collect();
-    out
+    Vector(&'a [T]),
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -81,6 +46,18 @@ impl YaoEvaluatorShare {
 pub enum YaoShare {
     G(YaoGarblerShare),
     E(YaoEvaluatorShare),
+}
+
+impl From<YaoGarblerShare> for YaoShare {
+    fn from(share: YaoGarblerShare) -> Self {
+        YaoShare::G(share)
+    }
+}
+
+impl From<YaoEvaluatorShare> for YaoShare {
+    fn from(share: YaoEvaluatorShare) -> Self {
+        YaoShare::E(share)
+    }
 }
 
 impl YaoShare {
@@ -152,5 +129,29 @@ impl YaoSetup {
             YaoSetup::E(e) => Some(e),
             _ => None,
         }
+    }
+}
+
+impl From<GarblerSetup> for YaoSetup {
+    fn from(value: GarblerSetup) -> Self {
+        YaoSetup::G(value)
+    }
+}
+
+impl From<EvaluatorSetup> for YaoSetup {
+    fn from(value: EvaluatorSetup) -> Self {
+        YaoSetup::E(value)
+    }
+}
+
+impl From<&GarblerSetup> for YaoSetup {
+    fn from(value: &GarblerSetup) -> Self {
+        YaoSetup::G(value.clone())
+    }
+}
+
+impl From<&EvaluatorSetup> for YaoSetup {
+    fn from(value: &EvaluatorSetup) -> Self {
+        YaoSetup::E(value.clone())
     }
 }

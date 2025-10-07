@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use crate::circuitop::gate::BinaryGate;
+use crate::circuitop::gate::{BinaryGate, ID};
 use crate::config::errors::FileParsingError;
 
 /// Represents a binary circuit composed of various logic gates.
 /// This struct keeps track of gates, inputs, outputs, and metadata
 /// required for evaluation and is mainly used for garbling circuits.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct BinaryCircuit {
     /// A list of all gates in the circuit.
     pub gates: Vec<BinaryGate>,
@@ -15,17 +15,17 @@ pub struct BinaryCircuit {
     pub num_inputs: u32,
 
     /// The list of gate IDs corresponding to the circuit's input wires.
-    pub input_gate_ids: Vec<Vec<u32>>,
+    pub input_gate_ids: Vec<Vec<ID>>,
 
     /// A list of gate IDs corresponding to the circuit's output wires.
-    pub output_gate_ids: Vec<u32>,
+    pub output_gate_ids: Vec<ID>,
 
     /// A list of gate IDs corresponding to constant values in the circuit.
-    pub constant_map: HashMap<u16, u32>,
+    pub constant_map: HashMap<u16, ID>,
 
     /// The number of non-free (i.e., AND) gates in the circuit.
     /// This is used to track the complexity of garbled circuit evaluation.
-    pub num_nonfree_gates: u32,
+    pub num_nonfree_gates: usize,
 
     /// The total number of wires used in the circuit.
     /// This includes inputs, outputs, and intermediate wires.
@@ -91,8 +91,6 @@ impl BinaryCircuit {
             })
             .ok_or(FileParsingError::InputNoParsingError)?;
 
-        let mut id: u32 = 0;
-
         output_circuit.num_wires = num_wires;
 
         let mut totalcount = 0;
@@ -104,7 +102,7 @@ impl BinaryCircuit {
                     id: j,
                     wire: totalcount,
                 });
-                output_circuit.push_nth_input(ipcnt as u32, j as _);
+                output_circuit.push_nth_input(ipcnt as u32, j);
                 totalcount += 1;
             }
         }
@@ -112,6 +110,8 @@ impl BinaryCircuit {
         for i in 0..num_outputs {
             output_circuit.push_output_gate(num_wires - num_outputs + i)
         }
+
+        let mut id: u32 = 0;
 
         for i in 0..num_gates {
             let gate = reader
@@ -239,7 +239,7 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * A slice containing the IDs of all output gates in the circuit.
-    pub fn get_output_gate_ids(&self) -> &[u32] {
+    pub fn get_output_gate_ids(&self) -> &[ID] {
         &self.output_gate_ids
     }
 
@@ -247,7 +247,7 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * A slice containing the IDs of all n-th input gates.
-    pub fn get_nth_input_ids(&self, n: usize) -> &[u32] {
+    pub fn get_nth_input_ids(&self, n: usize) -> &[ID] {
         &self.input_gate_ids[n]
     }
 
@@ -255,7 +255,7 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * A slice containing the Vectors of IDs of all input gates.
-    pub fn get_input_ids(&self) -> &[Vec<u32>] {
+    pub fn get_input_ids(&self) -> &[Vec<ID>] {
         &self.input_gate_ids
     }
 
@@ -273,7 +273,7 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * The number of non-free gates.
-    pub fn get_num_nonfree_gates(&self) -> u32 {
+    pub fn get_num_nonfree_gates(&self) -> usize {
         self.num_nonfree_gates
     }
 

@@ -1,10 +1,13 @@
-use crypto_bigint::U256;
 use derivation_path::ChildIndex;
+use k256::{
+    ProjectivePoint, U256,
+    elliptic_curve::{bigint::Encoding, sec1::ToEncodedPoint},
+};
+
 use garbled_circuit::{
     circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder},
     config::constants::SHA512_CIRCUIT,
 };
-use k256::{ProjectivePoint, elliptic_curve::sec1::ToEncodedPoint};
 use sl_compute_common::BinaryString;
 
 use crate::{constants::SECP256_K1_Q, utils::u8_vec_to_bool_vec};
@@ -371,7 +374,7 @@ fn build_compare_eq_circuit(input_len: usize) -> BinaryCircuit {
 
     let xors: Vec<u32> = input1
         .iter()
-        .zip(input2.iter())
+        .zip(&input2)
         .map(|(i1, i2)| builder.xor(*i1, *i2))
         .collect();
 
@@ -414,9 +417,9 @@ pub fn build_verify_sharings_circuit() -> BinaryCircuit {
 /// Returns the `BinaryCircuit` which implements addition modulo a constant `prime` of two
 ///  binary values of bit length `size`
 ///
-/// The first input is set as the gabler's input and the next input is set as the
-/// evaluator's input
-pub fn build_mod_add_circut(size: usize, prime: U256) -> BinaryCircuit {
+/// The first input is set as the gabler's input and the next input is
+/// set as the evaluator's input
+fn build_mod_add_circut(size: usize, prime: U256) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
     let mut pbin = BinaryString {
@@ -544,20 +547,20 @@ pub fn build_ppa_circuit(size: usize) -> BinaryCircuit {
     let pc = p.clone();
 
     for step in 0..size_log2 {
-        let g_to_and_1 = g[0..size - (1usize << step)].to_vec();
-        let p_to_and_2 = p[0..size - (1usize << step)].to_vec();
-        let p_to_and_1_2 = p[1usize << step..size].to_vec();
-        let g_to_or = g[1usize << step..size].to_vec();
+        let g_to_and_1 = &g[0..size - (1usize << step)];
+        let p_to_and_2 = &p[0..size - (1usize << step)];
+        let p_to_and_1_2 = &p[1usize << step..size];
+        let g_to_or = &g[1usize << step..size];
 
         let gc_to_or: Vec<u32> = g_to_and_1
             .iter()
-            .zip(&p_to_and_1_2)
+            .zip(p_to_and_1_2)
             .map(|(x, y)| builder.and(*x, *y))
             .collect();
 
         let pc_after_and: Vec<u32> = p_to_and_2
             .iter()
-            .zip(&p_to_and_1_2)
+            .zip(p_to_and_1_2)
             .map(|(x, y)| builder.and(*x, *y))
             .collect();
 
@@ -590,7 +593,9 @@ pub fn build_ppa_circuit(size: usize) -> BinaryCircuit {
     for i in sum {
         builder.output(i);
     }
+
     builder.output(g_size);
+
     builder.finish()
 }
 
@@ -614,8 +619,9 @@ pub fn build_compare_ge_circuit(size: usize) -> BinaryCircuit {
     builder.finish()
 }
 
-/// Returns the `BinaryCircuit` which implements the recursion for compare ge protocol, which
-/// compares two binary values of `size` bit length
+/// Returns the `BinaryCircuit` which implements the recursion for
+/// compare ge protocol, which compares two binary values of `size`
+/// bit length
 pub fn build_compare_ge_rec_circuit(size: usize, lo: usize, hi: usize) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
@@ -630,7 +636,7 @@ pub fn build_compare_ge_rec_circuit(size: usize, lo: usize, hi: usize) -> Binary
         builder.output(a);
         return builder.finish();
     } else if lo > hi {
-        println!("impossible {} {}", lo, hi);
+        panic!("impossible {lo} {hi}");
     }
 
     let m = lo + (hi - lo) / 2;
@@ -681,5 +687,6 @@ pub fn build_if_then_else_circuit(size: usize) -> BinaryCircuit {
     for i in r {
         builder.output(i);
     }
+
     builder.finish()
 }

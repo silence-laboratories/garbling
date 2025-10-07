@@ -81,7 +81,7 @@ where
     )
     .await?;
 
-    let mut inputs = vec![vec![], vec![], vec![], vec![], vec![], vec![]];
+    let mut inputs = [vec![], vec![], vec![], vec![], vec![], vec![]];
 
     inputs[0].extend_from_slice(&i1_yao[256..]);
     inputs[1].extend_from_slice(&i2_yao[256..]);
@@ -204,14 +204,14 @@ where
     )
     .await?;
 
-    let mut temp = vec![pa, ch.clone()];
-
     let mut output = vec![PrivKeyShareDkg {
         keyshare: ch.key_share,
         pubkey: ch.pubkey,
     }];
 
-    for (cnt, i) in derivation_path.path()[1..].iter().enumerate() {
+    let mut temp = vec![pa, ch];
+
+    for (cnt, i) in derivation_path.path().iter().skip(1).enumerate() {
         let child_key = run_derive_child_key(
             &setup,
             &mut relay,

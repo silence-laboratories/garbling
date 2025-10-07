@@ -97,7 +97,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn yao_to_binary_functionality_inner<T, G, C, R>(
+async fn yao_to_binary_functionality_inner<T, G, C, R>(
     setup: &T,
     relay: &mut FilteredMsgRelay<R>,
     input: &YaoShare,
@@ -121,8 +121,6 @@ where
             let garbler_share = input.as_garbler();
 
             if party_id == 0 {
-                // assert!(yao_setup.g_setup.is_some());
-                // let yaosetup = yao_setup.g_setup.as_ref().unwrap();
                 let (y, wyr, wr0) = create_yao_to_binary_msg1(yaosetup);
                 let mut msg = [0u8; BLOCK_SIZE + 1];
                 msg[0..BLOCK_SIZE].copy_from_slice(&wyr);
@@ -150,9 +148,9 @@ where
                     value2: p,
                 })
             } else {
-                // 1 => {
-                let msg1s: Vec<Block> =
-                    receive_from_parties(setup, tag1, BLOCK_SIZE, &[0], relay).await?;
+                assert!(party_id == 1);
+
+                let msg1s: Vec<Block> = receive_from_parties(setup, tag1, &[0], relay).await?;
                 let wr0 = &msg1s[0];
 
                 let r = rng.unwrap();
@@ -166,8 +164,7 @@ where
 
                 send_to_party(setup, tag2, msg, 2, relay).await?;
 
-                let msg2s: Vec<Block> =
-                    receive_from_parties(setup, tag3, BLOCK_SIZE, &[2], relay).await?;
+                let msg2s: Vec<Block> = receive_from_parties(setup, tag3, &[2], relay).await?;
                 let mut wxz = Block::default();
                 wxz.copy_from_slice(&msg2s[0]);
 
@@ -188,7 +185,7 @@ where
 
         YaoSetup::E(_e) => {
             let msg1s: Vec<[u8; BLOCK_SIZE + 1]> =
-                receive_from_parties(setup, tag1, BLOCK_SIZE + 1, &[0], relay).await?;
+                receive_from_parties(setup, tag1, &[0], relay).await?;
             let mut wyr = Block::default();
             wyr.copy_from_slice(&msg1s[0][0..BLOCK_SIZE]);
             let y = msg1s[0][BLOCK_SIZE] != 0;
@@ -199,8 +196,7 @@ where
 
             send_to_party(setup, tag3, wxz, 1, relay).await?;
 
-            let msg2s: Vec<Vec<u8>> =
-                receive_from_parties(setup, tag2, BLOCK_SIZE * 4, &[0, 1], relay).await?;
+            let msg2s: Vec<Vec<u8>> = receive_from_parties(setup, tag2, &[0, 1], relay).await?;
 
             let mut com0 = Block::default();
             let mut com1 = Block::default();
@@ -278,7 +274,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn batch_yao_to_binary_functionality_inner<T, G, C, R>(
+async fn batch_yao_to_binary_functionality_inner<T, G, C, R>(
     setup: &T,
     relay: &mut FilteredMsgRelay<R>,
     input: &[YaoShare],
@@ -297,205 +293,213 @@ where
     G: RngCore + CryptoRng,
 {
     let party_id = setup.participant_index();
-    let batch_size = input.len();
 
     match yao_setup {
         YaoSetup::G(yaosetup) => {
-            if party_id == 0 {
-                // assert!(yao_setup.g_setup.is_some());
-                // let yaosetup = yao_setup.g_setup.clone().unwrap();
+            let r = rng.unwrap();
 
+            if party_id == 0 {
                 let mut msgs = Vec::new();
                 let mut wr0msgs = Vec::new();
                 let mut msg2s = Vec::new();
-                let r = rng.unwrap();
 
-                let mut outputs = Vec::new();
+                let outputs = input
+                    .iter()
+                    .map(YaoShare::as_garbler)
+                    .map(|share| {
+                        let (y, wyr, wr0) = create_yao_to_binary_msg1(yaosetup);
+                        let mut msg = [0u8; BLOCK_SIZE + 1];
 
-                (0..batch_size).for_each(|i| {
-                    let (y, wyr, wr0) = create_yao_to_binary_msg1(yaosetup);
-                    let mut msg = [0u8; BLOCK_SIZE + 1];
-                    msg[0..BLOCK_SIZE].copy_from_slice(&wyr);
-                    if y {
-                        msg[BLOCK_SIZE] = 1;
-                    }
+                        msg[0..BLOCK_SIZE].copy_from_slice(&wyr);
+                        if y {
+                            msg[BLOCK_SIZE] = 1;
+                        }
 
-                    for i in msg {
-                        msgs.push(i);
-                    }
-                    for i in wr0 {
-                        wr0msgs.push(i);
-                    }
-                    let share = input[i].as_garbler();
-                    let (com0, com1, _, _, wit0, wit1) =
-                        create_yao_to_binary_msg2(&wr0, comm, r, share);
-                    for i in com0 {
-                        msg2s.push(i);
-                    }
-                    for i in com1 {
-                        msg2s.push(i);
-                    }
-                    for i in wit0 {
-                        msg2s.push(i);
-                    }
-                    for i in wit1 {
-                        msg2s.push(i);
-                    }
+                        msgs.extend_from_slice(&msg);
 
-                    let p = lsb(&share.f_label) != 0;
+                        wr0msgs.extend_from_slice(&wr0);
 
-                    let op = BinaryShare {
-                        value1: p ^ y,
-                        value2: p,
-                    };
+                        let (com0, com1, _, _, wit0, wit1) =
+                            create_yao_to_binary_msg2(&wr0, comm, r, share);
 
-                    outputs.push(op);
-                });
+                        msg2s.extend_from_slice(&com0);
+
+                        msg2s.extend_from_slice(&com1);
+
+                        msg2s.extend_from_slice(&wit0);
+
+                        msg2s.extend_from_slice(&wit1);
+
+                        let p = lsb(&share.f_label) != 0;
+
+                        BinaryShare {
+                            value1: p ^ y,
+                            value2: p,
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
                 send_to_party(setup, tag1, msgs, 2, relay).await?;
                 send_to_party(setup, tag1, wr0msgs, 1, relay).await?;
-
                 send_to_party(setup, tag2, msg2s, 2, relay).await?;
+
                 Ok(outputs)
             } else {
-                // 1 => {
-                let r = rng.unwrap();
+                assert!(party_id == 1);
 
-                let msg1s: Vec<Vec<u8>> =
-                    receive_from_parties(setup, tag1, BLOCK_SIZE * batch_size, &[0], relay).await?;
+                let msg1s: Vec<Vec<u8>> = receive_from_parties(setup, tag1, &[0], relay).await?;
 
-                let mut outputs = Vec::new();
                 let mut msgs = Vec::new();
                 let mut wr0s = Vec::new();
                 let mut wz0s = Vec::new();
                 let mut wz1s = Vec::new();
 
-                (0..batch_size).for_each(|i| {
-                    let mut wr0 = Block::default();
-                    wr0.copy_from_slice(&msg1s[0][BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)]);
-                    let share = input[i].as_garbler();
-                    let (com0, com1, wz0, wz1, _, _) =
-                        create_yao_to_binary_msg2(&wr0, comm, r, share);
+                input
+                    .iter()
+                    .map(YaoShare::as_garbler)
+                    .enumerate()
+                    .for_each(|(i, share)| {
+                        let mut wr0 = Block::default();
+                        wr0.copy_from_slice(&msg1s[0][BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)]);
 
-                    for i in com0 {
-                        msgs.push(i);
-                    }
-                    for i in com1 {
-                        msgs.push(i);
-                    }
-                    wr0s.push(wr0);
-                    wz0s.push(wz0);
-                    wz1s.push(wz1);
-                });
+                        let (com0, com1, wz0, wz1, _, _) =
+                            create_yao_to_binary_msg2(&wr0, comm, r, share);
+
+                        msgs.extend_from_slice(&com0);
+
+                        msgs.extend_from_slice(&com1);
+
+                        wr0s.push(wr0);
+                        wz0s.push(wz0);
+                        wz1s.push(wz1);
+                    });
+
                 send_to_party(setup, tag4, msgs, 2, relay).await?;
 
-                let msg2s: Vec<Vec<u8>> =
-                    receive_from_parties(setup, tag3, BLOCK_SIZE * batch_size, &[2], relay).await?;
+                let msg2s: Vec<Vec<u8>> = receive_from_parties(setup, tag3, &[2], relay).await?;
 
-                for i in 0..batch_size {
-                    let mut wxz = Block::default();
-                    wxz.copy_from_slice(&msg2s[0][BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)]);
+                Ok(input
+                    .iter()
+                    .map(YaoShare::as_garbler)
+                    .enumerate()
+                    .map(|(i, share)| {
+                        let wxz =
+                            <&Block>::try_from(&msg2s[0][BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)])
+                                .unwrap();
 
-                    let val1 = wxz == wz0s[i];
-                    let val2 = wxz == wz1s[i];
+                        let val1 = wxz == &wz0s[i];
+                        let val2 = wxz == &wz1s[i];
 
-                    assert!(val1 || val2);
+                        assert!(val1 || val2);
 
-                    let pz = (lsb(&wxz) ^ lsb(&wr0s[i])) != 0;
-                    let share = input[i].as_garbler();
-                    let p = lsb(&share.f_label) != 0;
-                    let op = BinaryShare {
-                        value1: pz ^ p,
-                        value2: pz,
-                    };
-                    outputs.push(op)
-                }
-                Ok(outputs)
+                        let pz = (lsb(wxz) ^ lsb(&wr0s[i])) != 0;
+
+                        let p = lsb(&share.f_label) != 0;
+
+                        BinaryShare {
+                            value1: pz ^ p,
+                            value2: pz,
+                        }
+                    })
+                    .collect())
             }
         }
 
         YaoSetup::E(_e) => {
-            let msg1s: Vec<Vec<u8>> =
-                receive_from_parties(setup, tag1, (BLOCK_SIZE + 1) * batch_size, &[0], relay)
-                    .await?;
+            let msg1s: Vec<Vec<u8>> = receive_from_parties(setup, tag1, &[0], relay).await?;
 
             let mut wxzs = Vec::new();
-            let mut outputs = Vec::new();
             let mut ys = Vec::new();
             let mut wxzs_store = Vec::new();
 
-            (0..batch_size).for_each(|i| {
-                let mut wyr = Block::default();
-                wyr.copy_from_slice(
-                    &msg1s[0][(BLOCK_SIZE + 1) * i..((BLOCK_SIZE + 1) * i + BLOCK_SIZE)],
-                );
-                let y = msg1s[0][(BLOCK_SIZE + 1) * i + BLOCK_SIZE] != 0;
-                let yaoshare = input[i].as_evaluator();
-                let wxz = xor_blocks(&yaoshare.label, &wyr);
-                for i in wxz {
-                    wxzs.push(i);
-                }
-                wxzs_store.push(wxz);
-                ys.push(y);
-            });
+            input
+                .iter()
+                .map(YaoShare::as_evaluator)
+                .enumerate()
+                .for_each(|(i, share)| {
+                    let mut wyr = Block::default();
+                    wyr.copy_from_slice(
+                        &msg1s[0][(BLOCK_SIZE + 1) * i..((BLOCK_SIZE + 1) * i + BLOCK_SIZE)],
+                    );
+                    let y = msg1s[0][(BLOCK_SIZE + 1) * i + BLOCK_SIZE] != 0;
+
+                    let wxz = xor_blocks(&share.label, &wyr);
+
+                    wxzs.extend_from_slice(&wxz);
+
+                    wxzs_store.push(wxz);
+
+                    ys.push(y);
+                });
 
             send_to_party(setup, tag3, wxzs, 1, relay).await?;
 
-            let msg2s_0: Vec<Vec<u8>> =
-                receive_from_parties(setup, tag2, BLOCK_SIZE * 4 * batch_size, &[0], relay).await?;
+            let msg2s_0: Vec<Vec<u8>> = receive_from_parties(setup, tag2, &[0], relay).await?;
 
-            let msg2s_1: Vec<Vec<u8>> =
-                receive_from_parties(setup, tag4, BLOCK_SIZE * 2 * batch_size, &[1], relay).await?;
+            let msg2s_1: Vec<Vec<u8>> = receive_from_parties(setup, tag4, &[1], relay).await?;
 
-            for i in 0..batch_size {
-                let yaoshare = input[i].as_evaluator();
+            let outputs = input
+                .iter()
+                .map(YaoShare::as_evaluator)
+                .enumerate()
+                .map(|(i, share)| {
+                    // We pass a slice that is guaranteed to have the
+                    // correct length to <&Block::try_from(); the
+                    // conversion can’t fail
 
-                let mut com0 = Block::default();
-                let mut com1 = Block::default();
-                let mut com01 = Block::default();
-                let mut com11 = Block::default();
-                let mut wit0 = Block::default();
-                let mut wit1 = Block::default();
+                    let com0 = <&Block>::try_from(
+                        &msg2s_0[0][BLOCK_SIZE * 4 * i..(BLOCK_SIZE * 4 * i + BLOCK_SIZE)],
+                    )
+                    .unwrap();
 
-                com0.copy_from_slice(
-                    &msg2s_0[0][BLOCK_SIZE * 4 * i..(BLOCK_SIZE * 4 * i + BLOCK_SIZE)],
-                );
-                com1.copy_from_slice(
-                    &msg2s_0[0]
-                        [(BLOCK_SIZE * 4 * i + BLOCK_SIZE)..(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 2)],
-                );
-                com01.copy_from_slice(
-                    &msg2s_1[0][BLOCK_SIZE * 2 * i..(BLOCK_SIZE * 2 * i + BLOCK_SIZE)],
-                );
-                com11.copy_from_slice(
-                    &msg2s_1[0]
-                        [(BLOCK_SIZE * 2 * i + BLOCK_SIZE)..(BLOCK_SIZE * 2 * i + BLOCK_SIZE * 2)],
-                );
-                wit0.copy_from_slice(
-                    &msg2s_0[0][(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 2)
-                        ..(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 3)],
-                );
-                wit1.copy_from_slice(
-                    &msg2s_0[0][(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 3)
-                        ..(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 4)],
-                );
+                    let com1 = <&Block>::try_from(
+                        &msg2s_0[0][(BLOCK_SIZE * 4 * i + BLOCK_SIZE)
+                            ..(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 2)],
+                    )
+                    .unwrap();
 
-                assert_eq!(com0, com01);
-                assert_eq!(com1, com11);
+                    let com01 = <&Block>::try_from(
+                        &msg2s_1[0][BLOCK_SIZE * 2 * i..(BLOCK_SIZE * 2 * i + BLOCK_SIZE)],
+                    )
+                    .unwrap();
 
-                let px = lsb(&yaoshare.label) != 0;
-                if px ^ ys[i] {
-                    assert!(comm.verify(&wxzs_store[i], &wit1, &com1))
-                } else {
-                    assert!(comm.verify(&wxzs_store[i], &wit0, &com0))
-                }
+                    let com11 = <&Block>::try_from(
+                        &msg2s_1[0][(BLOCK_SIZE * 2 * i + BLOCK_SIZE)
+                            ..(BLOCK_SIZE * 2 * i + BLOCK_SIZE * 2)],
+                    )
+                    .unwrap();
 
-                let pz = px ^ ys[i];
-                let op = BinaryShare {
-                    value1: ys[i] ^ pz,
-                    value2: ys[i],
-                };
-                outputs.push(op)
-            }
+                    let wit0 = <&Block>::try_from(
+                        &msg2s_0[0][(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 2)
+                            ..(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 3)],
+                    )
+                    .unwrap();
+
+                    let wit1 = <&Block>::try_from(
+                        &msg2s_0[0][(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 3)
+                            ..(BLOCK_SIZE * 4 * i + BLOCK_SIZE * 4)],
+                    )
+                    .unwrap();
+
+                    assert_eq!(com0, com01);
+                    assert_eq!(com1, com11);
+
+                    let px = lsb(&share.label) != 0;
+                    if px ^ ys[i] {
+                        assert!(comm.verify(&wxzs_store[i], wit1, com1))
+                    } else {
+                        assert!(comm.verify(&wxzs_store[i], wit0, com0))
+                    }
+
+                    let pz = px ^ ys[i];
+
+                    BinaryShare {
+                        value1: ys[i] ^ pz,
+                        value2: ys[i],
+                    }
+                })
+                .collect();
+
             Ok(outputs)
         }
     }
@@ -573,17 +577,6 @@ mod tests {
             }
         };
 
-        // let (mut rng, hash, comm) = if setup.participant_index() == 2 {
-        //     let hash = AesGarbleHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
-        //     let comm = HashCommitment::new(Sha512Hash::new());
-        //     (None, hash, comm)
-        // } else {
-        //     let hash = AesGarbleHash::new(yao_setup.g_setup.as_ref().unwrap().comm_crs);
-        //     let comm = HashCommitment::new(Sha512Hash::new());
-        //     let r = ChaCha8Rng::from_seed(yao_setup.g_setup.as_ref().unwrap().prf_key);
-        //     (Some(r), hash, comm)
-        // };
-
         let circuit = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
 
         for x in 0..2 {
@@ -611,7 +604,7 @@ mod tests {
                     assert!(val);
                 }
 
-                let mut inputs = vec![vec![], vec![]];
+                let mut inputs = [vec![], vec![]];
                 inputs[0].extend_from_slice(&jointsh[..128]);
                 inputs[1].extend_from_slice(&jointsh[128..]);
 
@@ -718,7 +711,7 @@ mod tests {
 
         let output: Vec<bool> = shares
             .iter()
-            .zip(msg_from_prev.iter())
+            .zip(&msg_from_prev)
             .map(|(share, v)| share.value2 ^ (*v == 1u8))
             .collect();
 

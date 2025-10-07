@@ -8,7 +8,7 @@ use crate::{
         utils::{receive_from_parties, send_to_party, FilteredMsgRelay},
         utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
     },
-    utilities::types::{Block, EvaluatorSetup, GarblerSetup, YaoSetup, BLOCK_SIZE},
+    utilities::types::{Block, EvaluatorSetup, GarblerSetup, YaoSetup},
 };
 
 pub async fn setup_yao_functionality<T, R>(
@@ -34,7 +34,7 @@ where
     Ok(output)
 }
 
-pub async fn setup_yao_functionality_inner<T, R>(
+async fn setup_yao_functionality_inner<T, R>(
     setup: &T,
     relay: &mut FilteredMsgRelay<R>,
     tag1: MessageTag,
@@ -56,7 +56,7 @@ where
 
         Ok(YaoSetup::E(EvaluatorSetup { comm_crs: crs }))
     } else {
-        let crss: Vec<Block> = receive_from_parties(setup, tag1, BLOCK_SIZE, &[2], relay).await?;
+        let crss: Vec<Block> = receive_from_parties(setup, tag1, &[2], relay).await?;
 
         let mut rng = rand::rngs::StdRng::from_entropy();
         let seed = if party_id == 0 {
@@ -66,7 +66,7 @@ where
             send_to_party(setup, tag2, seed, 1, relay).await?;
             seed
         } else {
-            let seed: Vec<[u8; 32]> = receive_from_parties(setup, tag2, 32, &[0], relay).await?;
+            let seed: Vec<[u8; 32]> = receive_from_parties(setup, tag2, &[0], relay).await?;
             seed[0]
         };
 

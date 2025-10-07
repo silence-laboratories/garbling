@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
+use crate::circuitop::{
+    circuit::BinaryCircuit,
+    gate::{BinaryGate, ID},
+};
 
 /// `CircuitBuilder` is a struct used to construct a `BinaryCircuit`.
 /// It maintains internal state during the circuit construction
@@ -49,7 +52,7 @@ impl CircuitBuilder {
     fn get_next_ciphertext_id(&mut self) -> u32 {
         let current = self.circ.get_num_nonfree_gates();
         self.circ.increment_nonfree_gates();
-        current
+        current as u32
     }
 
     /// Retrieves the next available reference ID for a gate and
@@ -165,46 +168,49 @@ impl CircuitBuilder {
         self.circ.push_output_gate(id);
     }
 
-    pub fn add_circuit(&mut self, other_circuit: &BinaryCircuit, input_ids: &[&[u32]]) -> Vec<u32> {
+    pub fn add_circuit(&mut self, other_circuit: &BinaryCircuit, input_ids: &[&[ID]]) -> Vec<ID> {
         assert_eq!(input_ids.len(), other_circuit.num_inputs() as _);
         (0..input_ids.len())
             .for_each(|i| assert_eq!(input_ids[i].len(), other_circuit.input_gate_ids[i].len()));
 
-        let mut old_to_new_map: HashMap<u32, u32> = HashMap::new();
+        let mut old_to_new_map = vec![0; other_circuit.num_wires as usize];
 
         for gate in &other_circuit.gates {
             match gate {
-                BinaryGate::Xor { xid, yid, out } => {
-                    let newx = old_to_new_map.get(xid).unwrap();
-                    let newy = old_to_new_map.get(yid).unwrap();
-                    let newz = self.xor(*newx, *newy);
-                    old_to_new_map.insert(*out, newz);
+                &BinaryGate::Xor { xid, yid, out } => {
+                    let newx = old_to_new_map[xid as usize];
+                    let newy = old_to_new_map[yid as usize];
+                    let newz = self.xor(newx, newy);
+
+                    old_to_new_map[out as usize] = newz;
                 }
 
-                BinaryGate::And {
+                &BinaryGate::And {
                     xid,
                     yid,
                     id: _,
                     out,
                 } => {
-                    let newx = old_to_new_map.get(xid).unwrap();
-                    let newy = old_to_new_map.get(yid).unwrap();
-                    let newz = self.and(*newx, *newy);
-                    old_to_new_map.insert(*out, newz);
+                    let newx = old_to_new_map[xid as usize];
+                    let newy = old_to_new_map[yid as usize];
+                    let newz = self.and(newx, newy);
+
+                    old_to_new_map[out as usize] = newz;
                 }
 
-                BinaryGate::Inv { xid, out } => {
-                    let newx = old_to_new_map.get(xid).unwrap();
-                    let newz = self.negate(*newx);
-                    old_to_new_map.insert(*out, newz);
+                &BinaryGate::Inv { xid, out } => {
+                    let newx = old_to_new_map[xid as usize];
+                    let newz = self.negate(newx);
+
+                    old_to_new_map[out as usize] = newz;
                 }
 
                 &BinaryGate::Input { no, id, wire } => {
-                    old_to_new_map.insert(wire, input_ids[no as usize][id as usize]);
+                    old_to_new_map[wire as usize] = input_ids[no as usize][id as usize];
                 }
 
                 &BinaryGate::Constant { val, wire } => {
-                    old_to_new_map.insert(wire, self.constant(val));
+                    old_to_new_map[wire as usize] = self.constant(val);
                 }
             }
         }
@@ -212,11 +218,7 @@ impl CircuitBuilder {
         other_circuit
             .output_gate_ids
             .iter()
-            .map(|&out| {
-                *old_to_new_map
-                    .get(&out)
-                    .expect("output gate id missing in mapping")
-            })
+            .map(|&out| old_to_new_map[out as usize])
             .collect()
     }
 }

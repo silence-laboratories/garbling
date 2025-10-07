@@ -13,6 +13,8 @@ tokio = { workspace = true, features = [
     "macros",
     "rt-multi-thread",
 ] }
+merlin = "3.0.0"
+
 [features]
 test-support = ["sl-mpc-mate/simple-relay"]
 
@@ -26,30 +28,18 @@ harness = false
 
 [dependencies]
 aes = "0.8.4"
-regex = "1.11.1"
+aes-gcm = "0.10.3"
 rand = "0.8"
 rand_chacha = "0.3"
-serde = { version = "1.0.214", features = ["derive"] }
-serde_json = "1.0.131"
-aes-gcm = "0.10.3"
-tokio = { version = "1.24.1" }
-sl-mpc-mate = { git = "https://github.com/silence-laboratories/sl-crypto.git", rev = "804ae2b" }
-sl-messages = { git = "https://github.com/silence-laboratories/sl-crypto.git", rev = "804ae2b" }
 sha2 = "0.10.8"
-merlin = "3.0.0"
 signature = { version = "2.2.0" }
-crypto-bigint = "0.6.1"
 sl-compute-common = { git = "https://github.com/silence-laboratories/sl-crypto.git", branch = "sl-compute-common" }
-bytemuck = { version = "1.22", features = [
-    "derive",
-    "min_const_generics",
-    "extern_crate_alloc",
-] }
+sl-messages = { git = "https://github.com/silence-laboratories/sl-crypto.git", rev = "804ae2b" }
+sl-mpc-mate = { git = "https://github.com/silence-laboratories/sl-crypto.git", rev = "804ae2b" }
 thiserror = "1.0"
 
 [workspace.dependencies]
 tokio = "1.43.0"
-
 
 [workspace]
 members = [

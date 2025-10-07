@@ -1,4 +1,3 @@
-use crypto_bigint::{Encoding, NonZero, U256};
 use garbled_circuit::{
     functionality::{
         utils::{FixedExternalSize, SetupMessage, Wrap},
@@ -11,8 +10,6 @@ use k256::{FieldBytes, ProjectivePoint, Scalar, elliptic_curve::ops::Reduce};
 use sl_compute_common::CommonRandomness;
 use sl_messages::relay::MessageSendError;
 
-use crate::constants::{SECP256_K1_Q, X25519_Q};
-
 /// Trait to convert any random byte array into a Group scalar.
 /// The input bytes need not necessarily be the byte representation of the scalar.
 /// The input bytes can be modified to make sure a valid Scalar is returned.
@@ -22,21 +19,21 @@ pub trait ScalarFromBytes: Sized {
 
 impl ScalarFromBytes for k256::Scalar {
     fn from_bytes(bytes: [u8; 32]) -> Self {
-        let hval = k256::U256::from_be_hex(&hex::encode(bytes));
+        let hval = k256::U256::from_be_slice(&bytes);
         k256::Scalar::reduce(hval)
     }
 }
 
-impl ScalarFromBytes for curve25519_dalek::Scalar {
-    fn from_bytes(bytes: [u8; 32]) -> Self {
-        let mut hval = U256::from_be_bytes(bytes);
-        hval = hval.rem(&NonZero::new(X25519_Q).unwrap());
-        curve25519_dalek::Scalar::from_bytes_mod_order(hval.to_le_bytes())
-    }
-}
+// use crate::constants::X25519_Q;
+// impl ScalarFromBytes for curve25519_dalek::Scalar {
+//     fn from_bytes(bytes: [u8; 32]) -> Self {
+//         let mut hval = U256::from_be_bytes(bytes);
+//         hval = hval.rem(&NonZero::new(X25519_Q).unwrap());
+//         curve25519_dalek::Scalar::from_bytes_mod_order(hval.to_le_bytes())
+//     }
+// }
 
 /// Scalar wrapper for implementing Wrap
-#[derive(Clone)]
 pub struct ScalarVal(pub Scalar);
 
 impl Wrap for ScalarVal {
@@ -49,12 +46,11 @@ impl Wrap for ScalarVal {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&buffer[..32]);
-        Some(ScalarVal(
-            k256::Scalar::from_repr_vartime(*k256::FieldBytes::from_slice(&bytes))
-                .expect("Conversion Failed"),
-        ))
+        Some(buffer)
+            .filter(|b| b.len() == 32)
+            .map(FieldBytes::from_slice)
+            .and_then(|&b| Scalar::from_repr(b).into_option())
+            .map(ScalarVal)
     }
 }
 
@@ -68,17 +64,20 @@ pub fn vec_scalarval_2_scalars(input: &[ScalarVal]) -> Vec<Scalar> {
     for i in input {
         outs.push(i.0);
     }
+
     outs
 }
 
 /// Converts a vector of `Scalar`s to a vector of `ScalarVal`s
 pub fn vec_scalar_2_scalarvals(input: &[Scalar]) -> Vec<ScalarVal> {
     let mut outs = vec![];
-    for i in input {
-        outs.push(ScalarVal(*i));
+    for &i in input {
+        outs.push(ScalarVal(i));
     }
+
     outs
 }
+
 /// error generated during hard derivation
 #[derive(thiserror::Error, Debug)]
 pub enum HardDerivationError {
@@ -146,12 +145,10 @@ impl PrivKeyShare<ProjectivePoint> {
         common_randomness: &mut CommonRandomness,
     ) -> PrivKeyShare<ProjectivePoint> {
         let (prev_bytes, next_bytes) = common_randomness.random_32_bytes();
-        let mut hval = U256::from_be_bytes(prev_bytes);
-        hval = hval.rem(&NonZero::new(SECP256_K1_Q).unwrap());
-        let prev = k256::Scalar::from_repr(*FieldBytes::from_slice(&hval.to_be_bytes())).unwrap();
-        let mut hval = U256::from_be_bytes(next_bytes);
-        hval = hval.rem(&NonZero::new(SECP256_K1_Q).unwrap());
-        let next = k256::Scalar::from_repr(*FieldBytes::from_slice(&hval.to_be_bytes())).unwrap();
+        let hval = k256::U256::from_be_slice(&prev_bytes);
+        let prev = k256::Scalar::reduce(hval);
+        let hval = k256::U256::from_be_slice(&next_bytes);
+        let next = k256::Scalar::reduce(hval);
 
         PrivKeyShare::<ProjectivePoint> {
             prev_share: prev,
@@ -160,15 +157,15 @@ impl PrivKeyShare<ProjectivePoint> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct PrivKeyShareDkg<T: Group + GroupEncoding> {
     pub keyshare: PrivKeyShare<T>,
     pub pubkey: T,
 }
 
-/// Represents a share for secure hard derivation of child key shares as per
-/// BIP32
-#[derive(Debug, Clone, PartialEq)]
+/// Represents a share for secure hard derivation of child key shares
+/// as per BIP32
+#[derive(Debug, PartialEq)]
 pub struct PrivKeyShareBip {
     /// Yao shares of binary representation of the Private key
     pub yao_share: [YaoShare; 256],

@@ -1,26 +1,21 @@
 use std::{
     collections::HashMap,
     marker::PhantomData,
-    mem,
     ops::{Deref, DerefMut},
     time::Duration,
 };
 
-use bytemuck::{AnyBitPattern, NoUninit};
-use crypto_bigint::U256;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use signature::{SignatureEncoding, Signer, Verifier};
-use sl_compute_common::{Binary, BinaryString, CommonRandomness};
+use sl_compute_common::{BinaryString, CommonRandomness};
 use sl_messages::{
-    encrypted::{EncryptedMessage, EncryptionScheme},
-    message::{InstanceId, MessageTag, MsgId},
+    message::{InstanceId, MessageTag, MsgHdr, MsgId},
     pairs::Pairs,
     relay::{MessageSendError, Relay},
     signed::SignedMessage,
-    Bytes, BytesMut,
+    BytesMut,
 };
-use sl_mpc_mate::ByteArray;
 
 use crate::functionality::utils_dep::{Error, ProtocolError, ProtocolParticipant};
 
@@ -147,27 +142,6 @@ impl<R: Relay> FilteredMsgRelay<R> {
 
         Ok(count)
     }
-
-    /// The same as `ask_messages_from_iter()` by accepts slice of indices
-    pub async fn ask_messages_from_slice<'a, P, I>(
-        &mut self,
-        setup: &P,
-        tag: MessageTag,
-        from_parties: I,
-        p2p: bool,
-    ) -> Result<usize, MessageSendError>
-    where
-        P: ProtocolParticipant,
-        I: IntoIterator<Item = &'a usize>,
-    {
-        self.ask_messages_from_iter(setup, tag, from_parties.into_iter().copied(), p2p)
-            .await
-    }
-
-    /// Create a round
-    pub fn round(&mut self, count: usize, tag: MessageTag) -> Round<'_, R> {
-        Round::new(count, tag, self)
-    }
 }
 
 /// Structure to receive a round of messages
@@ -214,198 +188,6 @@ impl<'a, R: Relay> Round<'a, R> {
             self.count += 1;
         }
     }
-
-    /// Receiver all messages in the round, verify, decode and pass to
-    /// given handler.
-    pub async fn of_signed_messages<T, F, S, E>(
-        mut self,
-        setup: &S,
-        mut handler: F,
-    ) -> Result<(), E>
-    where
-        T: AnyBitPattern + NoUninit,
-        S: ProtocolParticipant,
-        F: FnMut(&T, usize) -> Result<(), E>,
-        E: From<Error>,
-    {
-        while let Some((msg, party_idx, is_abort)) = self.recv().await? {
-            if is_abort {
-                check_abort(setup, &msg, party_idx, Error::Abort)?;
-                self.put_back(&msg, ABORT_MESSAGE_TAG, party_idx);
-                continue;
-            }
-
-            let vk = setup.verifier(party_idx);
-            let Some(msg) = SignedMessage::<T, _>::verify(&msg, vk) else {
-                // We got message with a right ID but with broken
-                // signature, ignore it.
-                self.put_back(&msg, self.tag, party_idx);
-                continue;
-            };
-
-            handler(msg, party_idx)?;
-        }
-
-        Ok(())
-    }
-
-    /// Receiver all messages in the round, decrypt, decode and pass
-    /// to given handler.
-    pub async fn of_encrypted_messages<T, F, P, E, S>(
-        mut self,
-        setup: &P,
-        scheme: &mut S,
-        mut handler: F,
-    ) -> Result<(), E>
-    where
-        T: AnyBitPattern + NoUninit,
-        F: FnMut(&T, usize, &[u8], &mut S) -> Result<Option<Bytes>, E>,
-        P: ProtocolParticipant,
-        E: From<Error>,
-        S: EncryptionScheme,
-    {
-        while let Some((mut msg, party_index, is_abort)) = self.recv().await? {
-            if is_abort {
-                check_abort(setup, &msg, party_index, Error::Abort)?;
-                self.put_back(&msg, ABORT_MESSAGE_TAG, party_index);
-                continue;
-            }
-
-            let Some(payload) = scheme.decrypt::<T>(msg.as_mut(), 0, party_index) else {
-                // We got a message with right ID but broken content,
-                // ignore it.
-                self.put_back(&msg, self.tag, party_index);
-                continue;
-            };
-
-            if let Some(response) = handler(payload.body(), party_index, payload.trailer(), scheme)?
-            {
-                self.relay.send(response).await.map_err(|_| Error::Send)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Broadcast 4 values and collect 4 values from others in the round
-    pub async fn broadcast_4<P, T1, T2, T3, T4>(
-        self,
-        setup: &P,
-        msg: (T1, T2, T3, T4),
-    ) -> Result<
-        (
-            Pairs<T1, usize>,
-            Pairs<T2, usize>,
-            Pairs<T3, usize>,
-            Pairs<T4, usize>,
-        ),
-        Error,
-    >
-    where
-        P: ProtocolParticipant,
-        T1: Wrap,
-        T2: Wrap,
-        T3: Wrap,
-        T4: Wrap,
-    {
-        let my_party_id = setup.participant_index();
-
-        let sizes = [
-            msg.0.external_size(),
-            msg.1.external_size(),
-            msg.2.external_size(),
-            msg.3.external_size(),
-        ];
-        let trailer: usize = sizes.iter().sum();
-
-        let buffer = {
-            // Do not hold SignedMessage across an await point to avoid
-            // forcing ProtocolParticipant::MessageSignature to be Send
-            // in case if the future returned by run() have to be Send.
-            let mut buffer = SignedMessage::<(), _>::new(
-                &setup.msg_id(None, self.tag),
-                setup.message_ttl(),
-                0,
-                trailer,
-            );
-
-            let (_, mut out) = buffer.payload();
-
-            out = msg.0.encode(out);
-            out = msg.1.encode(out);
-            out = msg.2.encode(out);
-            msg.3.encode(out);
-
-            buffer.sign(setup.signer())
-        };
-
-        self.relay.send(buffer).await.map_err(|_| Error::Send)?;
-
-        let (mut p0, mut p1, mut p2, mut p3) = self.recv_broadcast_4(setup, &sizes).await?;
-
-        p0.push(my_party_id, msg.0);
-        p1.push(my_party_id, msg.1);
-        p2.push(my_party_id, msg.2);
-        p3.push(my_party_id, msg.3);
-
-        Ok((p0, p1, p2, p3))
-    }
-
-    /// Receive broadcasted 4 values from all parties in the round and
-    /// collect them into 4 Pairs vectors.
-    pub async fn recv_broadcast_4<P, T1, T2, T3, T4>(
-        mut self,
-        setup: &P,
-        sizes: &[usize; 4],
-    ) -> Result<
-        (
-            Pairs<T1, usize>,
-            Pairs<T2, usize>,
-            Pairs<T3, usize>,
-            Pairs<T4, usize>,
-        ),
-        Error,
-    >
-    where
-        P: ProtocolParticipant,
-        T1: Wrap,
-        T2: Wrap,
-        T3: Wrap,
-        T4: Wrap,
-    {
-        let mut p0 = Pairs::new();
-        let mut p1 = Pairs::new();
-        let mut p2 = Pairs::new();
-        let mut p3 = Pairs::new();
-
-        while let Some((msg, party_id, is_abort)) = self.recv().await? {
-            if is_abort {
-                check_abort(setup, &msg, party_id, Error::Abort)?;
-                self.put_back(&msg, ABORT_MESSAGE_TAG, party_id);
-                continue;
-            }
-
-            let Some((_, buf)) =
-                SignedMessage::<(), _>::verify_with_trailer(&msg, setup.verifier(party_id))
-            else {
-                // We got message with a right ID but with broken signature.
-                self.put_back(&msg, self.tag, party_id);
-                continue;
-            };
-
-            let (buf, v1) = T1::decode(buf, sizes[0]).ok_or(Error::InvalidMessage)?;
-            let (buf, v2) = T2::decode(buf, sizes[1]).ok_or(Error::InvalidMessage)?;
-            let (buf, v3) = T3::decode(buf, sizes[2]).ok_or(Error::InvalidMessage)?;
-            let (_bu, v4) = T4::decode(buf, sizes[3]).ok_or(Error::InvalidMessage)?;
-
-            p0.push(party_id, v1);
-            p1.push(party_id, v2);
-            p2.push(party_id, v3);
-            p3.push(party_id, v4);
-        }
-
-        Ok((p0, p1, p2, p3))
-    }
 }
 
 impl<R> Deref for FilteredMsgRelay<R> {
@@ -425,22 +207,22 @@ impl<R> DerefMut for FilteredMsgRelay<R> {
 /// the message contains error code.
 pub const ABORT_MESSAGE_TAG: MessageTag = MessageTag::tag(u64::MAX);
 
-/// Create an Abort Message.
-pub fn create_abort_message<P>(setup: &P) -> Bytes
-where
-    P: ProtocolParticipant,
-{
-    SignedMessage::<(), _>::new(
-        &setup.msg_id(None, ABORT_MESSAGE_TAG),
-        setup.message_ttl(),
-        0,
-        0,
-    )
-    .sign(setup.signer())
-}
+// /// Create an Abort Message.
+// pub fn create_abort_message<P>(setup: &P) -> Bytes
+// where
+//     P: ProtocolParticipant,
+// {
+//     SignedMessage::<(), _>::new(
+//         &setup.msg_id(None, ABORT_MESSAGE_TAG),
+//         setup.message_ttl(),
+//         0,
+//         0,
+//     )
+//     .sign(setup.signer())
+// }
 
 /// Returns passed error if msg is a vaild abort message.
-pub fn check_abort<P: ProtocolParticipant, E>(
+fn check_abort<P: ProtocolParticipant, E>(
     setup: &P,
     msg: &[u8],
     party_id: usize,
@@ -454,7 +236,7 @@ pub fn check_abort<P: ProtocolParticipant, E>(
 pub async fn send_to_party<P, R, T>(
     setup: &P,
     tag: MessageTag,
-    msg: T,
+    message: T,
     to_party: usize,
     relay: &mut FilteredMsgRelay<R>,
 ) -> Result<(), MessageSendError>
@@ -463,17 +245,14 @@ where
     R: Relay,
     T: Wrap,
 {
-    let mut buf = vec![0; msg.external_size()];
-    msg.encode(&mut buf);
-
     let mut msg = SignedMessage::<(), _>::new(
         &setup.msg_id(Some(to_party), tag),
         setup.message_ttl(),
-        0,
-        msg.external_size(),
+        MsgHdr::ONE_RECEIVER | (to_party as u16 & 0xff),
+        message.external_size(),
     );
     let (_, t) = msg.payload();
-    t.copy_from_slice(&buf);
+    message.encode(t);
     let buffer = msg.sign(setup.signer());
 
     relay.send(buffer).await?;
@@ -482,10 +261,9 @@ where
 }
 
 /// Party receives a message from other party
-pub async fn receive_from_parties<P, R, T>(
+pub async fn receive_from_parties<T, P, R>(
     setup: &P,
     tag: MessageTag,
-    message_size: usize,
     from_parties: &[usize],
     relay: &mut FilteredMsgRelay<R>,
 ) -> Result<Vec<T>, ProtocolError>
@@ -510,10 +288,9 @@ where
             continue;
         }
 
-        let (_, buf) =
-            SignedMessage::<(), _>::verify_with_trailer(&msg, setup.verifier(party_id)).unwrap();
-
-        let (_buf, v1) = T::decode(buf, message_size).ok_or(ProtocolError::InvalidMessage)?;
+        let v1 = SignedMessage::<(), _>::verify_with_trailer(&msg, setup.verifier(party_id))
+            .and_then(|(_, buf)| T::read(buf))
+            .ok_or(ProtocolError::InvalidMessage)?;
 
         p0.push(party_id, v1);
     }
@@ -525,7 +302,7 @@ where
 pub async fn p2p_send_to_next_receive_from_prev<P, R, T>(
     setup: &P,
     tag: MessageTag,
-    msg: T,
+    message: T,
     relay: &mut FilteredMsgRelay<R>,
 ) -> Result<T, ProtocolError>
 where
@@ -535,19 +312,16 @@ where
 {
     let next_party_id = (3 + 1 + setup.participant_index()) % 3;
     let prev_party_id = (3 - 1 + setup.participant_index()) % 3;
-    let message_size = msg.external_size();
 
     let buffer = {
-        let mut buf = vec![0; msg.external_size()];
-        msg.encode(&mut buf);
         let mut msg = SignedMessage::<(), _>::new(
             &setup.msg_id(Some(next_party_id), tag),
             setup.message_ttl(),
-            0,
-            msg.external_size(),
+            MsgHdr::ONE_RECEIVER | (next_party_id as u16 & 0xff),
+            message.external_size(),
         );
         let (_, t) = msg.payload();
-        t.copy_from_slice(&buf);
+        message.encode(t);
         msg.sign(setup.signer())
     };
 
@@ -567,10 +341,9 @@ where
             continue;
         }
 
-        let (_, buf) =
-            SignedMessage::<(), _>::verify_with_trailer(&msg, setup.verifier(party_id)).unwrap();
-
-        let (_buf, v1) = T::decode(buf, message_size).ok_or(ProtocolError::InvalidMessage)?;
+        let v1 = SignedMessage::<(), _>::verify_with_trailer(&msg, setup.verifier(party_id))
+            .and_then(|(_, buf)| T::read(buf))
+            .ok_or(ProtocolError::InvalidMessage)?;
 
         return Ok(v1);
     }
@@ -815,10 +588,7 @@ pub trait Wrap: Sized {
     /// Decode a value from `input` buffer using `size` bytes.
     /// Return remaining bytes and decoded value.
     fn decode(input: &[u8], size: usize) -> Option<(&[u8], Self)> {
-        if input.len() < size {
-            return None;
-        }
-        let (input, rest) = input.split_at(size);
+        let (input, rest) = input.split_at_checked(size)?;
         Some((rest, Self::read(input)?))
     }
 }
@@ -839,24 +609,8 @@ impl FixedExternalSize for () {
     const SIZE: usize = 0;
 }
 
-impl<const N: usize> FixedExternalSize for ByteArray<N> {
+impl<const N: usize> FixedExternalSize for [u8; N] {
     const SIZE: usize = N;
-}
-
-impl<const N: usize> Wrap for ByteArray<N> {
-    fn external_size(&self) -> usize {
-        self.len()
-    }
-
-    fn write(&self, buffer: &mut [u8]) {
-        buffer.copy_from_slice(self);
-    }
-
-    fn read(buffer: &[u8]) -> Option<Self> {
-        let mut value = Self::default();
-        value.copy_from_slice(buffer);
-        Some(value)
-    }
 }
 
 impl<const N: usize> Wrap for [u8; N] {
@@ -869,9 +623,7 @@ impl<const N: usize> Wrap for [u8; N] {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        let mut value = [0u8; N];
-        value.copy_from_slice(buffer);
-        Some(value)
+        Self::try_from(buffer).ok()
     }
 }
 
@@ -881,7 +633,7 @@ impl<T: Wrap + FixedExternalSize> Wrap for Vec<T> {
     }
 
     fn write(&self, buffer: &mut [u8]) {
-        for (v, b) in self.iter().zip(buffer.chunks_exact_mut(T::SIZE)) {
+        for (b, v) in buffer.chunks_exact_mut(T::SIZE).zip(self) {
             v.write(b);
         }
     }
@@ -908,7 +660,7 @@ impl Wrap for u8 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        Some(buffer[0])
+        buffer.get(0).cloned()
     }
 }
 
@@ -922,7 +674,21 @@ impl Wrap for u16 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        Some(u16::from_le_bytes(buffer[..2].try_into().unwrap()))
+        Some(u16::from_le_bytes(buffer[..2].try_into().ok()?))
+    }
+}
+
+impl Wrap for u32 {
+    fn external_size(&self) -> usize {
+        4
+    }
+
+    fn write(&self, buffer: &mut [u8]) {
+        buffer[..4].copy_from_slice(&self.to_le_bytes());
+    }
+
+    fn read(buffer: &[u8]) -> Option<Self> {
+        Some(u32::from_le_bytes(buffer[..4].try_into().ok()?))
     }
 }
 
@@ -936,61 +702,27 @@ impl Wrap for u64 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        Some(u64::from_le_bytes(buffer[..8].try_into().unwrap()))
+        Some(u64::from_le_bytes(buffer[..4].try_into().ok()?))
     }
 }
 
 impl Wrap for BinaryString {
     fn external_size(&self) -> usize {
-        self.get_external_size()
+        4 + self.value.len()
     }
 
     fn write(&self, buffer: &mut [u8]) {
-        let (l, v) = buffer.split_at_mut(mem::size_of::<u64>());
-        self.length.write(l);
-        v[..self.length_in_bytes()].copy_from_slice(&self.value);
+        let buffer = (self.length as u32).encode(buffer);
+        buffer.copy_from_slice(&self.value);
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        let (l, v) = buffer.split_at(mem::size_of::<u64>());
-        let length = u64::read(l)?;
-        let value = v
-            .chunks_exact(1)
-            .map(u8::read)
-            .collect::<Option<Vec<u8>>>()?;
+        let (buffer, length) = u32::decode(buffer, 4)?;
+        let value = buffer.get(..length as usize)?.to_vec();
 
-        Some(BinaryString { length, value })
-    }
-}
-
-impl FixedExternalSize for Binary {
-    const SIZE: usize = 1;
-}
-
-impl Wrap for Binary {
-    fn external_size(&self) -> usize {
-        1
-    }
-
-    fn write(&self, buffer: &mut [u8]) {
-        buffer[0] = *self as u8;
-    }
-
-    fn read(buffer: &[u8]) -> Option<Self> {
-        Some(buffer[0] == 1)
-    }
-}
-
-impl Wrap for U256 {
-    fn external_size(&self) -> usize {
-        32
-    }
-
-    fn write(&self, buffer: &mut [u8]) {
-        buffer.copy_from_slice(&self.to_be_bytes())
-    }
-
-    fn read(buffer: &[u8]) -> Option<Self> {
-        Some(U256::from_be_slice(buffer))
+        Some(BinaryString {
+            length: length as _,
+            value,
+        })
     }
 }

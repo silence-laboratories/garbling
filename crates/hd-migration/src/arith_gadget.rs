@@ -12,19 +12,22 @@ use sha2::Digest;
 
 use crate::types::ScalarFromBytes;
 
-pub fn get_pub_vec_times_a<G>(a: &G::Scalar) -> Vec<G::Scalar>
+fn get_pub_vec_times_a<G>(a: &G::Scalar) -> Vec<G::Scalar>
 where
     G: Group + GroupEncoding,
     G::Scalar: Field,
 {
     let mut out = Vec::new();
     let mut twopow = G::Scalar::ONE;
+    let two = G::Scalar::ONE + G::Scalar::ONE;
+
     for _ in 0..256 {
         let val = *a * twopow;
-        let two = G::Scalar::ONE + G::Scalar::ONE;
-        out.push(val);
+
         twopow *= two;
+        out.push(val);
     }
+
     out
 }
 
@@ -78,7 +81,9 @@ where
         let ci = ci_p1 + bi;
         cvec.push(ci);
     }
+
     let dec = (a, b);
+
     (cvec, dec)
 }
 
@@ -205,7 +210,7 @@ mod tests {
 
         let out = if setup.participant_index() == 2 {
             let svcvecs: Vec<Vec<ScalarVal>> =
-                receive_from_parties(&setup, tag1, 32 * 256, &[0, 1], &mut r).await?;
+                receive_from_parties(&setup, tag1, &[0, 1], &mut r).await?;
 
             let cvecs = [
                 vec_scalarval_2_scalars(&svcvecs[0]),
@@ -226,8 +231,7 @@ mod tests {
             send_to_party(&setup, tag2, ScalarVal(z), 0, &mut r).await?;
             send_to_party(&setup, tag2, ScalarVal(z), 1, &mut r).await?;
 
-            let outs: Vec<ScalarVal> =
-                receive_from_parties(&setup, tag3, 32, &[0, 1], &mut r).await?;
+            let outs: Vec<ScalarVal> = receive_from_parties(&setup, tag3, &[0, 1], &mut r).await?;
 
             assert_eq!(outs[0].0, outs[1].0);
             outs[0].0
@@ -244,11 +248,12 @@ mod tests {
 
             send_to_party(&setup, tag1, svcvec, 2, &mut r).await?;
 
-            let zs: Vec<ScalarVal> = receive_from_parties(&setup, tag2, 32, &[2], &mut r).await?;
+            let zs: Vec<ScalarVal> = receive_from_parties(&setup, tag2, &[2], &mut r).await?;
 
             let out = decode_gadget::<ProjectivePoint>(&de, zs[0].0);
 
             send_to_party(&setup, tag3, ScalarVal(out), 2, &mut r).await?;
+
             out
         };
 

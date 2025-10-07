@@ -4,19 +4,20 @@ use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
     utilities::{
         hash_function::HashFunction,
-        types::{Block, YaoEvaluatorShare, BLOCK_SIZE},
+        types::{Block, YaoEvaluatorShare, YaoShare, BLOCK_SIZE},
         utils::{lsb, xor_blocks},
     },
 };
 
-pub fn evaluate_functionality<H>(
+pub fn evaluate_functionality<T, H>(
     circuit: &BinaryCircuit,
-    input_encoding_shares: &[Vec<YaoEvaluatorShare>],
+    input_encoding_shares: &[Vec<YaoShare>],
     f: &[Block],
     hash: &H,
-) -> HashMap<u32, YaoEvaluatorShare>
+) -> HashMap<u32, T>
 where
     H: HashFunction,
+    T: From<YaoEvaluatorShare>,
 {
     let mut f_index = 0;
     let mut w = vec![[0; BLOCK_SIZE]; circuit.gates.len()];
@@ -24,8 +25,8 @@ where
     for (i, gate) in circuit.gates.iter().enumerate() {
         let (out_gate, f_label) = match gate {
             &BinaryGate::Input { no, id, wire } => {
-                let label = &input_encoding_shares[no as usize][id as usize];
-                (wire, label.label)
+                let share = input_encoding_shares[no as usize][id as usize].as_evaluator();
+                (wire, share.label)
             }
 
             &BinaryGate::Constant { val: _, wire } => {
@@ -48,12 +49,11 @@ where
             } => {
                 let x_label = &w[xid as usize];
                 let y_label = &w[yid as usize];
-                let k0 = (2 * i - 1) as u128;
-                let k1 = 2 * i as u128;
-                let mut k0_bytes = Block::default();
-                let mut k1_bytes = Block::default();
-                k0_bytes[(BLOCK_SIZE - 16)..].copy_from_slice(&k0.to_le_bytes());
-                k1_bytes[(BLOCK_SIZE - 16)..].copy_from_slice(&k1.to_le_bytes());
+
+                let k0 = (2 * i) as u128;
+                let k1 = (2 * i + 1) as u128;
+                let k0_bytes = k0.to_le_bytes();
+                let k1_bytes = k1.to_le_bytes();
 
                 let sx = lsb(x_label);
                 let sy = lsb(y_label);
@@ -93,7 +93,7 @@ where
     let mut outputs = HashMap::new();
     for &r in circuit.get_output_gate_ids() {
         let label = w[r as usize];
-        outputs.insert(r, YaoEvaluatorShare { label });
+        outputs.insert(r, T::from(YaoEvaluatorShare { label }));
     }
 
     outputs
