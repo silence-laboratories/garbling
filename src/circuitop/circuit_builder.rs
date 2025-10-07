@@ -165,7 +165,7 @@ impl CircuitBuilder {
     pub fn add_circuit(
         &mut self,
         other_circuit: &BinaryCircuit,
-        input_ids: &[Vec<usize>],
+        input_ids: &[&[usize]],
     ) -> Vec<usize> {
         assert_eq!(input_ids.len(), other_circuit.num_inputs());
         (0..input_ids.len())

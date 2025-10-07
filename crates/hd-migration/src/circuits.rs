@@ -24,17 +24,17 @@ pub fn build_child_key_der_hmac_round1_circuit(
     let p3_prev = builder.new_inputs(256);
 
     let comp_eq_circ = build_compare_eq_circuit(256);
-    let op1 = builder.add_circuit(&comp_eq_circ, &[p1_next.clone(), p2_prev])[0];
-    let op2 = builder.add_circuit(&comp_eq_circ, &[p2_next.clone(), p3_prev])[0];
-    let op3 = builder.add_circuit(&comp_eq_circ, &[p3_next.clone(), p1_prev])[0];
+    let op1 = builder.add_circuit(&comp_eq_circ, &[&p1_next, &p2_prev])[0];
+    let op2 = builder.add_circuit(&comp_eq_circ, &[&p2_next, &p3_prev])[0];
+    let op3 = builder.add_circuit(&comp_eq_circ, &[&p3_next, &p1_prev])[0];
 
     let temp = builder.and(op1, op2);
     let output = builder.and(temp, op3);
 
     let circ = build_mod_add_circut(p1_next.len(), SECP256_K1_Q);
 
-    let temp = builder.add_circuit(&circ, &[p1_next, p2_next]);
-    let mut res3_ids = builder.add_circuit(&circ, &[temp, p3_next]);
+    let temp = builder.add_circuit(&circ, &[&p1_next, &p2_next]);
+    let mut res3_ids = builder.add_circuit(&circ, &[&temp, &p3_next]);
     res3_ids.reverse();
 
     builder.output(output);
@@ -81,7 +81,7 @@ pub fn build_child_key_der_hmac_round1_circuit(
     data_ids.extend_from_slice(&index_ids);
 
     let hmac_circuit = build_hmac_512_circuit(chain_par_ids.len(), data_ids.len());
-    let mut hmac_outputs = builder.add_circuit(&hmac_circuit, &[chain_par_ids, data_ids]);
+    let mut hmac_outputs = builder.add_circuit(&hmac_circuit, &[&chain_par_ids, &data_ids]);
 
     let mut left = hmac_outputs[..256].to_vec();
     left.reverse();
@@ -90,7 +90,7 @@ pub fn build_child_key_der_hmac_round1_circuit(
     parent_key.reverse();
 
     let add_circ = build_mod_add_circut(256, SECP256_K1_Q);
-    let out = builder.add_circuit(&add_circ, &[parent_key, left]);
+    let out = builder.add_circuit(&add_circ, &[&parent_key, &left]);
 
     hmac_outputs[..256].copy_from_slice(&out);
 
@@ -149,7 +149,7 @@ pub fn build_child_key_der_hmac_circuit(
     data_ids.extend_from_slice(&index_ids);
 
     let hmac_circuit = build_hmac_512_circuit(chain_par_ids.len(), data_ids.len());
-    let mut hmac_outputs = builder.add_circuit(&hmac_circuit, &[chain_par_ids, data_ids]);
+    let mut hmac_outputs = builder.add_circuit(&hmac_circuit, &[&chain_par_ids, &data_ids]);
 
     let mut left = hmac_outputs[..256].to_vec();
     left.reverse();
@@ -158,7 +158,7 @@ pub fn build_child_key_der_hmac_circuit(
     parent_key.reverse();
 
     let add_circ = build_mod_add_circut(256, SECP256_K1_Q);
-    let out = builder.add_circuit(&add_circ, &[parent_key, left]);
+    let out = builder.add_circuit(&add_circ, &[&parent_key, &left]);
 
     hmac_outputs[..256].copy_from_slice(&out);
 
@@ -180,7 +180,7 @@ pub fn build_hmac_512_circuit(key_length: usize, message_length: usize) -> Binar
     let mut resized_key_ids;
     if key_length > 1024 {
         let sha_circuit = build_sha512_circuit(key_length as u128);
-        resized_key_ids = builder.add_circuit(&sha_circuit, &[key_ids]);
+        resized_key_ids = builder.add_circuit(&sha_circuit, &[&key_ids]);
     } else {
         resized_key_ids = key_ids;
     }
@@ -207,13 +207,13 @@ pub fn build_hmac_512_circuit(key_length: usize, message_length: usize) -> Binar
     inner_msg.extend_from_slice(&msg_ids);
 
     let innersha = build_sha512_circuit(inner_msg.len() as u128);
-    let inner_hash_ids = builder.add_circuit(&innersha, &[inner_msg]);
+    let inner_hash_ids = builder.add_circuit(&innersha, &[&inner_msg]);
 
     let mut outer_msg = o_key_pad_ids.clone();
     outer_msg.extend_from_slice(&inner_hash_ids);
 
     let outersha = build_sha512_circuit(outer_msg.len() as u128);
-    let output_ids = builder.add_circuit(&outersha, &[outer_msg]);
+    let output_ids = builder.add_circuit(&outersha, &[&outer_msg]);
 
     for i in output_ids {
         builder.output(i);
@@ -301,7 +301,7 @@ pub fn build_sha512_circuit(len: u128) -> BinaryCircuit {
         let mut block_inp = padded[1024 * i..1024 * (i + 1)].to_vec();
         block_inp.reverse();
 
-        chain_input = builder.add_circuit(&sha512_circuit, &[block_inp.clone(), chain_input]);
+        chain_input = builder.add_circuit(&sha512_circuit, &[&block_inp, &chain_input]);
     }
 
     chain_input.reverse();
@@ -324,17 +324,17 @@ pub fn build_scalar_to_y_verification_circuit() -> BinaryCircuit {
     let p3_prev = builder.new_inputs(256);
 
     let comp_eq_circ = build_compare_eq_circuit(256);
-    let op1 = builder.add_circuit(&comp_eq_circ, &[p1_next.clone(), p2_prev])[0];
-    let op2 = builder.add_circuit(&comp_eq_circ, &[p2_next.clone(), p3_prev])[0];
-    let op3 = builder.add_circuit(&comp_eq_circ, &[p3_next.clone(), p1_prev])[0];
+    let op1 = builder.add_circuit(&comp_eq_circ, &[&p1_next, &p2_prev])[0];
+    let op2 = builder.add_circuit(&comp_eq_circ, &[&p2_next, &p3_prev])[0];
+    let op3 = builder.add_circuit(&comp_eq_circ, &[&p3_next, &p1_prev])[0];
 
     let temp = builder.and(op1, op2);
     let output = builder.and(temp, op3);
 
     let circ = build_mod_add_circut(p1_next.len(), SECP256_K1_Q);
 
-    let temp = builder.add_circuit(&circ, &[p1_next, p2_next]);
-    let res3_ids = builder.add_circuit(&circ, &[temp, p3_next]);
+    let temp = builder.add_circuit(&circ, &[&p1_next, &p2_next]);
+    let res3_ids = builder.add_circuit(&circ, &[&temp, &p3_next]);
 
     builder.output(output);
     (0..256).for_each(|i| {
@@ -353,8 +353,8 @@ pub fn build_scalar_to_y_circuit() -> BinaryCircuit {
 
     let circ = build_mod_add_circut(x1_ids.len(), SECP256_K1_Q);
 
-    let temp = builder.add_circuit(&circ, &[x1_ids, x2_ids]);
-    let res3_ids = builder.add_circuit(&circ, &[temp, x3_ids]);
+    let temp = builder.add_circuit(&circ, &[&x1_ids, &x2_ids]);
+    let res3_ids = builder.add_circuit(&circ, &[&temp, &x3_ids]);
 
     (0..256).for_each(|i| {
         builder.output(res3_ids[i]);
@@ -400,9 +400,9 @@ pub fn build_verify_sharings_circuit() -> BinaryCircuit {
     let p3_prev = builder.new_inputs(256);
 
     let comp_eq_circ = build_compare_eq_circuit(256);
-    let op1 = builder.add_circuit(&comp_eq_circ, &[p1_next, p2_prev])[0];
-    let op2 = builder.add_circuit(&comp_eq_circ, &[p2_next, p3_prev])[0];
-    let op3 = builder.add_circuit(&comp_eq_circ, &[p3_next, p1_prev])[0];
+    let op1 = builder.add_circuit(&comp_eq_circ, &[&p1_next, &p2_prev])[0];
+    let op2 = builder.add_circuit(&comp_eq_circ, &[&p2_next, &p3_prev])[0];
+    let op3 = builder.add_circuit(&comp_eq_circ, &[&p3_next, &p1_prev])[0];
 
     let temp = builder.and(op1, op2);
     let output = builder.and(temp, op3);
@@ -440,21 +440,18 @@ pub fn build_mod_add_circut(size: usize, prime: U256) -> BinaryCircuit {
 
     let add_circuit = build_ppa_circuit(size);
 
-    let add = builder.add_circuit(&add_circuit, &[x, y]);
+    let add = builder.add_circuit(&add_circuit, &[&x, &y]);
 
     let comp_circ = build_compare_ge_circuit(size + 1);
-    let comp = builder.add_circuit(&comp_circ, &[add.clone(), ps]);
+    let comp = builder.add_circuit(&comp_circ, &[&add, &ps]);
 
     let sub_circ = build_subtract_order_circuit(size + 1, prime);
-    let sub = builder.add_circuit(&sub_circ, &[add.clone()]);
+    let sub = builder.add_circuit(&sub_circ, &[&add]);
 
     let comps = vec![comp[0]; size];
 
     let ifthenelse_circ = build_if_then_else_circuit(size);
-    let out = builder.add_circuit(
-        &ifthenelse_circ,
-        &[comps, sub[..size].to_vec(), add[..size].to_vec()],
-    );
+    let out = builder.add_circuit(&ifthenelse_circ, &[&comps, &sub[..size], &add[..size]]);
 
     for i in out {
         builder.output(i);
@@ -510,7 +507,7 @@ pub fn build_subtract_order_circuit(size: usize, prime: U256) -> BinaryCircuit {
     }
 
     let ppa_circuit = build_ppa_circuit(size);
-    let ppaout = builder.add_circuit(&ppa_circuit, &[gin, pbin_ids]);
+    let ppaout = builder.add_circuit(&ppa_circuit, &[&gin, &pbin_ids]);
 
     (0..size).for_each(|i| {
         builder.output(ppaout[i]);
@@ -610,7 +607,7 @@ pub fn build_compare_ge_circuit(size: usize) -> BinaryCircuit {
 
     let rec_circ = build_compare_ge_rec_circuit(size, 0, size - 1);
 
-    let ops = builder.add_circuit(&rec_circ, &[x, y]);
+    let ops = builder.add_circuit(&rec_circ, &[&x, &y]);
 
     builder.output(ops[0]);
 
@@ -640,17 +637,14 @@ pub fn build_compare_ge_rec_circuit(size: usize, lo: usize, hi: usize) -> Binary
     let circ_low = build_compare_ge_rec_circuit(size, lo, m);
     let circ_high = build_compare_ge_rec_circuit(size, m + 1, hi);
 
-    let lowout = builder.add_circuit(&circ_low, &[xvals.clone(), yvals.clone()]);
-    let highout = builder.add_circuit(&circ_high, &[xvals, yvals]);
+    let lowout = builder.add_circuit(&circ_low, &[&xvals, &yvals]);
+    let highout = builder.add_circuit(&circ_high, &[&xvals, &yvals]);
 
     let (subres_l, diff_l) = (lowout[0], lowout[1]);
     let (subres_h, diff_h) = (highout[0], highout[1]);
 
     let ifelse_circ = build_if_then_else_circuit(1);
-    let subres = builder.add_circuit(
-        &ifelse_circ,
-        &[vec![diff_h], vec![subres_h], vec![subres_l]],
-    );
+    let subres = builder.add_circuit(&ifelse_circ, &[&[diff_h], &[subres_h], &[subres_l]]);
 
     let mut diff = builder.xor(diff_h, diff_l);
     let temp = builder.and(diff_h, diff_l);
