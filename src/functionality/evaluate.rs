@@ -14,7 +14,7 @@ pub fn evaluate_functionality<H>(
     input_encoding_shares: &[Vec<YaoEvaluatorShare>],
     f: &[Block],
     hash: &H,
-) -> HashMap<usize, YaoEvaluatorShare>
+) -> HashMap<u32, YaoEvaluatorShare>
 where
     H: HashFunction,
 {
@@ -24,7 +24,7 @@ where
     for (i, gate) in circuit.gates.iter().enumerate() {
         let (out_gate, f_label) = match gate {
             &BinaryGate::Input { no, id, wire } => {
-                let label = &input_encoding_shares[no][id];
+                let label = &input_encoding_shares[no as usize][id as usize];
                 (wire, label.label)
             }
 
@@ -35,8 +35,8 @@ where
             }
 
             &BinaryGate::Xor { xid, yid, out } => {
-                let x_label = &w[xid];
-                let y_label = &w[yid];
+                let x_label = &w[xid as usize];
+                let y_label = &w[yid as usize];
                 (out, xor_blocks(x_label, y_label))
             }
 
@@ -46,8 +46,8 @@ where
                 id: _,
                 out,
             } => {
-                let x_label = &w[xid];
-                let y_label = &w[yid];
+                let x_label = &w[xid as usize];
+                let y_label = &w[yid as usize];
                 let k0 = (2 * i - 1) as u128;
                 let k1 = 2 * i as u128;
                 let mut k0_bytes = Block::default();
@@ -82,17 +82,17 @@ where
             }
 
             &BinaryGate::Inv { xid, out } => {
-                let x_label = w[xid];
+                let x_label = w[xid as usize];
                 (out, x_label)
             }
         };
 
-        w[out_gate] = f_label;
+        w[out_gate as usize] = f_label;
     }
 
-    let mut outputs: HashMap<usize, YaoEvaluatorShare> = HashMap::new();
+    let mut outputs = HashMap::new();
     for &r in circuit.get_output_gate_ids() {
-        let label = w[r];
+        let label = w[r as usize];
         outputs.insert(r, YaoEvaluatorShare { label });
     }
 

@@ -369,7 +369,7 @@ fn build_compare_eq_circuit(input_len: usize) -> BinaryCircuit {
     let input1 = builder.new_inputs(input_len as u16);
     let input2 = builder.new_inputs(input_len as u16);
 
-    let xors: Vec<usize> = input1
+    let xors: Vec<u32> = input1
         .iter()
         .zip(input2.iter())
         .map(|(i1, i2)| builder.xor(*i1, *i2))
@@ -549,19 +549,19 @@ pub fn build_ppa_circuit(size: usize) -> BinaryCircuit {
         let p_to_and_1_2 = p[1usize << step..size].to_vec();
         let g_to_or = g[1usize << step..size].to_vec();
 
-        let gc_to_or: Vec<usize> = g_to_and_1
+        let gc_to_or: Vec<u32> = g_to_and_1
             .iter()
             .zip(&p_to_and_1_2)
             .map(|(x, y)| builder.and(*x, *y))
             .collect();
 
-        let pc_after_and: Vec<usize> = p_to_and_2
+        let pc_after_and: Vec<u32> = p_to_and_2
             .iter()
             .zip(&p_to_and_1_2)
             .map(|(x, y)| builder.and(*x, *y))
             .collect();
 
-        let gc_after_or: Vec<usize> = g_to_or
+        let gc_after_or: Vec<u32> = g_to_or
             .iter()
             .zip(&gc_to_or)
             .map(|(x, y)| {
@@ -581,7 +581,7 @@ pub fn build_ppa_circuit(size: usize) -> BinaryCircuit {
     let mut g_mul_two = vec![builder.constant(0)];
     g_mul_two.extend_from_slice(&g[..size - 1]);
 
-    let sum: Vec<usize> = pc
+    let sum: Vec<u32> = pc
         .iter()
         .zip(&g_mul_two)
         .map(|(x, y)| builder.xor(*x, *y))
@@ -667,7 +667,7 @@ pub fn build_if_then_else_circuit(size: usize) -> BinaryCircuit {
     let gin = builder.new_inputs(size as u16);
     let ein = builder.new_inputs(size as u16);
 
-    let r: Vec<usize> = gin
+    let r: Vec<u32> = gin
         .iter()
         .zip(&ein)
         .zip(&choice)

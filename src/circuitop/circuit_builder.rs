@@ -9,12 +9,12 @@ use crate::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
 /// the existing one.
 pub struct CircuitBuilder {
     /// Tracks the next available gate ID in the circuit.
-    next_ref_id: usize,
+    next_ref_id: u32,
 
     /// A mapping of constant values to their corresponding gate IDs.
     /// This allows reuse of constant gates instead of creating
     /// duplicates.
-    const_map: HashMap<u16, usize>,
+    const_map: HashMap<u16, u32>,
 
     /// The binary circuit being constructed.  This is incrementally
     /// updated as new gates and inputs are added.  Once the
@@ -40,13 +40,13 @@ impl CircuitBuilder {
     }
 
     /// Retrieves the next available input ID for the n-th input.
-    fn get_next_nth_input_id(&mut self, n: usize) -> usize {
-        self.circ.get_nth_input_ids(n).len()
+    fn get_next_nth_input_id(&mut self, n: u32) -> u32 {
+        self.circ.get_nth_input_ids(n as _).len() as u32
     }
 
     /// Retrieves the next available ciphertext ID for non-free gates.
     /// This ID is used to reference ciphertexts in the circuit.
-    fn get_next_ciphertext_id(&mut self) -> usize {
+    fn get_next_ciphertext_id(&mut self) -> u32 {
         let current = self.circ.get_num_nonfree_gates();
         self.circ.increment_nonfree_gates();
         current
@@ -54,7 +54,7 @@ impl CircuitBuilder {
 
     /// Retrieves the next available reference ID for a gate and
     /// increments the counter.
-    fn get_next_ref_id(&mut self) -> usize {
+    fn get_next_ref_id(&mut self) -> u32 {
         let current = self.next_ref_id;
         self.next_ref_id += 1;
         current
@@ -62,7 +62,7 @@ impl CircuitBuilder {
 
     /// Adds a new input gate to the circuit.
     /// Returns the reference ID of the created input gate.
-    pub fn new_input(&mut self) -> usize {
+    pub fn new_input(&mut self) -> u32 {
         let id = self.get_next_nth_input_id(self.circ.num_inputs());
         let gate_id = self.get_next_ref_id();
 
@@ -81,8 +81,8 @@ impl CircuitBuilder {
 
     /// Adds multiple garbler input gates to the circuit.
     /// Returns a vector of reference IDs corresponding to the created inputs.
-    pub fn new_inputs(&mut self, number_of_inputs: u16) -> Vec<usize> {
-        let mut output: Vec<usize> = Vec::new();
+    pub fn new_inputs(&mut self, number_of_inputs: u16) -> Vec<u32> {
+        let mut output: Vec<u32> = Vec::new();
         self.circ.new_input();
         for _i in 0..number_of_inputs {
             let id = self.get_next_nth_input_id(self.circ.num_inputs() - 1);
@@ -96,12 +96,13 @@ impl CircuitBuilder {
             self.circ.push_nth_input(self.circ.num_inputs() - 1, id);
             self.circ.increment_wires();
         }
+
         output
     }
 
     /// Adds an XOR gate to the circuit.  Returns the reference ID of
     /// the resulting gate.
-    pub fn xor(&mut self, xid: usize, yid: usize) -> usize {
+    pub fn xor(&mut self, xid: u32, yid: u32) -> u32 {
         let out_id = self.get_next_ref_id();
         let gate = BinaryGate::Xor {
             xid,
@@ -115,7 +116,7 @@ impl CircuitBuilder {
 
     /// Adds a NOT gate (negation) to the circuit.  Returns the
     /// reference ID of the resulting gate.
-    pub fn negate(&mut self, xid: usize) -> usize {
+    pub fn negate(&mut self, xid: u32) -> u32 {
         let out_id = self.get_next_ref_id();
         let gate = BinaryGate::Inv { xid, out: out_id };
         self.circ.push_gate(gate);
@@ -125,7 +126,7 @@ impl CircuitBuilder {
 
     /// Adds an AND gate to the circuit.  Returns the reference ID of
     /// the resulting gate.
-    pub fn and(&mut self, xid: usize, yid: usize) -> usize {
+    pub fn and(&mut self, xid: u32, yid: u32) -> u32 {
         let out_id = self.get_next_ref_id();
         let gate = BinaryGate::And {
             xid,
@@ -142,36 +143,34 @@ impl CircuitBuilder {
     /// exists in the circuit, returns its reference ID.  Otherwise,
     /// creates a new constant gate, stores it in `const_map`, and
     /// returns its reference ID.
-    pub fn constant(&mut self, val: u16) -> usize {
+    pub fn constant(&mut self, val: u16) -> u32 {
         match self.const_map.get(&val) {
             Some(&r) => r,
             None => {
                 let out_id = self.get_next_ref_id();
                 let gate = BinaryGate::Constant { val, wire: out_id };
+
                 self.circ.push_gate(gate);
                 self.const_map.insert(val, out_id);
                 self.circ.increment_wires();
                 self.circ.push_constant_gate(val, out_id);
+
                 out_id
             }
         }
     }
 
     /// Marks a gate as an output in the circuit.
-    pub fn output(&mut self, id: usize) {
+    pub fn output(&mut self, id: u32) {
         self.circ.push_output_gate(id);
     }
 
-    pub fn add_circuit(
-        &mut self,
-        other_circuit: &BinaryCircuit,
-        input_ids: &[&[usize]],
-    ) -> Vec<usize> {
-        assert_eq!(input_ids.len(), other_circuit.num_inputs());
+    pub fn add_circuit(&mut self, other_circuit: &BinaryCircuit, input_ids: &[&[u32]]) -> Vec<u32> {
+        assert_eq!(input_ids.len(), other_circuit.num_inputs() as _);
         (0..input_ids.len())
             .for_each(|i| assert_eq!(input_ids[i].len(), other_circuit.input_gate_ids[i].len()));
 
-        let mut old_to_new_map = HashMap::new();
+        let mut old_to_new_map: HashMap<u32, u32> = HashMap::new();
 
         for gate in &other_circuit.gates {
             match gate {
@@ -201,7 +200,7 @@ impl CircuitBuilder {
                 }
 
                 &BinaryGate::Input { no, id, wire } => {
-                    old_to_new_map.insert(wire, input_ids[no][id]);
+                    old_to_new_map.insert(wire, input_ids[no as usize][id as usize]);
                 }
 
                 &BinaryGate::Constant { val, wire } => {
@@ -213,7 +212,11 @@ impl CircuitBuilder {
         other_circuit
             .output_gate_ids
             .iter()
-            .map(|out| *old_to_new_map.get(out).unwrap())
+            .map(|&out| {
+                *old_to_new_map
+                    .get(&out)
+                    .expect("output gate id missing in mapping")
+            })
             .collect()
     }
 }

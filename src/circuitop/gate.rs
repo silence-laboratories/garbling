@@ -1,3 +1,5 @@
+pub type ID = u32;
+
 /// Represents a binary gate in a Boolean circuit.
 ///
 /// Each variant corresponds to a different type of gate that
@@ -5,13 +7,13 @@
 #[derive(Clone, Debug, PartialEq)]
 pub enum BinaryGate {
     /// Represents an input gate.
-    Input { no: usize, id: usize, wire: usize },
+    Input { no: u32, id: u32, wire: u32 },
 
     /// Represents a constant value gate.
     ///
     /// # Fields
     /// * `val` - The constant value stored in the gate.
-    Constant { val: u16, wire: usize },
+    Constant { val: u16, wire: u32 },
 
     /// Represents an XOR gate, which performs a bitwise XOR operation.
     ///
@@ -19,7 +21,7 @@ pub enum BinaryGate {
     /// * `xid` - The ID of the first input wire.
     /// * `yid` - The ID of the second input wire.
     /// * `out` - The optional ID of the output wire.
-    Xor { xid: usize, yid: usize, out: usize },
+    Xor { xid: u32, yid: u32, out: u32 },
 
     /// Represents an AND gate, which performs a bitwise AND operation.
     ///
@@ -29,10 +31,10 @@ pub enum BinaryGate {
     /// * `id` - The unique identifier for this AND gate (used for garbling).
     /// * `out` - The optional ID of the output wire.
     And {
-        xid: usize,
-        yid: usize,
-        id: usize,
-        out: usize,
+        xid: u32,
+        yid: u32,
+        id: u32,
+        out: u32,
     },
 
     /// Represents an inverter (NOT gate), which negates a bit.
@@ -40,5 +42,5 @@ pub enum BinaryGate {
     /// # Fields
     /// * `xid` - The ID of the input wire.
     /// * `out` - The optional ID of the output wire.
-    Inv { xid: usize, out: usize },
+    Inv { xid: u32, out: u32 },
 }

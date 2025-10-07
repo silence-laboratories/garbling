@@ -17,7 +17,7 @@ pub fn garble_functionality<R, H>(
     setup: &GarblerSetup,
     rng: &mut R,
     hash: &H,
-) -> (Vec<Block>, HashMap<usize, YaoGarblerShare>)
+) -> (Vec<Block>, HashMap<u32, YaoGarblerShare>)
 where
     R: RngCore + CryptoRng,
     H: HashFunction,
@@ -27,12 +27,13 @@ where
     let mut f: Vec<Block> = vec![];
 
     for (i, gate) in circuit.gates.iter().enumerate() {
-        let (out_gate, f_label) = match *gate {
-            BinaryGate::Input { no, id, wire } => {
-                let label = &input_shares[no][id];
+        let (out_gate, f_label) = match gate {
+            &BinaryGate::Input { no, id, wire } => {
+                let label = &input_shares[no as usize][id as usize];
                 (wire, label.f_label)
             }
-            BinaryGate::Constant { val, wire } => {
+
+            &BinaryGate::Constant { val, wire } => {
                 let mut zerowire = Block::default();
                 rng.fill_bytes(&mut zerowire);
                 zerowire[0] |= 1;
@@ -43,20 +44,22 @@ where
                 f.push(newwire);
                 (wire, zerowire)
             }
-            BinaryGate::Xor { xid, yid, out } => {
-                let x_label = &w[xid];
-                let y_label = &w[yid];
+
+            &BinaryGate::Xor { xid, yid, out } => {
+                let x_label = &w[xid as usize];
+                let y_label = &w[yid as usize];
                 (out, xor_blocks(x_label, y_label))
             }
-            BinaryGate::And {
+
+            &BinaryGate::And {
                 xid,
                 yid,
                 id: _,
                 out,
             } => {
-                let x_label = &w[xid];
+                let x_label = &w[xid as usize];
                 let xp_label = xor_blocks(x_label, &setup.delta);
-                let y_label = &w[yid];
+                let y_label = &w[yid as usize];
                 let yp_label = xor_blocks(y_label, &setup.delta);
                 let k0 = (2 * i - 1) as u128;
                 let k1 = 2 * i as u128;
@@ -93,18 +96,19 @@ where
                 };
                 (out, w_out)
             }
-            BinaryGate::Inv { xid, out } => {
-                let x_label = &w[xid];
+
+            &BinaryGate::Inv { xid, out } => {
+                let x_label = &w[xid as usize];
                 (out, xor_blocks(x_label, &setup.delta))
             }
         };
 
-        w[out_gate] = f_label;
+        w[out_gate as usize] = f_label;
     }
 
     let mut outputs = HashMap::new();
     for &r in circuit.get_output_gate_ids() {
-        let f_label = w[r];
+        let f_label = w[r as usize];
         outputs.insert(
             r,
             YaoGarblerShare {
@@ -164,11 +168,12 @@ mod tests {
         let (f, _o) = garble_functionality(&circuit, &gin, &setup, &mut rng, &hash);
 
         println!("cir: gates.len() {}", circuit.gates.len());
-        println!("cir: num_nonfree_gates {}", circuit.num_nonfree_gates);
+        let nonfree = circuit.get_num_nonfree_gates();
+        println!("cir: num_nonfree_gates {}", nonfree);
         println!("cir: constant_map.len() {}", circuit.constant_map.len());
         println!(
             "cir: 2*constant_map.len() + num_nonfree_gates {}",
-            2 * circuit.num_nonfree_gates + circuit.constant_map.len()
+            2 * nonfree as usize + circuit.constant_map.len()
         );
 
         println!("f {}\n\n\n\n\n\n\n", f.len());
@@ -202,11 +207,12 @@ mod tests {
         let (f, _o) = garble_functionality(&circuit, &gin, &setup, &mut rng, &hash);
 
         println!("cir: gates.len() {}", circuit.gates.len());
-        println!("cir: num_nonfree_gates {}", circuit.num_nonfree_gates);
+        let nonfree = circuit.get_num_nonfree_gates();
+        println!("cir: num_nonfree_gates {}", nonfree);
         println!("cir: constant_map.len() {}", circuit.constant_map.len());
         println!(
             "cir: 2*constant_map.len() + num_nonfree_gates {}",
-            2 * circuit.num_nonfree_gates + circuit.constant_map.len()
+            2 * nonfree as usize + circuit.constant_map.len()
         );
 
         println!("f {}", f.len());

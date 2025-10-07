@@ -12,24 +12,24 @@ pub struct BinaryCircuit {
     pub gates: Vec<BinaryGate>,
 
     /// A number of inputs in the circuit.
-    pub num_inputs: usize,
+    pub num_inputs: u32,
 
     /// The list of gate IDs corresponding to the circuit's input wires.
-    pub input_gate_ids: Vec<Vec<usize>>,
+    pub input_gate_ids: Vec<Vec<u32>>,
 
     /// A list of gate IDs corresponding to the circuit's output wires.
-    pub output_gate_ids: Vec<usize>,
+    pub output_gate_ids: Vec<u32>,
 
     /// A list of gate IDs corresponding to constant values in the circuit.
-    pub constant_map: HashMap<u16, usize>,
+    pub constant_map: HashMap<u16, u32>,
 
     /// The number of non-free (i.e., AND) gates in the circuit.
     /// This is used to track the complexity of garbled circuit evaluation.
-    pub num_nonfree_gates: usize,
+    pub num_nonfree_gates: u32,
 
     /// The total number of wires used in the circuit.
     /// This includes inputs, outputs, and intermediate wires.
-    pub num_wires: usize,
+    pub num_wires: u32,
 }
 
 /// Implementation of the `BinaryCircuit` struct.
@@ -91,7 +91,7 @@ impl BinaryCircuit {
             })
             .ok_or(FileParsingError::InputNoParsingError)?;
 
-        let mut id: usize = 0;
+        let mut id: u32 = 0;
 
         output_circuit.num_wires = num_wires;
 
@@ -100,11 +100,11 @@ impl BinaryCircuit {
             output_circuit.new_input();
             for j in 0..i {
                 output_circuit.push_gate(BinaryGate::Input {
-                    no: ipcnt,
+                    no: ipcnt as u32,
                     id: j,
                     wire: totalcount,
                 });
-                output_circuit.push_nth_input(ipcnt, j);
+                output_circuit.push_nth_input(ipcnt as u32, j as _);
                 totalcount += 1;
             }
         }
@@ -118,9 +118,9 @@ impl BinaryCircuit {
                 .next()
                 .map(|line| line.split_whitespace())
                 .and_then(|mut parts| {
-                    let num_input: usize = parts.next().and_then(|s| s.parse().ok())?;
-                    let _num_output: usize = parts.next().and_then(|s| s.parse().ok())?;
-                    let input0: usize = parts.next().and_then(|s| s.parse().ok())?;
+                    let num_input: u32 = parts.next().and_then(|s| s.parse().ok())?;
+                    let _num_output: u32 = parts.next().and_then(|s| s.parse().ok())?;
+                    let input0 = parts.next().and_then(|s| s.parse().ok())?;
 
                     let input1 = if num_input == 2 {
                         parts.next().and_then(|s| s.parse().ok())?
@@ -198,7 +198,7 @@ impl BinaryCircuit {
     ///
     /// # Arguments
     /// * `output_gate_id` - The ID of the output gate.
-    pub fn push_output_gate(&mut self, output_gate_id: usize) {
+    pub fn push_output_gate(&mut self, output_gate_id: u32) {
         self.output_gate_ids.push(output_gate_id);
     }
 
@@ -206,7 +206,7 @@ impl BinaryCircuit {
     ///
     /// # Arguments
     /// * `constant_gate_id` - The ID of the constant gate.
-    pub fn push_constant_gate(&mut self, val: u16, constant_gate_id: usize) {
+    pub fn push_constant_gate(&mut self, val: u16, constant_gate_id: u32) {
         self.constant_map.insert(val, constant_gate_id);
     }
 
@@ -223,15 +223,15 @@ impl BinaryCircuit {
     ///
     /// # Arguments
     /// * `garbler_input_id` - The ID of the garbler input gate.
-    pub fn push_nth_input(&mut self, n: usize, input_id: usize) {
-        self.input_gate_ids[n].push(input_id);
+    pub fn push_nth_input(&mut self, n: u32, input_id: u32) {
+        self.input_gate_ids[n as usize].push(input_id);
     }
 
     /// Adds an input gate ID to the circuit.
     ///
     /// # Arguments
     /// * `garbler_input_id` - The ID of the garbler input gate.
-    pub fn push_nth_inputs(&mut self, n: usize, input_id: &[usize]) {
+    pub fn push_nth_inputs(&mut self, n: usize, input_id: &[u32]) {
         self.input_gate_ids[n].extend_from_slice(input_id);
     }
 
@@ -239,7 +239,7 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * A slice containing the IDs of all output gates in the circuit.
-    pub fn get_output_gate_ids(&self) -> &[usize] {
+    pub fn get_output_gate_ids(&self) -> &[u32] {
         &self.output_gate_ids
     }
 
@@ -247,7 +247,7 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * A slice containing the IDs of all n-th input gates.
-    pub fn get_nth_input_ids(&self, n: usize) -> &[usize] {
+    pub fn get_nth_input_ids(&self, n: usize) -> &[u32] {
         &self.input_gate_ids[n]
     }
 
@@ -255,7 +255,7 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * A slice containing the Vectors of IDs of all input gates.
-    pub fn get_input_ids(&self) -> &[Vec<usize>] {
+    pub fn get_input_ids(&self) -> &[Vec<u32>] {
         &self.input_gate_ids
     }
 
@@ -273,7 +273,7 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * The number of non-free gates.
-    pub fn get_num_nonfree_gates(&self) -> usize {
+    pub fn get_num_nonfree_gates(&self) -> u32 {
         self.num_nonfree_gates
     }
 
@@ -281,7 +281,7 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * The total count of garbler input gates.
-    pub fn num_inputs(&self) -> usize {
+    pub fn num_inputs(&self) -> u32 {
         self.num_inputs
     }
 

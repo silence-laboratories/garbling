@@ -27,7 +27,7 @@ pub fn yao_circuit_eval_process_msg1_p2<H>(
     fs: &[Block],
     circuit: &BinaryCircuit,
     hash: &H,
-) -> HashMap<usize, YaoShare>
+) -> HashMap<u32, YaoShare>
 where
     H: HashFunction,
 {
@@ -49,7 +49,7 @@ fn yao_circuit_eval_create_msg1_p01<G, H>(
     circuit: &BinaryCircuit,
     rng: &mut G,
     hash: &H,
-) -> (Vec<Block>, HashMap<usize, YaoShare>)
+) -> (Vec<Block>, HashMap<u32, YaoShare>)
 where
     G: RngCore + CryptoRng,
     H: HashFunction,
@@ -63,7 +63,7 @@ where
 
     let (f, out_shares) = garble_functionality(circuit, &shares, garble_setup, rng, hash);
 
-    let out: HashMap<usize, YaoShare> = out_shares
+    let out: HashMap<u32, YaoShare> = out_shares
         .iter()
         .map(|(&id, element)| (id, YaoShare::G(*element)))
         .collect();
@@ -81,7 +81,7 @@ pub async fn yao_circuit_eval_functionality<T, R, G, H>(
     rng: Option<&mut G>,
     hash: &H,
     yao_setup: &YaoSetup,
-) -> Result<HashMap<usize, YaoShare>, ProtocolError>
+) -> Result<HashMap<u32, YaoShare>, ProtocolError>
 where
     T: ProtocolParticipant,
     R: Relay,
@@ -117,7 +117,7 @@ pub async fn yao_circuit_eval_functionality_inner<T, R, G, H>(
     yao_setup: &YaoSetup,
     tag1: MessageTag,
     tag2: MessageTag,
-) -> Result<HashMap<usize, YaoShare>, ProtocolError>
+) -> Result<HashMap<u32, YaoShare>, ProtocolError>
 where
     T: ProtocolParticipant,
     R: Relay,
@@ -126,12 +126,13 @@ where
 {
     let party_id = setup.participant_index();
 
-    assert_eq!(input.len(), circuit.num_inputs());
+    assert_eq!(input.len(), circuit.num_inputs() as _);
     (0..input.len()).for_each(|i| assert_eq!(input[i].len(), circuit.input_gate_ids[i].len()));
 
     match yao_setup {
         YaoSetup::E(_) => {
-            let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len()) * BLOCK_SIZE;
+            let len =
+                (2 * circuit.num_nonfree_gates as usize + circuit.constant_map.len()) * BLOCK_SIZE;
 
             let hashes: Vec<[u8; 32]> = receive_from_parties(setup, tag2, 32, &[0], relay).await?;
 
@@ -191,7 +192,7 @@ pub async fn yao_map_circuit_eval_functionality<T, R, G, H>(
     rng: Option<&mut G>,
     hash: &H,
     yao_setup: &YaoSetup,
-) -> Result<Vec<HashMap<usize, YaoShare>>, ProtocolError>
+) -> Result<Vec<HashMap<u32, YaoShare>>, ProtocolError>
 where
     T: ProtocolParticipant,
     R: Relay,
@@ -227,7 +228,7 @@ pub async fn yao_map_circuit_eval_functionality_inner<T, R, G, H>(
     yao_setup: &YaoSetup,
     tag1: MessageTag,
     tag2: MessageTag,
-) -> Result<Vec<HashMap<usize, YaoShare>>, ProtocolError>
+) -> Result<Vec<HashMap<u32, YaoShare>>, ProtocolError>
 where
     T: ProtocolParticipant,
     R: Relay,
@@ -242,8 +243,8 @@ where
         YaoSetup::E(_e) => match circuits {
             MapArg::Scalar(circuit) => match inputs {
                 MapArg::Scalar(input) => {
-                    let len =
-                        (2 * circuit.num_nonfree_gates + circuit.constant_map.len()) * BLOCK_SIZE;
+                    let len = (2 * circuit.num_nonfree_gates as usize + circuit.constant_map.len())
+                        * BLOCK_SIZE;
 
                     let hashes: Vec<[u8; 32]> =
                         receive_from_parties(setup, tag2, 32, &[0], relay).await?;
@@ -269,7 +270,7 @@ where
                 }
 
                 MapArg::Vector(input) => {
-                    let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
+                    let len = (2 * circuit.num_nonfree_gates as usize + circuit.constant_map.len())
                         * BLOCK_SIZE
                         * input.len();
 
@@ -293,7 +294,8 @@ where
 
                     assert_eq!(hashout, hashes[0]);
 
-                    let complen = 2 * circuit.num_nonfree_gates + circuit.constant_map.len();
+                    let complen =
+                        2 * circuit.num_nonfree_gates as usize + circuit.constant_map.len();
                     let mut temp = Vec::new();
                     (0..input.len()).for_each(|i| {
                         let f = fs[0][complen * i..complen * (i + 1)].to_vec();
@@ -308,7 +310,8 @@ where
                 MapArg::Scalar(input) => {
                     let mut len = 0;
                     for circuit in circuits {
-                        len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
+                        len += (2 * circuit.num_nonfree_gates as usize
+                            + circuit.constant_map.len())
                             * BLOCK_SIZE;
                     }
 
@@ -335,7 +338,8 @@ where
                     let mut temp = Vec::new();
                     let mut len = 0;
                     circuits.iter().for_each(|circuit| {
-                        let complen = 2 * circuit.num_nonfree_gates + circuit.constant_map.len();
+                        let complen =
+                            2 * circuit.num_nonfree_gates as usize + circuit.constant_map.len();
                         let f = fs[0][len..len + complen].to_vec();
                         let out = yao_circuit_eval_process_msg1_p2(input, &f, circuit, hash);
                         len += complen;
@@ -349,7 +353,8 @@ where
 
                     let mut len = 0;
                     for circuit in circuits {
-                        len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
+                        len += (2 * circuit.num_nonfree_gates as usize
+                            + circuit.constant_map.len())
                             * BLOCK_SIZE;
                     }
 
@@ -377,7 +382,8 @@ where
                     let mut temp = Vec::new();
                     let mut len = 0;
                     circuits.iter().zip(input).for_each(|(circuit, ip)| {
-                        let complen = 2 * circuit.num_nonfree_gates + circuit.constant_map.len();
+                        let complen =
+                            2 * circuit.num_nonfree_gates as usize + circuit.constant_map.len();
                         let f = fs[0][len..len + complen].to_vec();
                         let out = yao_circuit_eval_process_msg1_p2(ip, &f, circuit, hash);
                         len += complen;
@@ -416,12 +422,13 @@ where
                     }
 
                     MapArg::Vector(input) => {
-                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<usize, YaoShare>>) = input
+                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<u32, YaoShare>>) = input
                             .iter()
                             .map(|ip| yao_circuit_eval_create_msg1_p01(ip, g, circuit, rng, hash))
                             .collect();
 
-                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
+                        let len = (2 * circuit.num_nonfree_gates as usize
+                            + circuit.constant_map.len())
                             * BLOCK_SIZE
                             * input.len();
 
@@ -453,7 +460,7 @@ where
 
                 MapArg::Vector(circuits) => match inputs {
                     MapArg::Scalar(input) => {
-                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<usize, YaoShare>>) = circuits
+                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<u32, YaoShare>>) = circuits
                             .iter()
                             .map(|circuit| {
                                 yao_circuit_eval_create_msg1_p01(input, g, circuit, rng, hash)
@@ -462,7 +469,8 @@ where
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates as usize
+                                + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -493,7 +501,7 @@ where
 
                     MapArg::Vector(input) => {
                         assert_eq!(input.len(), circuits.len());
-                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<usize, YaoShare>>) = circuits
+                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<u32, YaoShare>>) = circuits
                             .iter()
                             .zip(input)
                             .map(|(circuit, ip)| {
@@ -503,7 +511,8 @@ where
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates as usize
+                                + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
