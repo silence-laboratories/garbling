@@ -1,5 +1,5 @@
 use garbled_circuit::functionality::{
-    utils::{FilteredMsgRelay, FixedExternalSize, receive_from_parties, send_to_party},
+    utils::{FilteredMsgRelay, receive_from_parties, send_to_party},
     utils_dep::TagOffsetCounter,
 };
 use k256::{NonZeroScalar, Scalar};
@@ -54,7 +54,7 @@ pub async fn run_reconstruct_shamir<R: Relay, S: ProtocolParticipant>(
 }
 
 /// Function to reconstruct a shamir shared Scalar value to all parties
-pub async fn run_reconstruct_shamir_inner<R: Relay, S: ProtocolParticipant>(
+async fn run_reconstruct_shamir_inner<R: Relay, S: ProtocolParticipant>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
     share: &Scalar,
@@ -70,9 +70,9 @@ pub async fn run_reconstruct_shamir_inner<R: Relay, S: ProtocolParticipant>(
     send_to_party(setup, tag2, ScalarVal(*share), next_party, relay).await?;
 
     let shares_recv_n: Vec<ScalarVal> =
-        receive_from_parties(setup, tag1, ScalarVal::SIZE, vec![next_party], relay).await?;
+        receive_from_parties(setup, tag1, &[next_party], relay).await?;
     let shares_recv_p: Vec<ScalarVal> =
-        receive_from_parties(setup, tag2, ScalarVal::SIZE, vec![prev_party], relay).await?;
+        receive_from_parties(setup, tag2, &[prev_party], relay).await?;
 
     let share_prev = shares_recv_p[0].0;
     let share_next = shares_recv_n[0].0;

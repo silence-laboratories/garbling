@@ -6,38 +6,26 @@ edition = "2024"
 
 [dependencies]
 garbled-circuit = { path = "../.." }
-rand = "0.8"
-rand_chacha = "0.3"
-num-bigint = "0.4"
-crypto-bigint = { version = "0.6.1", features = ["serde", "alloc"] }
-sha2 = "0.10.8"
-merlin = "3.0.0"
+
 sl-mpc-mate = { git = "https://github.com/silence-laboratories/sl-crypto.git", rev = "804ae2b" }
 sl-messages = { git = "https://github.com/silence-laboratories/sl-crypto.git", rev = "804ae2b" }
 sl-compute-common = { git = "https://github.com/silence-laboratories/sl-crypto.git", branch = "sl-compute-common" }
-hex = "0.4"
-k256 = { version = "0.13", features = ["arithmetic"] }
-curve25519-dalek = { version = "4.1.3", features = [
-    "rand_core",
-    "precomputed-tables",
-    "digest",
-    "group",
-    "serde"
-]}
+
+# curve25519-dalek = { version = "4.1.3", features = ["precomputed-tables"]}
 derivation-path = "0.2.0"
 group = "0.13.0"
 hmac = { version = "0.12.1" }
-unicode-normalization = "0.1.24"
-thiserror = "1.0"
+k256 = { version = "0.13", features = ["arithmetic"] }
+rand = "0.8"
+rand_chacha = "0.3"
+sha2 = "0.10.8"
 signature = { version = "2.2.0" }
+thiserror = "1.0"
 
 [dev-dependencies]
-tokio = { workspace = true, features = [
-    "rt",
-    "sync",
-    "macros",
-    "rt-multi-thread",
-] }
+hex = "0.4"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
 
 [features]
 test-support = ["sl-mpc-mate/simple-relay"]

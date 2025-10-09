@@ -24,7 +24,7 @@ pub async fn run_derive_child_key<S, R, G, H>(
     parent_key: &PrivKeyShareBip,
     index_child: &ChildIndex,
     yao_setup: &YaoSetup,
-    rng: &mut Option<G>,
+    mut rng: Option<&mut G>,
     hash: &H,
 ) -> Result<PrivKeyShareBip, HardDerivationError>
 where
@@ -46,7 +46,7 @@ where
         relay,
         &inputs,
         &circuit,
-        rng,
+        rng.as_mut(),
         hash,
         yao_setup,
     )
@@ -87,7 +87,10 @@ mod tests {
             input::batch_input_yao_functionality, output::batch_output_yao_functionality,
             setup::setup_yao_functionality, utils_dep::TagOffsetCounter,
         },
-        utilities::{commitments::HashCommitment, hash_function::AesHash, utils::bool_vec_to_hex},
+        utilities::{
+            commitments::HashCommitment, hash_function::AesHash, types::YaoSetup,
+            utils::bool_vec_to_hex,
+        },
     };
     use hmac::{Hmac, Mac};
     use k256::{
@@ -123,24 +126,37 @@ mod tests {
 
         let yao_setup = setup_yao_functionality(&setup, &mut cnt, &mut relay).await?;
 
-        let (mut rng, hash, _) = if setup.participant_index() == 2 {
-            let hash = AesHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
-            (None, hash, comm)
-        } else {
-            let hash = AesHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
-            let comm = HashCommitment::new(hash.clone());
-            let r = ChaCha8Rng::from_seed(yao_setup.g_setup.clone().unwrap().prf_key);
-            (Some(r), hash, comm)
+        let (mut rng, hash, _) = match &yao_setup {
+            YaoSetup::E(e) => {
+                let hash = AesHash::new(e.comm_crs);
+                let comm = HashCommitment::new(hash);
+                (None, hash, comm)
+            }
+            YaoSetup::G(g) => {
+                let hash = AesHash::new(g.comm_crs);
+                let comm = HashCommitment::new(hash.clone());
+                let r = ChaCha8Rng::from_seed(g.prf_key);
+                (Some(r), hash, comm)
+            }
         };
 
         let rpk_yao = batch_input_yao_functionality(
-            &setup, &mut cnt, &mut relay, &rpk_bool, &mut rng, &yao_setup,
+            &setup,
+            &mut cnt,
+            &mut relay,
+            &rpk_bool,
+            rng.as_mut(),
+            &yao_setup,
         )
         .await?;
 
         let rcc_yao = batch_input_yao_functionality(
-            &setup, &mut cnt, &mut relay, &rcc_bool, &mut rng, &yao_setup,
+            &setup,
+            &mut cnt,
+            &mut relay,
+            &rcc_bool,
+            rng.as_mut(),
+            &yao_setup,
         )
         .await?;
 
@@ -158,7 +174,7 @@ mod tests {
             &share,
             &child_index,
             &yao_setup,
-            &mut rng,
+            rng.as_mut(),
             &hash,
         )
         .await?;

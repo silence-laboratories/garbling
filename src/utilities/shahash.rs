@@ -1,6 +1,6 @@
 use sha2::{Digest, Sha512};
 
-use crate::{config::util_errors::HashError, utilities::types::BLOCK_SIZE};
+use crate::utilities::types::BLOCK_SIZE;
 
 use super::{hash_function::HashFunction, types::Block, utils::xor_blocks};
 
@@ -17,8 +17,8 @@ impl HashFunction for Sha512Hash {
     fn initialize(&mut self, _key: Block) {}
 
     fn cr_hash(&self, x: &Block) -> Block {
-        let hashval = self.get_hash(x).unwrap();
-        xor_blocks(hashval, x.to_owned())
+        let hashval = self.get_hash(x);
+        xor_blocks(&hashval, x)
     }
 
     fn ccr_hash(&self, x: &Block) -> Block {
@@ -31,18 +31,19 @@ impl HashFunction for Sha512Hash {
     }
 
     fn tccr_hash(&self, x: &Block, i: &Block) -> Block {
-        let hash1 = self.get_hash(x).unwrap();
-        let y = xor_blocks(hash1, i.to_owned());
-        let hash2 = self.get_hash(&y).unwrap();
-        xor_blocks(hash1, hash2)
+        let hash1 = self.get_hash(x);
+        let y = xor_blocks(&hash1, i);
+        let hash2 = self.get_hash(&y);
+        xor_blocks(&hash1, &hash2)
     }
 
-    fn get_hash(&self, input: &[u8]) -> Result<Block, HashError> {
+    fn get_hash(&self, input: &[u8]) -> Block {
         let mut hasher = Sha512::new();
         hasher.update(input);
         let result: [u8; BLOCK_SIZE * 4] = hasher.finalize().into();
         let mut output = Block::default();
         output.copy_from_slice(&result[BLOCK_SIZE * 3..BLOCK_SIZE * 4]);
-        Ok(output)
+
+        output
     }
 }

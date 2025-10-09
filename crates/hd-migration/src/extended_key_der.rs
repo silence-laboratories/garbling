@@ -39,7 +39,7 @@ pub async fn run_extended_key_derivation_round1<S, R, G, H, C>(
     public_key: ProjectivePoint,
     randomness: &mut CommonRandomness,
     yao_setup: &YaoSetup,
-    rng: &mut Option<G>,
+    mut rng: Option<&mut G>,
     comm: &C,
     hash: &H,
 ) -> Result<(PrivKeyShareBip, PrivKeyShareBip), HardDerivationError>
@@ -75,13 +75,13 @@ where
         all_ip.len(),
         all_ip.len(),
         all_ip.len(),
-        rng,
+        rng.as_mut(),
         yao_setup,
         comm,
     )
     .await?;
 
-    let mut inputs = vec![vec![], vec![], vec![], vec![], vec![], vec![]];
+    let mut inputs = [vec![], vec![], vec![], vec![], vec![], vec![]];
 
     inputs[0].extend_from_slice(&i1_yao[256..]);
     inputs[1].extend_from_slice(&i2_yao[256..]);
@@ -101,7 +101,7 @@ where
         relay,
         &inputs,
         &circ,
-        rng,
+        rng.as_mut(),
         hash,
         yao_setup,
     )
@@ -172,15 +172,19 @@ where
     // run setup for yao protocols
     let yao_setup = setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
 
-    let (mut rng, hash, comm) = if setup.participant_index() == 2 {
-        let hash = AesHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
-        let comm = HashCommitment::new(hash.clone());
-        (None, hash, comm)
-    } else {
-        let hash = AesHash::new(yao_setup.g_setup.clone().unwrap().comm_crs);
-        let comm = HashCommitment::new(hash.clone());
-        let r = ChaCha8Rng::from_seed(yao_setup.g_setup.clone().unwrap().prf_key);
-        (Some(r), hash, comm)
+    let (mut rng, hash, comm) = match &yao_setup {
+        YaoSetup::E(e) => {
+            let hash = AesHash::new(e.comm_crs);
+            let comm = HashCommitment::new(hash);
+            (None, hash, comm)
+        }
+
+        YaoSetup::G(g) => {
+            let hash = AesHash::new(g.comm_crs);
+            let comm = HashCommitment::new(hash);
+            let r = ChaCha8Rng::from_seed(g.prf_key);
+            (Some(r), hash, comm)
+        }
     };
 
     let (pa, ch) = run_extended_key_derivation_round1(
@@ -194,20 +198,20 @@ where
         public_key,
         &mut randomness,
         &yao_setup,
-        &mut rng,
+        rng.as_mut(),
         &comm,
         &hash,
     )
     .await?;
-
-    let mut temp = vec![pa, ch.clone()];
 
     let mut output = vec![PrivKeyShareDkg {
         keyshare: ch.key_share,
         pubkey: ch.pubkey,
     }];
 
-    for (cnt, i) in derivation_path.path()[1..].iter().enumerate() {
+    let mut temp = vec![pa, ch];
+
+    for (cnt, i) in derivation_path.path().iter().skip(1).enumerate() {
         let child_key = run_derive_child_key(
             &setup,
             &mut relay,
@@ -215,7 +219,7 @@ where
             &temp[cnt + 1],
             i,
             &yao_setup,
-            &mut rng,
+            rng.as_mut(),
             &hash,
         )
         .await?;

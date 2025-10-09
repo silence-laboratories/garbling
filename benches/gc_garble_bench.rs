@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use garbled_circuit::{
     circuitop::circuit::BinaryCircuit,
@@ -5,7 +7,7 @@ use garbled_circuit::{
     functionality::garble::garble_functionality,
     utilities::{
         garble_hash::AesGarbleHash,
-        types::{Block, GarblerSetup, YaoGarblerShare},
+        types::{Block, GarblerSetup, YaoGarblerShare, YaoShare},
     },
 };
 use rand::{RngCore, SeedableRng};
@@ -24,7 +26,7 @@ pub fn garble_aes256_benchmark(c: &mut Criterion) {
     let hash = AesGarbleHash::new(AES_KEY);
 
     let zero = Block::default();
-    let gin: Vec<Vec<YaoGarblerShare>> = circuit
+    let gin: Vec<Vec<_>> = circuit
         .get_input_ids()
         .iter()
         .map(|v| {
@@ -33,12 +35,13 @@ pub fn garble_aes256_benchmark(c: &mut Criterion) {
                     delta,
                     f_label: zero,
                 })
+                .map(From::from)
                 .collect()
         })
         .collect();
     group.bench_function("aes256_garble", |b| {
         b.iter(|| {
-            let _ = garble_functionality(
+            let _: (_, HashMap<u32, YaoShare>) = garble_functionality(
                 &circuit,
                 &gin,
                 &GarblerSetup {
@@ -51,6 +54,7 @@ pub fn garble_aes256_benchmark(c: &mut Criterion) {
             );
         })
     });
+
     group.finish();
 }
 
@@ -67,7 +71,7 @@ pub fn garble_aes128_benchmark(c: &mut Criterion) {
     let hash = AesGarbleHash::new(AES_KEY);
 
     let zero = Block::default();
-    let gin: Vec<Vec<YaoGarblerShare>> = circuit
+    let gin: Vec<Vec<_>> = circuit
         .get_input_ids()
         .iter()
         .map(|v| {
@@ -76,12 +80,13 @@ pub fn garble_aes128_benchmark(c: &mut Criterion) {
                     delta,
                     f_label: zero,
                 })
+                .map(From::from)
                 .collect()
         })
         .collect();
     group.bench_function("aes128_garble", |b| {
         b.iter(|| {
-            let _ = garble_functionality(
+            let _: (_, HashMap<u32, YaoShare>) = garble_functionality(
                 &circuit,
                 &gin,
                 &GarblerSetup {
@@ -110,7 +115,7 @@ pub fn garble_sha256_benchmark(c: &mut Criterion) {
     let hash = AesGarbleHash::new(AES_KEY);
 
     let zero = Block::default();
-    let gin: Vec<Vec<YaoGarblerShare>> = circuit
+    let gin: Vec<Vec<_>> = circuit
         .get_input_ids()
         .iter()
         .map(|v| {
@@ -119,12 +124,13 @@ pub fn garble_sha256_benchmark(c: &mut Criterion) {
                     delta,
                     f_label: zero,
                 })
+                .map(From::from)
                 .collect()
         })
         .collect();
     group.bench_function("sha256_garble", |b| {
         b.iter(|| {
-            let _ = garble_functionality(
+            let _: (_, HashMap<u32, YaoShare>) = garble_functionality(
                 &circuit,
                 &gin,
                 &GarblerSetup {

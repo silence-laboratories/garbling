@@ -1,27 +1,27 @@
 use std::collections::HashMap;
 
-use crate::circuitop::gate::BinaryGate;
+use crate::circuitop::gate::{BinaryGate, ID};
 use crate::config::errors::FileParsingError;
 
 /// Represents a binary circuit composed of various logic gates.
 /// This struct keeps track of gates, inputs, outputs, and metadata
 /// required for evaluation and is mainly used for garbling circuits.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct BinaryCircuit {
     /// A list of all gates in the circuit.
     pub gates: Vec<BinaryGate>,
 
     /// A number of inputs in the circuit.
-    pub num_inputs: usize,
+    pub num_inputs: u32,
 
     /// The list of gate IDs corresponding to the circuit's input wires.
-    pub input_gate_ids: Vec<Vec<usize>>,
+    pub input_gate_ids: Vec<Vec<ID>>,
 
     /// A list of gate IDs corresponding to the circuit's output wires.
-    pub output_gate_ids: Vec<usize>,
+    pub output_gate_ids: Vec<ID>,
 
     /// A list of gate IDs corresponding to constant values in the circuit.
-    pub constant_map: HashMap<u16, usize>,
+    pub constant_map: HashMap<u16, ID>,
 
     /// The number of non-free (i.e., AND) gates in the circuit.
     /// This is used to track the complexity of garbled circuit evaluation.
@@ -29,7 +29,7 @@ pub struct BinaryCircuit {
 
     /// The total number of wires used in the circuit.
     /// This includes inputs, outputs, and intermediate wires.
-    pub num_wires: usize,
+    pub num_wires: u32,
 }
 
 /// Implementation of the `BinaryCircuit` struct.
@@ -39,7 +39,7 @@ impl BinaryCircuit {
     ///
     /// The Bristol Fashion format is a standard plaintext representation of
     /// boolean circuits, commonly used in secure computation protocols.
-    /// More details can be found at:  
+    /// More details can be found at:
     /// <https://nigelsmart.github.io/MPC-Circuits/>
     ///
     /// # Arguments
@@ -51,73 +51,58 @@ impl BinaryCircuit {
     pub fn parse(file: &str) -> Result<Self, FileParsingError> {
         let mut reader = file.lines();
 
-        let mut num_gates: usize = 0;
-        let mut num_wires: usize = 0;
+        let (num_gates, num_wires) = reader
+            .next()
+            .map(|line1| line1.split_whitespace())
+            .and_then(|mut parts| {
+                let num_gates = parts.next().and_then(|s| s.parse().ok())?;
+                let num_wires = parts.next().and_then(|s| s.parse().ok())?;
 
-        if let Some(line1) = reader.next() {
-            let mut parts = line1.split(' ');
-            num_gates = parts.next().unwrap().parse()?;
-            num_wires = parts.next().unwrap().parse()?;
-        }
+                Some((num_gates, num_wires))
+            })
+            .ok_or(FileParsingError::InputNoParsingError)?;
 
         let mut output_circuit = Self::new(num_gates);
-        let mut input_sizes = Vec::new();
-        let mut num_outputs = 0;
 
-        if let Some(line1) = reader.next() {
-            let mut parts = line1.split(' ');
-            if let Some(n_input_wires_str) = parts.next() {
-                if let Ok(num_inp_wires) = n_input_wires_str.parse::<usize>() {
-                    for _ in 0..num_inp_wires {
-                        if let Some(num_iplen) = parts.next() {
-                            if let Ok(num_iplen) = num_iplen.parse::<usize>() {
-                                input_sizes.push(num_iplen);
-                            } else {
-                                return Err(FileParsingError::InputNoParsingError());
-                            }
-                        } else {
-                            return Err(FileParsingError::InputNoParsingError());
-                        }
-                    }
-                } else {
-                    return Err(FileParsingError::InputNoParsingError());
+        let input_sizes = reader
+            .next()
+            .map(|line| line.split_whitespace())
+            .and_then(|mut parts| {
+                let num_inp_wires = parts.next().and_then(|s| s.parse().ok())?;
+                let mut input_sizes = Vec::with_capacity(num_inp_wires);
+                for _ in 0..num_inp_wires {
+                    let num_iplen = parts.next().and_then(|s| s.parse().ok())?;
+                    input_sizes.push(num_iplen);
                 }
-            }
-        }
 
-        if let Some(line1) = reader.next() {
-            let mut parts = line1.split(' ');
-            if let Some(n_output_usizes_str) = parts.next() {
-                if let Ok(n_output_usizes) = n_output_usizes_str.parse::<usize>() {
-                    if n_output_usizes == 1 {
-                        if let Some(n_outputs) = parts.next() {
-                            if let Ok(n_output) = n_outputs.parse::<usize>() {
-                                num_outputs = n_output;
-                            }
-                        }
-                    } else {
-                        return Err(FileParsingError::OutputCountError());
-                    }
-                } else {
-                    return Err(FileParsingError::OutputNoParsingError());
-                }
-            }
-        }
+                Some(input_sizes)
+            })
+            .ok_or(FileParsingError::InputNoParsingError)?;
 
-        let mut id: usize = 0;
+        let num_outputs = reader
+            .next()
+            .map(|line| line.split_whitespace())
+            .and_then(|mut parts| {
+                let n_output_usizes: usize = parts.next().and_then(|s| s.parse().ok())?;
+
+                (n_output_usizes == 1)
+                    .then(|| parts.next().and_then(|s| s.parse().ok()))
+                    .flatten()
+            })
+            .ok_or(FileParsingError::InputNoParsingError)?;
 
         output_circuit.num_wires = num_wires;
 
         let mut totalcount = 0;
-        for (ipcnt, i) in input_sizes.iter().enumerate() {
+        for (ipcnt, &i) in input_sizes.iter().enumerate() {
             output_circuit.new_input();
-            for j in 0..*i {
+            for j in 0..i {
                 output_circuit.push_gate(BinaryGate::Input {
-                    no: ipcnt,
+                    no: ipcnt as u32,
                     id: j,
                     wire: totalcount,
                 });
-                output_circuit.push_nth_input(ipcnt, j);
+                output_circuit.push_nth_input(ipcnt as u32, j);
                 totalcount += 1;
             }
         }
@@ -126,56 +111,58 @@ impl BinaryCircuit {
             output_circuit.push_output_gate(num_wires - num_outputs + i)
         }
 
+        let mut id: u32 = 0;
+
         for i in 0..num_gates {
-            let num_input: usize;
-            let mut _num_output = 0;
-            let mut input0: usize = 0;
-            let mut input1: usize = 0;
-            let mut output: usize = 0;
-            let mut gate = String::new();
+            let gate = reader
+                .next()
+                .map(|line| line.split_whitespace())
+                .and_then(|mut parts| {
+                    let num_input: u32 = parts.next().and_then(|s| s.parse().ok())?;
+                    let _num_output: u32 = parts.next().and_then(|s| s.parse().ok())?;
+                    let input0 = parts.next().and_then(|s| s.parse().ok())?;
 
-            if let Some(line1) = reader.next() {
-                let mut parts = line1.split(' ');
-                if let Some(num_inputs_str) = parts.next() {
-                    if let Ok(parsed_num_input) = num_inputs_str.parse::<usize>() {
-                        num_input = parsed_num_input;
-                        _num_output = parts.next().unwrap().parse::<usize>()?;
-                        input0 = parts.next().unwrap().parse::<usize>()?;
-                        if num_input == 2 {
-                            input1 = parts.next().unwrap().parse::<usize>()?
-                        }
-                        output = parts.next().unwrap().parse::<usize>()?;
-                        if let Some(gate_str) = parts.next() {
-                            gate = gate_str.to_string();
-                        }
-                    }
-                }
-            }
+                    let input1 = if num_input == 2 {
+                        parts.next().and_then(|s| s.parse().ok())?
+                    } else {
+                        0
+                    };
 
-            if gate == "AND" {
-                output_circuit.push_gate(BinaryGate::And {
-                    xid: input0,
-                    yid: input1,
-                    id,
-                    out: output,
-                });
-                id += 1;
-                output_circuit.increment_nonfree_gates();
-            } else if gate == "XOR" {
-                output_circuit.push_gate(BinaryGate::Xor {
-                    xid: input0,
-                    yid: input1,
-                    out: output,
-                });
-            } else if gate == "INV" {
-                output_circuit.push_gate(BinaryGate::Inv {
-                    xid: input0,
-                    out: output,
-                });
-            } else {
-                return Err(FileParsingError::FileFormatError(i));
-            }
+                    let output = parts.next().and_then(|s| s.parse().ok())?;
+
+                    Some(match parts.next()? {
+                        "AND" => {
+                            let gate = BinaryGate::And {
+                                xid: input0,
+                                yid: input1,
+                                id,
+                                out: output,
+                            };
+                            id += 1;
+                            output_circuit.increment_nonfree_gates();
+
+                            gate
+                        }
+
+                        "XOR" => BinaryGate::Xor {
+                            xid: input0,
+                            yid: input1,
+                            out: output,
+                        },
+
+                        "INV" => BinaryGate::Inv {
+                            xid: input0,
+                            out: output,
+                        },
+
+                        _ => return None,
+                    })
+                })
+                .ok_or(FileParsingError::FileFormatError(i))?;
+
+            output_circuit.push_gate(gate);
         }
+
         Ok(output_circuit)
     }
 
@@ -211,7 +198,7 @@ impl BinaryCircuit {
     ///
     /// # Arguments
     /// * `output_gate_id` - The ID of the output gate.
-    pub fn push_output_gate(&mut self, output_gate_id: usize) {
+    pub fn push_output_gate(&mut self, output_gate_id: u32) {
         self.output_gate_ids.push(output_gate_id);
     }
 
@@ -219,7 +206,7 @@ impl BinaryCircuit {
     ///
     /// # Arguments
     /// * `constant_gate_id` - The ID of the constant gate.
-    pub fn push_constant_gate(&mut self, val: u16, constant_gate_id: usize) {
+    pub fn push_constant_gate(&mut self, val: u16, constant_gate_id: u32) {
         self.constant_map.insert(val, constant_gate_id);
     }
 
@@ -236,15 +223,15 @@ impl BinaryCircuit {
     ///
     /// # Arguments
     /// * `garbler_input_id` - The ID of the garbler input gate.
-    pub fn push_nth_input(&mut self, n: usize, input_id: usize) {
-        self.input_gate_ids[n].push(input_id);
+    pub fn push_nth_input(&mut self, n: u32, input_id: u32) {
+        self.input_gate_ids[n as usize].push(input_id);
     }
 
     /// Adds an input gate ID to the circuit.
     ///
     /// # Arguments
     /// * `garbler_input_id` - The ID of the garbler input gate.
-    pub fn push_nth_inputs(&mut self, n: usize, input_id: &[usize]) {
+    pub fn push_nth_inputs(&mut self, n: usize, input_id: &[u32]) {
         self.input_gate_ids[n].extend_from_slice(input_id);
     }
 
@@ -252,7 +239,7 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * A slice containing the IDs of all output gates in the circuit.
-    pub fn get_output_gate_ids(&self) -> &[usize] {
+    pub fn get_output_gate_ids(&self) -> &[ID] {
         &self.output_gate_ids
     }
 
@@ -260,7 +247,7 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * A slice containing the IDs of all n-th input gates.
-    pub fn get_nth_input_ids(&self, n: usize) -> &[usize] {
+    pub fn get_nth_input_ids(&self, n: usize) -> &[ID] {
         &self.input_gate_ids[n]
     }
 
@@ -268,7 +255,7 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * A slice containing the Vectors of IDs of all input gates.
-    pub fn get_input_ids(&self) -> &[Vec<usize>] {
+    pub fn get_input_ids(&self) -> &[Vec<ID>] {
         &self.input_gate_ids
     }
 
@@ -294,7 +281,7 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * The total count of garbler input gates.
-    pub fn num_inputs(&self) -> usize {
+    pub fn num_inputs(&self) -> u32 {
         self.num_inputs
     }
 
@@ -308,18 +295,22 @@ impl BinaryCircuit {
 
     /// Prints a textual representation of the circuit.
     pub fn print_circuit(&self) {
-        for gate in self.gates.iter() {
-            match *gate {
+        for gate in &self.gates {
+            match gate {
                 BinaryGate::Input { no, id, wire } => {
                     println!("Input: no: {} id: {} wire: {}", no, id, wire)
                 }
+
                 BinaryGate::Constant { val, wire: _ } => println!("Constantinput: val: {}", val),
+
                 BinaryGate::Inv { xid, out } => {
                     println!("InverseGate: inp: {} output: {}", xid, out)
                 }
+
                 BinaryGate::Xor { xid, yid, out } => {
                     println!("XorGate: inp1: {} inp2: {} output: {}", xid, yid, out)
                 }
+
                 BinaryGate::And {
                     xid,
                     yid,
@@ -328,6 +319,7 @@ impl BinaryCircuit {
                 } => println!("AndGate: inp1: {} inp2: {} output: {}", xid, yid, out),
             };
         }
+
         for i in self.get_output_gate_ids() {
             println!("output_gates: {}", *i);
         }

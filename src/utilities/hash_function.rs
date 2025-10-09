@@ -2,7 +2,6 @@ use aes::cipher::BlockEncrypt;
 use aes::Aes128;
 use aes_gcm::{aead::generic_array::GenericArray, KeyInit};
 
-use crate::config::util_errors::HashError;
 use crate::utilities::types::BLOCK_SIZE;
 
 use super::types::Block;
@@ -10,7 +9,7 @@ use super::utils::xor_blocks;
 
 /// Trait for any hash function which implements a secure hash function for
 /// garbled circuits.
-pub trait HashFunction: Clone {
+pub trait HashFunction {
     /// Initializes a hash function with a key.
     fn initialize(&mut self, key: Block);
 
@@ -26,11 +25,11 @@ pub trait HashFunction: Clone {
     fn tccr_hash(&self, x: &Block, i: &Block) -> Block;
 
     /// Returns a hash given an input `Block`.
-    fn get_hash(&self, input: &[u8]) -> Result<Block, HashError>;
+    fn get_hash(&self, input: &[u8]) -> Block;
 }
 
 /// Represents a structure of hash function based on AES-128 encryption.
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct AesHash {
     /// `Aes128` object used for hashing.
     key: Block,
@@ -104,8 +103,8 @@ impl HashFunction for AesHash {
     ///
     /// The function computes `H(x) ⊕ x`.
     fn cr_hash(&self, x: &Block) -> Block {
-        let hashval = self.get_hash(x).unwrap();
-        xor_blocks(hashval, x.to_owned())
+        let hashval = self.get_hash(x);
+        xor_blocks(&hashval, x)
     }
 
     /// Circular Correlation-robust hash function for 128-bit inputs (cf.
@@ -126,16 +125,15 @@ impl HashFunction for AesHash {
     ///
     /// The function computes `H(H(x) ⊕ i) ⊕ H(x)`.
     fn tccr_hash(&self, x: &Block, i: &Block) -> Block {
-        let hash1 = self.get_hash(x).unwrap();
-        let y = xor_blocks(hash1, i.to_owned());
-        let hash2 = self.get_hash(&y).unwrap();
-        xor_blocks(hash1, hash2)
+        let hash1 = self.get_hash(x);
+        let y = xor_blocks(&hash1, i);
+        let hash2 = self.get_hash(&y);
+        xor_blocks(&hash1, &hash2)
     }
 
     /// Implementation of the `get_hash` function for a `AesHash`.
-    fn get_hash(&self, input: &[u8]) -> Result<Block, HashError> {
-        let result = self.hash(input);
-        Ok(result)
+    fn get_hash(&self, input: &[u8]) -> Block {
+        self.hash(input)
     }
 
     /// Implementation of the `initialize` function for a `AesHash`.
@@ -166,8 +164,8 @@ mod tests {
         ];
         let function = AesHash::new(AES_KEY);
 
-        let output1 = function.get_hash(&input1).unwrap();
-        let output2 = function.get_hash(&input2).unwrap();
+        let output1 = function.get_hash(&input1);
+        let output2 = function.get_hash(&input2);
 
         println!("o1 {:?}\n\no2{:?}", output1, output2);
 
