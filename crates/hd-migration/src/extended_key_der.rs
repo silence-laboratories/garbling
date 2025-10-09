@@ -1,9 +1,12 @@
-use derivation_path::DerivationPath;
+use derivation_path::{ChildIndex, DerivationPath};
 use garbled_circuit::{
     functionality::{
-        circuit_eval::yao_circuit_eval_functionality, input::run_batch_input_from_all_yao,
-        output::output_yao_functionality, setup::setup_yao_functionality,
-        utils::run_common_randomness, utils_dep::TagOffsetCounter,
+        circuit_eval::yao_circuit_eval_functionality,
+        input::run_batch_input_from_all_yao,
+        output::{batch_output_yao_functionality, output_yao_functionality},
+        setup::setup_yao_functionality,
+        utils::run_common_randomness,
+        utils_dep::TagOffsetCounter,
     },
     utilities::{
         commitments::{Commitment, HashCommitment},
@@ -19,10 +22,10 @@ use sl_messages::relay::Relay;
 
 use crate::{
     circuits::build_child_key_der_hmac_round1_circuit,
-    derive_child_key::run_derive_child_key,
+    derive_child_key::{run_batch_derive_child_key, run_derive_child_key},
     shamir_to_rss::run_shamir_to_scalar_rss,
-    types::{HardDerivationError, PrivKeyShareBip, PrivKeyShareDkg, ProtocolParticipant},
-    utils::bytes_to_bits_le,
+    types::{HardDerivationError, PrivKeyShareBip, ProtocolParticipant},
+    utils::{bool_vec_to_u8_vec, bytes_to_bits_le},
     yao_to_rss::run_yao_to_scalar_rss_keypair,
 };
 
@@ -114,9 +117,8 @@ where
 
     let ver = ops[0].clone();
     let par_sk_yao = ops[1..257].to_vec();
-    let par_chain_yao = ops[257..513].to_vec();
-    let mut child_sk_yao = ops[513..513 + 256].to_vec();
-    let child_chain_yao = ops[513 + 256..].to_vec();
+    let mut child_sk_yao = ops[257..513].to_vec();
+    let child_chain_yao = ops[513..].to_vec();
 
     let verification = output_yao_functionality(setup, tag_offset_counter, relay, &ver).await?;
 
@@ -125,7 +127,7 @@ where
     // set the input for child key derivation
     let parent = PrivKeyShareBip {
         yao_share: par_sk_yao.try_into().expect("Conversion failed"),
-        chain_share: par_chain_yao.try_into().expect("Conversion failed"),
+        chain_code,
         key_share: scalar_rss_privkey,
         pubkey: public_key,
     };
@@ -133,11 +135,16 @@ where
     let scalar_rss_child =
         run_yao_to_scalar_rss_keypair(setup, relay, tag_offset_counter, &child_sk_yao, rng).await?;
 
+    let child_cc_pub =
+        batch_output_yao_functionality(setup, tag_offset_counter, relay, &child_chain_yao).await?;
+
+    let child_cc = bool_vec_to_u8_vec(child_cc_pub);
+
     child_sk_yao.reverse();
 
     let child = PrivKeyShareBip {
         yao_share: child_sk_yao.try_into().expect("Conversion failed"),
-        chain_share: child_chain_yao.try_into().expect("Conversion failed"),
+        chain_code: child_cc.try_into().expect("Conversion failed"),
         key_share: scalar_rss_child.keyshare,
         pubkey: scalar_rss_child.pubkey,
     };
@@ -153,7 +160,7 @@ pub async fn run_extended_key_derivation<S, R>(
     chain_code: [u8; 32],
     public_key: ProjectivePoint,
     relay: R,
-) -> Result<Vec<PrivKeyShareDkg<ProjectivePoint>>, HardDerivationError>
+) -> Result<Vec<PrivKeyShareBip>, HardDerivationError>
 where
     S: ProtocolParticipant,
     R: Relay,
@@ -187,7 +194,7 @@ where
         }
     };
 
-    let (pa, ch) = run_extended_key_derivation_round1(
+    let (_, ch) = run_extended_key_derivation_round1(
         &setup,
         &mut relay,
         &mut tag_offset_counter,
@@ -204,19 +211,14 @@ where
     )
     .await?;
 
-    let mut output = vec![PrivKeyShareDkg {
-        keyshare: ch.key_share,
-        pubkey: ch.pubkey,
-    }];
-
-    let mut temp = vec![pa, ch];
+    let mut output = vec![ch];
 
     for (cnt, i) in derivation_path.path().iter().skip(1).enumerate() {
         let child_key = run_derive_child_key(
             &setup,
             &mut relay,
             &mut tag_offset_counter,
-            &temp[cnt + 1],
+            &output[cnt],
             i,
             &yao_setup,
             rng.as_mut(),
@@ -224,17 +226,107 @@ where
         )
         .await?;
 
-        output.push(PrivKeyShareDkg {
-            keyshare: child_key.key_share,
-            pubkey: child_key.pubkey,
-        });
-
-        temp.push(child_key);
+        output.push(child_key);
     }
 
     Ok(output)
 }
 
+#[allow(clippy::too_many_arguments)]
+pub async fn run_extended_key_derivation_multiple_children<S, R>(
+    setup: S,
+    share: Scalar,
+    evaluation_points: Vec<NonZeroScalar>,
+    derivation_path: DerivationPath,
+    children: Vec<ChildIndex>,
+    chain_code: [u8; 32],
+    public_key: ProjectivePoint,
+    relay: R,
+) -> Result<Vec<PrivKeyShareBip>, HardDerivationError>
+where
+    S: ProtocolParticipant,
+    R: Relay,
+{
+    let mut tag_offset_counter = TagOffsetCounter::new();
+
+    let mut relay = relay;
+
+    let mut rng = StdRng::from_entropy();
+    let mut seed = [0u8; 32];
+    rng.fill_bytes(&mut seed);
+
+    // run setup for serverstate
+    let mut randomness = run_common_randomness(&setup, &seed, &mut relay).await?;
+
+    // run setup for yao protocols
+    let yao_setup = setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
+
+    let (mut rng, hash, comm) = match &yao_setup {
+        YaoSetup::E(e) => {
+            let hash = AesHash::new(e.comm_crs);
+            let comm = HashCommitment::new(hash);
+            (None, hash, comm)
+        }
+
+        YaoSetup::G(g) => {
+            let hash = AesHash::new(g.comm_crs);
+            let comm = HashCommitment::new(hash);
+            let r = ChaCha8Rng::from_seed(g.prf_key);
+            (Some(r), hash, comm)
+        }
+    };
+
+    let (_, ch) = run_extended_key_derivation_round1(
+        &setup,
+        &mut relay,
+        &mut tag_offset_counter,
+        share,
+        evaluation_points.clone(),
+        derivation_path.clone(),
+        chain_code,
+        public_key,
+        &mut randomness,
+        &yao_setup,
+        rng.as_mut(),
+        &comm,
+        &hash,
+    )
+    .await?;
+
+    let mut temp = vec![ch];
+
+    for (cnt, i) in derivation_path.path()[1..].iter().enumerate() {
+        let child_key = run_derive_child_key(
+            &setup,
+            &mut relay,
+            &mut tag_offset_counter,
+            &temp[cnt],
+            i,
+            &yao_setup,
+            rng.as_mut(),
+            &hash,
+        )
+        .await?;
+
+        temp.push(child_key);
+    }
+
+    let par = vec![&temp[temp.len() - 1]; children.len()];
+
+    let children = run_batch_derive_child_key(
+        &setup,
+        &mut relay,
+        &mut tag_offset_counter,
+        &par,
+        &children,
+        &yao_setup,
+        rng.as_mut(),
+        &hash,
+    )
+    .await?;
+
+    Ok(children)
+}
 #[cfg(test)]
 mod tests {
 
@@ -250,7 +342,9 @@ mod tests {
     use rand::{RngCore, SeedableRng};
     use sl_messages::relay::SimpleMessageRelay;
 
-    use crate::extended_key_der::run_extended_key_derivation;
+    use crate::extended_key_der::{
+        run_extended_key_derivation, run_extended_key_derivation_multiple_children,
+    };
     use crate::utils::{get_evaluation, run_init};
 
     #[allow(clippy::too_many_arguments)]
@@ -380,9 +474,9 @@ mod tests {
             let (is, icc) = get_ideal_output(&cc, &pk, path[i], sk);
             let ip = ProjectivePoint::GENERATOR * is;
 
-            let reals = shares[0][i].keyshare.next_share
-                + shares[1][i].keyshare.next_share
-                + shares[2][i].keyshare.next_share;
+            let reals = shares[0][i].key_share.next_share
+                + shares[1][i].key_share.next_share
+                + shares[2][i].key_share.next_share;
 
             let realp = ProjectivePoint::GENERATOR * reals;
 
@@ -391,5 +485,77 @@ mod tests {
 
             t.push((icc.try_into().expect("Conversion failed"), is, ip));
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_hard_derivation_import_multiple_children() {
+        let (s1, s2, s3, s, chaincode, pubkey, evaluation_points) = generate_random_input();
+
+        let derivation_path = DerivationPath::from_str("m/44'/60'/0'/0").unwrap();
+
+        let mut children = Vec::new();
+        for i in 1..4 {
+            let child_node = ChildIndex::Normal(i);
+            children.push(child_node);
+        }
+
+        let shares = [s1, s2, s3];
+
+        let mut parties = tokio::task::JoinSet::new();
+        let coord = SimpleMessageRelay::new();
+        let mut i = 0;
+        #[allow(clippy::explicit_counter_loop)]
+        for (setup, _) in run_init(None) {
+            let relay = coord.connect();
+            parties.spawn(run_extended_key_derivation_multiple_children(
+                setup,
+                shares[i],
+                evaluation_points.to_vec(),
+                derivation_path.clone(),
+                children.clone(),
+                chaincode,
+                pubkey,
+                relay,
+            ));
+            i += 1;
+        }
+
+        let mut shares = vec![];
+
+        while let Some(fini) = parties.join_next().await {
+            if let Err(ref err) = fini {
+                println!("error {err:?}");
+            } else {
+                match fini.unwrap() {
+                    Err(err) => panic!("err {:?}", err),
+                    Ok(share) => shares.push(share),
+                }
+            }
+        }
+
+        let mut t = vec![(chaincode, s, pubkey)];
+        let path = derivation_path.path();
+
+        for i in 0..path.len() {
+            let (cc, sk, pk) = t[i];
+            let (is, icc) = get_ideal_output(&cc, &pk, path[i], sk);
+            let ip = ProjectivePoint::GENERATOR * is;
+            t.push((icc.try_into().expect("Conversion failed"), is, ip));
+        }
+
+        let (cc, sk, pk) = t[t.len() - 1];
+
+        (0..children.len()).for_each(|i| {
+            let (is, _) = get_ideal_output(&cc, &pk, children[i], sk);
+
+            let reals = shares[0][i].key_share.next_share
+                + shares[1][i].key_share.next_share
+                + shares[2][i].key_share.next_share;
+
+            let realp = ProjectivePoint::GENERATOR * reals;
+
+            assert_eq!(realp, shares[0][i].pubkey);
+            assert_eq!(reals, is);
+        });
     }
 }

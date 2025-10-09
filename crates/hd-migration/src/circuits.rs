@@ -1,12 +1,12 @@
 use derivation_path::ChildIndex;
-use k256::{
-    ProjectivePoint, U256,
-    elliptic_curve::{bigint::Encoding, sec1::ToEncodedPoint},
-};
-
 use garbled_circuit::{
     circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder},
     config::constants::SHA512_CIRCUIT,
+};
+use hmac::{Hmac, Mac};
+use k256::{
+    ProjectivePoint, U256,
+    elliptic_curve::{bigint::Encoding, sec1::ToEncodedPoint},
 };
 use sl_compute_common::BinaryString;
 
@@ -45,46 +45,55 @@ pub fn build_child_key_der_hmac_round1_circuit(
         builder.output(res3_ids[i]);
     });
 
-    let chain = u8_vec_to_bool_vec(chain_code.to_vec());
-    let mut chain_par_ids = Vec::new();
-    for i in chain {
-        let val = if i { 1 } else { 0 };
-        chain_par_ids.push(builder.constant(val));
-    }
-    for i in chain_par_ids.iter() {
-        builder.output(*i);
-    }
     let key_par_ids = res3_ids;
 
     let mut data_ids = Vec::new();
     // key = chain_par
 
-    if index_child.is_hardened() {
+    let mut hmac_outputs = if index_child.is_hardened() {
         // Hardened child
         // data = 0x00 || privkey_par || index (all in big endian)
+
+        let chain = u8_vec_to_bool_vec(chain_code.to_vec());
+        let mut chain_par_ids = Vec::new();
+        for i in chain {
+            let val = if i { 1 } else { 0 };
+            chain_par_ids.push(builder.constant(val));
+        }
+
         for _ in 0..8 {
             data_ids.push(builder.constant(0));
         }
         data_ids.extend_from_slice(&key_par_ids);
+
+        let index_be = index_child.to_bits().to_be_bytes();
+        let index_bool = u8_vec_to_bool_vec(index_be.to_vec());
+        let mut index_ids = Vec::new();
+        for i in index_bool {
+            index_ids.push(builder.constant(if i { 1 } else { 0 }));
+        }
+        data_ids.extend_from_slice(&index_ids);
+
+        let hmac_circuit = build_hmac_512_circuit(chain_par_ids.len(), data_ids.len());
+        builder.add_circuit(&hmac_circuit, &[&chain_par_ids, &data_ids])
     } else {
         // Normal child
         // data = pubkey_par || index (all in big endian)
-        let pubkey_bytes = public_key_par.to_encoded_point(true).as_bytes().to_vec();
-        let pubkey_bool = u8_vec_to_bool_vec(pubkey_bytes);
-        for i in pubkey_bool {
-            data_ids.push(builder.constant(if i { 1 } else { 0 }));
-        }
-    }
-    let index_be = index_child.to_bits().to_be_bytes();
-    let index_bool = u8_vec_to_bool_vec(index_be.to_vec());
-    let mut index_ids = Vec::new();
-    for i in index_bool {
-        index_ids.push(builder.constant(if i { 1 } else { 0 }));
-    }
-    data_ids.extend_from_slice(&index_ids);
+        let mut hmac_hasher = Hmac::<sha2::Sha512>::new_from_slice(&chain_code).unwrap();
 
-    let hmac_circuit = build_hmac_512_circuit(chain_par_ids.len(), data_ids.len());
-    let mut hmac_outputs = builder.add_circuit(&hmac_circuit, &[&chain_par_ids, &data_ids]);
+        hmac_hasher.update(public_key_par.to_encoded_point(true).as_bytes());
+
+        hmac_hasher.update(&index_child.to_bits().to_be_bytes());
+        let hashout = hmac_hasher.finalize().into_bytes();
+        let hashoutbool = u8_vec_to_bool_vec(hashout.to_vec());
+        hashoutbool
+            .iter()
+            .map(|v| {
+                let val = if *v { 1 } else { 0 };
+                builder.constant(val)
+            })
+            .collect()
+    };
 
     let mut left = hmac_outputs[..256].to_vec();
     left.reverse();
@@ -119,40 +128,58 @@ pub fn build_child_key_der_hmac_round1_circuit(
 pub fn build_child_key_der_hmac_circuit(
     public_key_par: &ProjectivePoint,
     index_child: &ChildIndex,
+    chain_code: [u8; 32],
 ) -> garbled_circuit::circuitop::circuit::BinaryCircuit {
     let mut builder = CircuitBuilder::new();
     let key_par_ids = builder.new_inputs(256);
-    let chain_par_ids = builder.new_inputs(256);
 
     let mut data_ids = Vec::new();
     // key = chain_par
 
-    if index_child.is_hardened() {
+    let mut hmac_outputs = if index_child.is_hardened() {
         // Hardened child
         // data = 0x00 || privkey_par || index (all in big endian)
+
+        let chain = u8_vec_to_bool_vec(chain_code.to_vec());
+        let mut chain_par_ids = Vec::new();
+        for i in chain {
+            let val = if i { 1 } else { 0 };
+            chain_par_ids.push(builder.constant(val));
+        }
+
         for _ in 0..8 {
             data_ids.push(builder.constant(0));
         }
         data_ids.extend_from_slice(&key_par_ids);
+
+        let index_be = index_child.to_bits().to_be_bytes();
+        let index_bool = u8_vec_to_bool_vec(index_be.to_vec());
+        let mut index_ids = Vec::new();
+        for i in index_bool {
+            index_ids.push(builder.constant(if i { 1 } else { 0 }));
+        }
+        data_ids.extend_from_slice(&index_ids);
+
+        let hmac_circuit = build_hmac_512_circuit(chain_par_ids.len(), data_ids.len());
+        builder.add_circuit(&hmac_circuit, &[&chain_par_ids, &data_ids])
     } else {
         // Normal child
         // data = pubkey_par || index (all in big endian)
-        let pubkey_bytes = public_key_par.to_encoded_point(true).as_bytes().to_vec();
-        let pubkey_bool = u8_vec_to_bool_vec(pubkey_bytes);
-        for i in pubkey_bool {
-            data_ids.push(builder.constant(if i { 1 } else { 0 }));
-        }
-    }
-    let index_be = index_child.to_bits().to_be_bytes();
-    let index_bool = u8_vec_to_bool_vec(index_be.to_vec());
-    let mut index_ids = Vec::new();
-    for i in index_bool {
-        index_ids.push(builder.constant(if i { 1 } else { 0 }));
-    }
-    data_ids.extend_from_slice(&index_ids);
+        let mut hmac_hasher = Hmac::<sha2::Sha512>::new_from_slice(&chain_code).unwrap();
 
-    let hmac_circuit = build_hmac_512_circuit(chain_par_ids.len(), data_ids.len());
-    let mut hmac_outputs = builder.add_circuit(&hmac_circuit, &[&chain_par_ids, &data_ids]);
+        hmac_hasher.update(public_key_par.to_encoded_point(true).as_bytes());
+
+        hmac_hasher.update(&index_child.to_bits().to_be_bytes());
+        let hashout = hmac_hasher.finalize().into_bytes();
+        let hashoutbool = u8_vec_to_bool_vec(hashout.to_vec());
+        hashoutbool
+            .iter()
+            .map(|v| {
+                let val = if *v { 1 } else { 0 };
+                builder.constant(val)
+            })
+            .collect()
+    };
 
     let mut left = hmac_outputs[..256].to_vec();
     left.reverse();

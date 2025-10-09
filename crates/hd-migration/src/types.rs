@@ -171,7 +171,7 @@ pub struct PrivKeyShareBip {
     pub yao_share: [YaoShare; 256],
 
     /// Yao shares of binary representation of the chain code
-    pub chain_share: [YaoShare; 256],
+    pub chain_code: [u8; 32],
 
     /// RSS shares of the private key
     pub key_share: PrivKeyShare<ProjectivePoint>,

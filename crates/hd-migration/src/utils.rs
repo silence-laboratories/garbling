@@ -14,6 +14,26 @@ pub fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
     output
 }
 
+/// Converts a vector of `bool` values to a vector of `u8` values
+pub fn bool_vec_to_u8_vec(vec_bool: Vec<bool>) -> Vec<u8> {
+    assert!(
+        vec_bool.len() % 8 == 0,
+        "Length of bool vec must be multiple of 8"
+    );
+
+    let mut output = Vec::with_capacity(vec_bool.len() / 8);
+    for chunk in vec_bool.chunks(8) {
+        let mut byte = 0u8;
+        for (i, &bit) in chunk.iter().enumerate() {
+            if bit {
+                byte |= 1 << (7 - i); // MSB-first
+            }
+        }
+        output.push(byte);
+    }
+    output
+}
+
 /// Converts a vector of bytes to a vector of bool values in little endian
 pub fn bytes_to_bits_le(bytes: &[u8]) -> Vec<bool> {
     let mut bits = Vec::with_capacity(bytes.len() * 8);
