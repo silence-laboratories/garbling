@@ -1,9 +1,12 @@
 use derivation_path::DerivationPath;
 use garbled_circuit::{
     functionality::{
-        circuit_eval::yao_circuit_eval_functionality, input::run_batch_input_from_all_yao,
-        output::output_yao_functionality, setup::setup_yao_functionality,
-        utils::run_common_randomness, utils_dep::TagOffsetCounter,
+        circuit_eval::yao_circuit_eval_functionality,
+        input::run_batch_input_from_all_yao,
+        output::{batch_output_yao_functionality, output_yao_functionality},
+        setup::setup_yao_functionality,
+        utils::run_common_randomness,
+        utils_dep::TagOffsetCounter,
     },
     utilities::{
         commitments::{Commitment, HashCommitment},
@@ -22,7 +25,7 @@ use crate::{
     derive_child_key::run_derive_child_key,
     shamir_to_rss::run_shamir_to_scalar_rss,
     types::{HardDerivationError, PrivKeyShareBip, PrivKeyShareDkg, ProtocolParticipant},
-    utils::bytes_to_bits_le,
+    utils::{bool_vec_to_u8_vec, bytes_to_bits_le},
     yao_to_rss::run_yao_to_scalar_rss_keypair,
 };
 
@@ -114,9 +117,8 @@ where
 
     let ver = ops[0].clone();
     let par_sk_yao = ops[1..257].to_vec();
-    let par_chain_yao = ops[257..513].to_vec();
-    let mut child_sk_yao = ops[513..513 + 256].to_vec();
-    let child_chain_yao = ops[513 + 256..].to_vec();
+    let mut child_sk_yao = ops[257..513].to_vec();
+    let child_chain_yao = ops[513..].to_vec();
 
     let verification = output_yao_functionality(setup, tag_offset_counter, relay, &ver).await?;
 
@@ -125,7 +127,7 @@ where
     // set the input for child key derivation
     let parent = PrivKeyShareBip {
         yao_share: par_sk_yao.try_into().expect("Conversion failed"),
-        chain_share: par_chain_yao.try_into().expect("Conversion failed"),
+        chain_code,
         key_share: scalar_rss_privkey,
         pubkey: public_key,
     };
@@ -133,11 +135,16 @@ where
     let scalar_rss_child =
         run_yao_to_scalar_rss_keypair(setup, relay, tag_offset_counter, &child_sk_yao, rng).await?;
 
+    let child_cc_pub =
+        batch_output_yao_functionality(setup, tag_offset_counter, relay, &child_chain_yao).await?;
+
+    let child_cc = bool_vec_to_u8_vec(child_cc_pub);
+
     child_sk_yao.reverse();
 
     let child = PrivKeyShareBip {
         yao_share: child_sk_yao.try_into().expect("Conversion failed"),
-        chain_share: child_chain_yao.try_into().expect("Conversion failed"),
+        chain_code: child_cc.try_into().expect("Conversion failed"),
         key_share: scalar_rss_child.keyshare,
         pubkey: scalar_rss_child.pubkey,
     };
