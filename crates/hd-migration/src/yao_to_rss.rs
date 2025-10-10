@@ -5,10 +5,13 @@ use garbled_circuit::{
     },
     utilities::types::{YaoEvaluatorShare, YaoGarblerShare, YaoShare},
 };
-use k256::elliptic_curve::PrimeField;
 use k256::{
     AffinePoint, EncodedPoint, FieldBytes, ProjectivePoint, Scalar,
-    elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint},
+    elliptic_curve::{
+        PrimeField,
+        group::GroupEncoding,
+        sec1::{FromEncodedPoint, ToEncodedPoint},
+    },
 };
 use rand::{CryptoRng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -32,6 +35,13 @@ pub struct YaoToScalarRssKeypairMsg1 {
     delta_0: Scalar,
 }
 
+fn decode_point(bytes: &[u8]) -> Option<ProjectivePoint> {
+    let mut repr = <ProjectivePoint as GroupEncoding>::Repr::default();
+    AsMut::<[u8]>::as_mut(&mut repr).copy_from_slice(bytes);
+
+    ProjectivePoint::from_bytes(&repr).into()
+}
+
 impl Wrap for YaoToScalarRssKeypairMsg1 {
     fn external_size(&self) -> usize {
         self.cvec.len() * 32 + self.cvec.len() * 32 + 32 + 32
@@ -50,11 +60,9 @@ impl Wrap for YaoToScalarRssKeypairMsg1 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        let cveclen = buffer
-            .len()
-            .is_multiple_of(64)
-            .then(|| buffer.len() / 32)
-            .filter(|&len| len > 2)
+        let cveclen = Some(buffer.len())
+            .filter(|&len| len > 64 && len % 64 == 0)
+            .map(|len| len / 32)
             .map(|len| (len - 2) / 2)?;
 
         fn svec(b: &[u8], count: usize) -> Option<(&[u8], Vec<Scalar>)> {
@@ -111,9 +119,13 @@ pub struct YaoToScalarRssKeypairMsg2 {
     skip2_tilde: Scalar,
 }
 
+impl FixedExternalSize for YaoToScalarRssKeypairMsg2 {
+    const SIZE: usize = 32 * 2 + 33 * 2;
+}
+
 impl Wrap for YaoToScalarRssKeypairMsg2 {
     fn external_size(&self) -> usize {
-        32 * 2 + 33 * 2
+        Self::SIZE
     }
 
     fn write(&self, buffer: &mut [u8]) {
@@ -124,17 +136,12 @@ impl Wrap for YaoToScalarRssKeypairMsg2 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        let encoded = EncodedPoint::from_bytes(buffer[0..33].as_ref()).unwrap();
-        let affine = AffinePoint::from_encoded_point(&encoded).unwrap();
-        let pk_tilde = ProjectivePoint::from(affine);
+        let pk_tilde = decode_point(&buffer[0..33])?;
+        let pk_tilde_star = decode_point(&buffer[33..66])?;
 
-        let encoded = EncodedPoint::from_bytes(buffer[33..66].as_ref()).unwrap();
-        let affine = AffinePoint::from_encoded_point(&encoded).unwrap();
-        let pk_tilde_star = ProjectivePoint::from(affine);
+        let ski_tilde = ScalarVal::read(&buffer[66..98])?.0;
+        let skip2_tilde = ScalarVal::read(&buffer[98..130])?.0;
 
-        let ski_tilde = k256::Scalar::from_repr(*FieldBytes::from_slice(&buffer[66..98])).unwrap();
-        let skip2_tilde =
-            k256::Scalar::from_repr(*FieldBytes::from_slice(&buffer[98..130])).unwrap();
         Some(Self {
             pk_tilde,
             pk_tilde_star,
@@ -142,10 +149,6 @@ impl Wrap for YaoToScalarRssKeypairMsg2 {
             skip2_tilde,
         })
     }
-}
-
-impl FixedExternalSize for YaoToScalarRssKeypairMsg2 {
-    const SIZE: usize = 130;
 }
 
 /// State2 for Yao to Scalar RSS key pair protocol for evaluator
@@ -178,15 +181,12 @@ impl Wrap for YaoToScalarRssKeypairMsg3p3 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        let encoded = EncodedPoint::from_bytes(buffer[0..33].as_ref()).unwrap();
-        let affine = AffinePoint::from_encoded_point(&encoded).unwrap();
-        let pki_tilde = ProjectivePoint::from(affine);
+        let pki_tilde = decode_point(&buffer[0..33])?;
 
-        let encoded = EncodedPoint::from_bytes(buffer[33..66].as_ref()).unwrap();
-        let affine = AffinePoint::from_encoded_point(&encoded).unwrap();
-        let pkip2_tilde = ProjectivePoint::from(affine);
+        let pkip2_tilde = decode_point(&buffer[33..66])?;
 
-        let alpha = k256::Scalar::from_repr(*FieldBytes::from_slice(&buffer[66..98])).unwrap();
+        let alpha = ScalarVal::read(&buffer[66..98])?.0;
+
         Some(Self {
             pki_tilde,
             pkip2_tilde,
@@ -217,13 +217,14 @@ impl Wrap for YaoToScalarRssKeypairMsg3p12 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        let encoded = EncodedPoint::from_bytes(buffer[0..33].as_ref()).unwrap();
+        let encoded = EncodedPoint::from_bytes(&buffer[0..33]).ok()?;
         let affine = AffinePoint::from_encoded_point(&encoded).unwrap();
         let pki_tilde = ProjectivePoint::from(affine);
 
-        let encoded = EncodedPoint::from_bytes(buffer[33..66].as_ref()).unwrap();
-        let affine = AffinePoint::from_encoded_point(&encoded).unwrap();
+        let encoded = EncodedPoint::from_bytes(&buffer[33..66]).ok()?;
+        let affine = AffinePoint::from_encoded_point(&encoded).into_option()?;
         let pkip2_tilde = ProjectivePoint::from(affine);
+
         Some(Self {
             pki_tilde,
             pkip2_tilde,
@@ -897,9 +898,10 @@ where
             } else {
                 get_private_key_shares_dkg_process_msg3_p12(&msg3_01s[i], &msg3_2s[i], &state3s[i]);
             }
-            let pk = get_private_key_shares_dkg_create_msg4_p12(&state3s[i], &state1s[i]);
 
+            let pk = get_private_key_shares_dkg_create_msg4_p12(&state3s[i], &state1s[i]);
             pk_ors.push(pk);
+
             pks.push(
                 pk.to_encoded_point(true)
                     .as_bytes()
@@ -925,6 +927,7 @@ where
         Ok(output)
     }
 }
+
 #[cfg(test)]
 mod tests {
     use garbled_circuit::{
@@ -968,7 +971,7 @@ mod tests {
         let (mut rng, _, _) = match &yao_setup {
             YaoSetup::E(e) => {
                 let hash = AesHash::new(e.comm_crs);
-                let comm = HashCommitment::new(hash.clone());
+                let comm = HashCommitment::new(hash);
                 (None, hash, comm)
             }
             YaoSetup::G(g) => {
@@ -1020,7 +1023,7 @@ mod tests {
         let (mut rng, _, _) = match &yao_setup {
             YaoSetup::E(e) => {
                 let hash = AesHash::new(e.comm_crs);
-                let comm = HashCommitment::new(hash.clone());
+                let comm = HashCommitment::new(hash);
                 (None, hash, comm)
             }
             YaoSetup::G(g) => {

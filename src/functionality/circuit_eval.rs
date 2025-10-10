@@ -203,9 +203,9 @@ where
     let mut output = Vec::new();
 
     match yao_setup {
-        YaoSetup::E(_e) => match circuits {
-            &MapArg::Scalar(circuit) => match inputs {
-                &MapArg::Scalar(input) => {
+        YaoSetup::E(_e) => match *circuits {
+            MapArg::Scalar(circuit) => match *inputs {
+                MapArg::Scalar(input) => {
                     let hashes: Vec<[u8; 32]> =
                         receive_from_parties(setup, tag2, &[0], relay).await?;
 
@@ -226,7 +226,7 @@ where
                     output.push(temp);
                 }
 
-                &MapArg::Vector(input) => {
+                MapArg::Vector(input) => {
                     let hashes: Vec<[u8; 32]> =
                         receive_from_parties(setup, tag2, &[0], relay).await?;
 
@@ -249,14 +249,14 @@ where
                     let mut temp = Vec::new();
                     (0..input.len()).for_each(|i| {
                         let f = fs[0][complen * i..complen * (i + 1)].to_vec();
-                        let out = yao_circuit_eval_process_msg1_p2(&input[i], &f, circuit, hash);
+                        let out = yao_circuit_eval_process_msg1_p2(input[i], &f, circuit, hash);
                         temp.push(out);
                     });
                     output = temp;
                 }
             },
 
-            &MapArg::Vector(circuits) => match inputs {
+            MapArg::Vector(circuits) => match inputs {
                 MapArg::Scalar(input) => {
                     let hashes: Vec<[u8; 32]> =
                         receive_from_parties(setup, tag2, &[0], relay).await?;
@@ -568,8 +568,10 @@ mod tests {
                 &yao_setup,
             )
             .await?;
+
             let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
             assert!(cor);
+
             inputs[0].push(out);
         }
 
@@ -601,8 +603,10 @@ mod tests {
                 )
                 .await?
             };
+
             let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
             assert!(cor);
+
             inputs[0].push(out);
         }
 
@@ -637,6 +641,7 @@ mod tests {
 
             let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
             assert!(cor);
+
             inputs[0].push(out);
         }
 
@@ -671,6 +676,7 @@ mod tests {
 
             let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
             assert!(cor);
+
             inputs[0].push(out);
         }
 
@@ -1115,11 +1121,12 @@ mod tests {
                 &setup,
                 &mut tag_offset_counter,
                 &mut relay,
-                out_sh.get(&i).unwrap(),
+                out_sh.get(i).unwrap(),
             )
             .await?;
+
             assert!(cor);
-            shares.push(out_sh.get(&i).unwrap().clone());
+            shares.push(out_sh.get(i).unwrap().clone());
         }
 
         let op =

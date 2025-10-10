@@ -28,13 +28,13 @@ where
     let mut f: Vec<Block> = vec![];
 
     for (i, gate) in circuit.gates.iter().enumerate() {
-        let (out_gate, f_label) = match gate {
-            &BinaryGate::Input { no, id, wire } => {
+        let (out_gate, f_label) = match *gate {
+            BinaryGate::Input { no, id, wire } => {
                 let share = input_shares[no as usize][id as usize].as_garbler();
                 (wire, share.f_label)
             }
 
-            &BinaryGate::Constant { val, wire } => {
+            BinaryGate::Constant { val, wire } => {
                 let mut zerowire = Block::default();
                 rng.fill_bytes(&mut zerowire);
                 zerowire[0] |= 1;
@@ -46,13 +46,13 @@ where
                 (wire, zerowire)
             }
 
-            &BinaryGate::Xor { xid, yid, out } => {
+            BinaryGate::Xor { xid, yid, out } => {
                 let x_label = &w[xid as usize];
                 let y_label = &w[yid as usize];
                 (out, xor_blocks(x_label, y_label))
             }
 
-            &BinaryGate::And {
+            BinaryGate::And {
                 xid,
                 yid,
                 id: _,
@@ -98,7 +98,7 @@ where
                 (out, w_out)
             }
 
-            &BinaryGate::Inv { xid, out } => {
+            BinaryGate::Inv { xid, out } => {
                 let x_label = &w[xid as usize];
                 (out, xor_blocks(x_label, &setup.delta))
             }
@@ -176,7 +176,7 @@ mod tests {
         println!("cir: constant_map.len() {}", circuit.constant_map.len());
         println!(
             "cir: 2*constant_map.len() + num_nonfree_gates {}",
-            2 * nonfree as usize + circuit.constant_map.len()
+            2 * nonfree + circuit.constant_map.len()
         );
 
         println!("f {}\n\n\n\n\n\n\n", f.len());

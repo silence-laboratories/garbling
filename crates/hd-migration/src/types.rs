@@ -174,7 +174,7 @@ pub struct PrivKeyShareBip {
     pub chain_code: [u8; 32],
 
     /// RSS shares of the private key
-    pub key_share: PrivKeyShare<ProjectivePoint>,
+    pub keyshare: PrivKeyShare<ProjectivePoint>,
 
     /// The public key corresponding to the private key
     pub pubkey: ProjectivePoint,

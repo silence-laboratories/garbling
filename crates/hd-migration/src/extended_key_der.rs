@@ -37,7 +37,7 @@ pub async fn run_extended_key_derivation_round1<S, R, G, H, C>(
     tag_offset_counter: &mut TagOffsetCounter,
     share: Scalar,
     evaluation_points: Vec<NonZeroScalar>,
-    derivation_path: DerivationPath,
+    derivation_path: &DerivationPath,
     chain_code: [u8; 32],
     public_key: ProjectivePoint,
     randomness: &mut CommonRandomness,
@@ -115,22 +115,13 @@ where
         ops.push(output.get(&i).unwrap().to_owned());
     }
 
-    let ver = ops[0].clone();
+    let ver = &ops[0];
     let par_sk_yao = ops[1..257].to_vec();
     let mut child_sk_yao = ops[257..513].to_vec();
     let child_chain_yao = ops[513..].to_vec();
 
-    let verification = output_yao_functionality(setup, tag_offset_counter, relay, &ver).await?;
-
+    let verification = output_yao_functionality(setup, tag_offset_counter, relay, ver).await?;
     assert!(verification);
-
-    // set the input for child key derivation
-    let parent = PrivKeyShareBip {
-        yao_share: par_sk_yao.try_into().expect("Conversion failed"),
-        chain_code,
-        key_share: scalar_rss_privkey,
-        pubkey: public_key,
-    };
 
     let scalar_rss_child =
         run_yao_to_scalar_rss_keypair(setup, relay, tag_offset_counter, &child_sk_yao, rng).await?;
@@ -142,10 +133,18 @@ where
 
     child_sk_yao.reverse();
 
+    // set the input for child key derivation
+    let parent = PrivKeyShareBip {
+        yao_share: par_sk_yao.try_into().expect("Conversion failed"),
+        chain_code,
+        keyshare: scalar_rss_privkey,
+        pubkey: public_key,
+    };
+
     let child = PrivKeyShareBip {
         yao_share: child_sk_yao.try_into().expect("Conversion failed"),
         chain_code: child_cc.try_into().expect("Conversion failed"),
-        key_share: scalar_rss_child.keyshare,
+        keyshare: scalar_rss_child.keyshare,
         pubkey: scalar_rss_child.pubkey,
     };
 
@@ -199,8 +198,8 @@ where
         &mut relay,
         &mut tag_offset_counter,
         share,
-        evaluation_points.clone(),
-        derivation_path.clone(),
+        evaluation_points,
+        &derivation_path,
         chain_code,
         public_key,
         &mut randomness,
@@ -281,8 +280,8 @@ where
         &mut relay,
         &mut tag_offset_counter,
         share,
-        evaluation_points.clone(),
-        derivation_path.clone(),
+        evaluation_points,
+        &derivation_path,
         chain_code,
         public_key,
         &mut randomness,
@@ -474,9 +473,9 @@ mod tests {
             let (is, icc) = get_ideal_output(&cc, &pk, path[i], sk);
             let ip = ProjectivePoint::GENERATOR * is;
 
-            let reals = shares[0][i].key_share.next_share
-                + shares[1][i].key_share.next_share
-                + shares[2][i].key_share.next_share;
+            let reals = shares[0][i].keyshare.next_share
+                + shares[1][i].keyshare.next_share
+                + shares[2][i].keyshare.next_share;
 
             let realp = ProjectivePoint::GENERATOR * reals;
 
@@ -548,9 +547,9 @@ mod tests {
         (0..children.len()).for_each(|i| {
             let (is, _) = get_ideal_output(&cc, &pk, children[i], sk);
 
-            let reals = shares[0][i].key_share.next_share
-                + shares[1][i].key_share.next_share
-                + shares[2][i].key_share.next_share;
+            let reals = shares[0][i].keyshare.next_share
+                + shares[1][i].keyshare.next_share
+                + shares[2][i].keyshare.next_share;
 
             let realp = ProjectivePoint::GENERATOR * reals;
 

@@ -6,7 +6,7 @@ use crate::config::errors::FileParsingError;
 /// Represents a binary circuit composed of various logic gates.
 /// This struct keeps track of gates, inputs, outputs, and metadata
 /// required for evaluation and is mainly used for garbling circuits.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct BinaryCircuit {
     /// A list of all gates in the circuit.
     pub gates: Vec<BinaryGate>,

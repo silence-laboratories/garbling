@@ -10,6 +10,7 @@ use crate::circuitop::{
 /// process.  Once the circuit is built and returned, the builder can
 /// either be discarded or reused to construct a new circuit on top of
 /// the existing one.
+#[derive(Default)]
 pub struct CircuitBuilder {
     /// Tracks the next available gate ID in the circuit.
     next_ref_id: u32,
@@ -30,11 +31,7 @@ impl CircuitBuilder {
     /// Creates a new, empty `CircuitBuilder` instance.  Initializes
     /// all tracking counters to zero and sets up an empty circuit.
     pub fn new() -> Self {
-        CircuitBuilder {
-            next_ref_id: 0,
-            const_map: HashMap::new(),
-            circ: BinaryCircuit::new(0),
-        }
+        Self::default()
     }
 
     /// Returns the built `BinaryCircuit`.
@@ -176,8 +173,8 @@ impl CircuitBuilder {
         let mut old_to_new_map = vec![0; other_circuit.num_wires as usize];
 
         for gate in &other_circuit.gates {
-            match gate {
-                &BinaryGate::Xor { xid, yid, out } => {
+            match *gate {
+                BinaryGate::Xor { xid, yid, out } => {
                     let newx = old_to_new_map[xid as usize];
                     let newy = old_to_new_map[yid as usize];
                     let newz = self.xor(newx, newy);
@@ -185,7 +182,7 @@ impl CircuitBuilder {
                     old_to_new_map[out as usize] = newz;
                 }
 
-                &BinaryGate::And {
+                BinaryGate::And {
                     xid,
                     yid,
                     id: _,
@@ -198,18 +195,18 @@ impl CircuitBuilder {
                     old_to_new_map[out as usize] = newz;
                 }
 
-                &BinaryGate::Inv { xid, out } => {
+                BinaryGate::Inv { xid, out } => {
                     let newx = old_to_new_map[xid as usize];
                     let newz = self.negate(newx);
 
                     old_to_new_map[out as usize] = newz;
                 }
 
-                &BinaryGate::Input { no, id, wire } => {
+                BinaryGate::Input { no, id, wire } => {
                     old_to_new_map[wire as usize] = input_ids[no as usize][id as usize];
                 }
 
-                &BinaryGate::Constant { val, wire } => {
+                BinaryGate::Constant { val, wire } => {
                     old_to_new_map[wire as usize] = self.constant(val);
                 }
             }

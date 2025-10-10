@@ -660,7 +660,7 @@ impl Wrap for u8 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        buffer.get(0).cloned()
+        buffer.first().cloned()
     }
 }
 

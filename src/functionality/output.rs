@@ -94,6 +94,7 @@ where
         let t2 = wxs[0] == xor_blocks(&share.f_label, &share.delta);
 
         assert!(t1 || t2);
+
         let out = (lsb(&wxs[0]) ^ lsb(&share.f_label)) as u16;
 
         send_to_party(setup, tag2, out, 2, relay).await?;

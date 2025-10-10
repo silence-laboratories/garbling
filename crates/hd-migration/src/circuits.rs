@@ -655,6 +655,8 @@ pub fn build_compare_ge_rec_circuit(size: usize, lo: usize, hi: usize) -> Binary
     let xvals = builder.new_inputs(size as u16);
     let yvals = builder.new_inputs(size as u16);
 
+    assert!(lo <= hi, "impossible {lo} {hi}");
+
     if lo == hi {
         let a = builder.xor(xvals[lo], yvals[lo]);
         let temp = builder.and(a, yvals[lo]);
@@ -662,8 +664,6 @@ pub fn build_compare_ge_rec_circuit(size: usize, lo: usize, hi: usize) -> Binary
         builder.output(t);
         builder.output(a);
         return builder.finish();
-    } else if lo > hi {
-        panic!("impossible {lo} {hi}");
     }
 
     let m = lo + (hi - lo) / 2;

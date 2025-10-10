@@ -136,7 +136,7 @@ mod tests {
         let (mut rng, hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
                 let hash = AesHash::new(e.comm_crs);
-                let comm = HashCommitment::new(hash.clone());
+                let comm = HashCommitment::new(hash);
                 (None, hash, comm)
             }
             YaoSetup::G(g) => {
