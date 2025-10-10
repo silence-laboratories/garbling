@@ -875,6 +875,7 @@ impl InputYaoAllMsg1p22 {
         ids += input_p1_len;
         com_i2_1.copy_from_slice(&buffer[ids..ids + input_p2_len]);
         ids += input_p2_len;
+
         if from_party == 0 {
             w.copy_from_slice(&buffer[ids..ids + input_p1_len]);
             ids += input_p1_len;
@@ -1393,9 +1394,9 @@ where
             &msg1_to_p2,
         );
 
-        let i1_out: Vec<YaoShare> = i1_shares.into_iter().map(|v| YaoShare::E(v)).collect();
-        let i2_out: Vec<YaoShare> = i2_shares.into_iter().map(|v| YaoShare::E(v)).collect();
-        let i3_out: Vec<YaoShare> = i3_shares.into_iter().map(|v| YaoShare::E(v)).collect();
+        let i1_out: Vec<YaoShare> = i1_shares.into_iter().map(YaoShare::E).collect();
+        let i2_out: Vec<YaoShare> = i2_shares.into_iter().map(YaoShare::E).collect();
+        let i3_out: Vec<YaoShare> = i3_shares.into_iter().map(YaoShare::E).collect();
 
         (i1_out, i2_out, i3_out)
     } else {
@@ -1431,11 +1432,12 @@ where
         );
 
         send_to_party(setup, tag2, msg2, 2, relay).await?;
-        let i1_out: Vec<YaoShare> = i1_shares.into_iter().map(|v| YaoShare::G(v)).collect();
-        let i2_out: Vec<YaoShare> = i2_shares.into_iter().map(|v| YaoShare::G(v)).collect();
-        let i3_out: Vec<YaoShare> = i3_shares.into_iter().map(|v| YaoShare::G(v)).collect();
+        let i1_out: Vec<YaoShare> = i1_shares.into_iter().map(YaoShare::G).collect();
+        let i2_out: Vec<YaoShare> = i2_shares.into_iter().map(YaoShare::G).collect();
+        let i3_out: Vec<YaoShare> = i3_shares.into_iter().map(YaoShare::G).collect();
 
         (i1_out, i2_out, i3_out)
     };
+
     Ok(out)
 }

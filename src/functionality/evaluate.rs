@@ -23,25 +23,25 @@ where
     let mut w = vec![[0; BLOCK_SIZE]; circuit.gates.len()];
 
     for (i, gate) in circuit.gates.iter().enumerate() {
-        let (out_gate, f_label) = match gate {
-            &BinaryGate::Input { no, id, wire } => {
+        let (out_gate, f_label) = match *gate {
+            BinaryGate::Input { no, id, wire } => {
                 let share = input_encoding_shares[no as usize][id as usize].as_evaluator();
                 (wire, share.label)
             }
 
-            &BinaryGate::Constant { val: _, wire } => {
+            BinaryGate::Constant { val: _, wire } => {
                 let op_label = f[f_index];
                 f_index += 1;
                 (wire, op_label)
             }
 
-            &BinaryGate::Xor { xid, yid, out } => {
+            BinaryGate::Xor { xid, yid, out } => {
                 let x_label = &w[xid as usize];
                 let y_label = &w[yid as usize];
                 (out, xor_blocks(x_label, y_label))
             }
 
-            &BinaryGate::And {
+            BinaryGate::And {
                 xid,
                 yid,
                 id: _,
@@ -81,7 +81,7 @@ where
                 (out, w_out)
             }
 
-            &BinaryGate::Inv { xid, out } => {
+            BinaryGate::Inv { xid, out } => {
                 let x_label = w[xid as usize];
                 (out, x_label)
             }

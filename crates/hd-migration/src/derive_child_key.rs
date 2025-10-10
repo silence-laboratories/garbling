@@ -41,7 +41,7 @@ where
     let circuit =
         build_child_key_der_hmac_circuit(&parent_key.pubkey, index_child, parent_key.chain_code);
 
-    let inputs = vec![parent_key.yao_share.to_vec()];
+    let inputs = [parent_key.yao_share.to_vec()];
 
     let hashed_vals = yao_circuit_eval_functionality(
         setup,
@@ -77,7 +77,7 @@ where
     let out = PrivKeyShareBip {
         yao_share: child_yao_share.try_into().expect("Conversion failed"),
         pubkey: scalar_rss_out.pubkey,
-        key_share: scalar_rss_out.keyshare,
+        keyshare: scalar_rss_out.keyshare,
         chain_code: child_cc.try_into().expect("Conversion failed"),
     };
 
@@ -191,7 +191,7 @@ where
                 .try_into()
                 .expect("Conversion failed"),
             pubkey: scalar_rss_out[i].pubkey,
-            key_share: scalar_rss_out[i].keyshare,
+            keyshare: scalar_rss_out[i].keyshare,
             chain_code: child_ccs[i].clone().try_into().expect("Conversion failed"),
         };
 
@@ -200,6 +200,7 @@ where
 
     Ok(out)
 }
+
 #[cfg(test)]
 mod tests {
     use derivation_path::ChildIndex;
@@ -252,7 +253,7 @@ mod tests {
             }
             YaoSetup::G(g) => {
                 let hash = AesHash::new(g.comm_crs);
-                let comm = HashCommitment::new(hash.clone());
+                let comm = HashCommitment::new(hash);
                 let r = ChaCha8Rng::from_seed(g.prf_key);
                 (Some(r), hash, comm)
             }
@@ -270,7 +271,7 @@ mod tests {
 
         let share = PrivKeyShareBip {
             yao_share: rpk_yao.try_into().expect("Conversion failed"),
-            key_share: PrivKeyShare::<ProjectivePoint>::default(),
+            keyshare: PrivKeyShare::<ProjectivePoint>::default(),
             pubkey: public_key,
             chain_code: rcc_bool,
         };
@@ -316,7 +317,7 @@ mod tests {
             }
             YaoSetup::G(g) => {
                 let hash = AesHash::new(g.comm_crs);
-                let comm = HashCommitment::new(hash.clone());
+                let comm = HashCommitment::new(hash);
                 let r = ChaCha8Rng::from_seed(g.prf_key);
                 (Some(r), hash, comm)
             }
@@ -336,7 +337,7 @@ mod tests {
         for _ in 0..child_index.len() {
             let share = PrivKeyShareBip {
                 yao_share: rpk_yao.clone().try_into().expect("Conversion failed"),
-                key_share: PrivKeyShare::<ProjectivePoint>::default(),
+                keyshare: PrivKeyShare::<ProjectivePoint>::default(),
                 pubkey: public_key,
                 chain_code: rcc_bool,
             };
@@ -435,9 +436,9 @@ mod tests {
             }
         }
 
-        let child_privkey_obtained = shares[0].1.key_share.next_share
-            + shares[1].1.key_share.next_share
-            + shares[2].1.key_share.next_share;
+        let child_privkey_obtained = shares[0].1.keyshare.next_share
+            + shares[1].1.keyshare.next_share
+            + shares[2].1.keyshare.next_share;
 
         let (child_privkey_ideal, child_chaincode_ideal) = get_ideal_output(
             &root_chain_code,
@@ -485,9 +486,9 @@ mod tests {
         }
 
         (0..child_index.len()).for_each(|i| {
-            let child_privkey_obtained = shares[0].1[i].key_share.next_share
-                + shares[1].1[i].key_share.next_share
-                + shares[2].1[i].key_share.next_share;
+            let child_privkey_obtained = shares[0].1[i].keyshare.next_share
+                + shares[1].1[i].keyshare.next_share
+                + shares[2].1[i].keyshare.next_share;
 
             let (child_privkey_ideal, child_chaincode_ideal) = get_ideal_output(
                 &root_chain_code,
