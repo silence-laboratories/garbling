@@ -332,6 +332,7 @@ mod tests {
     use std::str::FromStr;
 
     use derivation_path::{ChildIndex, DerivationPath};
+    use garbled_circuit::functionality::utils_dep::ProtocolParticipant;
     use hmac::{Hmac, Mac};
     use k256::elliptic_curve::bigint::Encoding;
     use k256::elliptic_curve::{Curve, ops::Reduce};
@@ -339,11 +340,14 @@ mod tests {
     use k256::{ProjectivePoint, Scalar, Secp256k1, U256, elliptic_curve::sec1::ToEncodedPoint};
     use rand::rngs::StdRng;
     use rand::{RngCore, SeedableRng};
-    use sl_messages::relay::SimpleMessageRelay;
+    use sl_messages::relay::{Relay, SimpleMessageRelay};
+    use sl_mpc_mate::math;
 
     use crate::extended_key_der::{
         run_extended_key_derivation, run_extended_key_derivation_multiple_children,
     };
+    use crate::shamir_to_rss::scalar_rss_to_shamir;
+    use crate::types::{HardDerivationError, PrivKeyShareBip};
     use crate::utils::{get_evaluation, run_init};
 
     #[allow(clippy::too_many_arguments)]
@@ -426,6 +430,35 @@ mod tests {
         (child_key, child_chain_code.to_vec())
     }
 
+    pub async fn test_hard_derivation_import_protocol<S, R>(
+        setup: S,
+        share: Scalar,
+        evaluation_points: Vec<NonZeroScalar>,
+        derivation_path: DerivationPath,
+        chain_code: [u8; 32],
+        public_key: ProjectivePoint,
+        relay: R,
+    ) -> Result<(usize, Vec<PrivKeyShareBip>), HardDerivationError>
+    where
+        S: ProtocolParticipant,
+        R: Relay,
+    {
+        let i = &setup.participant_index();
+        let a = run_extended_key_derivation(
+            setup,
+            share,
+            evaluation_points.to_vec(),
+            derivation_path.clone(),
+            chain_code,
+            public_key,
+            relay,
+        )
+        .await;
+        match a {
+            Ok(v) => Ok((*i, v)),
+            Err(e) => Err(e),
+        }
+    }
     #[tokio::test(flavor = "multi_thread")]
     async fn test_hard_derivation_import() {
         let (s1, s2, s3, s, chaincode, pubkey, evaluation_points) = generate_random_input();
@@ -440,7 +473,7 @@ mod tests {
         #[allow(clippy::explicit_counter_loop)]
         for (setup, _) in run_init(None) {
             let relay = coord.connect();
-            parties.spawn(run_extended_key_derivation(
+            parties.spawn(test_hard_derivation_import_protocol(
                 setup,
                 shares[i],
                 evaluation_points.to_vec(),
@@ -465,6 +498,8 @@ mod tests {
             }
         }
 
+        shares.sort_by_key(|f| f.0);
+
         let mut t = vec![(chaincode, s, pubkey)];
         let path = derivation_path.path();
 
@@ -473,16 +508,68 @@ mod tests {
             let (is, icc) = get_ideal_output(&cc, &pk, path[i], sk);
             let ip = ProjectivePoint::GENERATOR * is;
 
-            let reals = shares[0][i].keyshare.next_share
-                + shares[1][i].keyshare.next_share
-                + shares[2][i].keyshare.next_share;
+            let reals = shares[0].1[i].keyshare.next_share
+                + shares[1].1[i].keyshare.next_share
+                + shares[2].1[i].keyshare.next_share;
+
+            let shamir_p1 = scalar_rss_to_shamir(&shares[0].1[i].keyshare, &1, &evaluation_points);
+            let shamir_p2 = scalar_rss_to_shamir(&shares[1].1[i].keyshare, &2, &evaluation_points);
+            let shamir_p3 = scalar_rss_to_shamir(&shares[2].1[i].keyshare, &3, &evaluation_points);
+
+            let s3 = get_evaluation(
+                &[evaluation_points[0], evaluation_points[1]],
+                &[shamir_p1, shamir_p2],
+                &evaluation_points[2],
+            );
+
+            assert_eq!(s3, shamir_p3);
+
+            let s = get_evaluation(
+                &[evaluation_points[0], evaluation_points[1]],
+                &[shamir_p1, shamir_p2],
+                &Scalar::ZERO,
+            );
+
+            assert_eq!(reals, s);
 
             let realp = ProjectivePoint::GENERATOR * reals;
 
-            assert_eq!(realp, shares[0][i].pubkey);
+            assert_eq!(realp, shares[0].1[i].pubkey);
             assert_eq!(reals, is);
 
             t.push((icc.try_into().expect("Conversion failed"), is, ip));
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn test_hard_derivation_import_multiple_children_protocol<
+        S: ProtocolParticipant,
+        R: Relay,
+    >(
+        setup: S,
+        share: Scalar,
+        evaluation_points: Vec<NonZeroScalar>,
+        derivation_path: DerivationPath,
+        children: Vec<ChildIndex>,
+        chain_code: [u8; 32],
+        public_key: ProjectivePoint,
+        relay: R,
+    ) -> Result<(usize, Vec<PrivKeyShareBip>), HardDerivationError> {
+        let i = &setup.participant_index();
+        let a = run_extended_key_derivation_multiple_children(
+            setup,
+            share,
+            evaluation_points.to_vec(),
+            derivation_path.clone(),
+            children.clone(),
+            chain_code,
+            public_key,
+            relay,
+        )
+        .await;
+        match a {
+            Ok(v) => Ok((*i, v)),
+            Err(e) => Err(e),
         }
     }
 
@@ -506,16 +593,18 @@ mod tests {
         #[allow(clippy::explicit_counter_loop)]
         for (setup, _) in run_init(None) {
             let relay = coord.connect();
-            parties.spawn(run_extended_key_derivation_multiple_children(
-                setup,
-                shares[i],
-                evaluation_points.to_vec(),
-                derivation_path.clone(),
-                children.clone(),
-                chaincode,
-                pubkey,
-                relay,
-            ));
+            parties.spawn({
+                test_hard_derivation_import_multiple_children_protocol(
+                    setup,
+                    shares[i],
+                    evaluation_points.to_vec(),
+                    derivation_path.clone(),
+                    children.clone(),
+                    chaincode,
+                    pubkey,
+                    relay,
+                )
+            });
             i += 1;
         }
 
@@ -532,6 +621,8 @@ mod tests {
             }
         }
 
+        shares.sort_by_key(|f| f.0);
+
         let mut t = vec![(chaincode, s, pubkey)];
         let path = derivation_path.path();
 
@@ -547,13 +638,33 @@ mod tests {
         (0..children.len()).for_each(|i| {
             let (is, _) = get_ideal_output(&cc, &pk, children[i], sk);
 
-            let reals = shares[0][i].keyshare.next_share
-                + shares[1][i].keyshare.next_share
-                + shares[2][i].keyshare.next_share;
+            let reals = shares[0].1[i].keyshare.next_share
+                + shares[1].1[i].keyshare.next_share
+                + shares[2].1[i].keyshare.next_share;
+
+            let shamir_p1 = scalar_rss_to_shamir(&shares[0].1[i].keyshare, &1, &evaluation_points);
+            let shamir_p2 = scalar_rss_to_shamir(&shares[1].1[i].keyshare, &2, &evaluation_points);
+            let shamir_p3 = scalar_rss_to_shamir(&shares[2].1[i].keyshare, &3, &evaluation_points);
+
+            let s3 = get_evaluation(
+                &[evaluation_points[0], evaluation_points[1]],
+                &[shamir_p1, shamir_p2],
+                &evaluation_points[2],
+            );
+
+            assert_eq!(s3, shamir_p3);
+
+            let s = get_evaluation(
+                &[evaluation_points[0], evaluation_points[1]],
+                &[shamir_p1, shamir_p2],
+                &Scalar::ZERO,
+            );
+
+            assert_eq!(reals, s);
 
             let realp = ProjectivePoint::GENERATOR * reals;
 
-            assert_eq!(realp, shares[0][i].pubkey);
+            assert_eq!(realp, shares[0].1[i].pubkey);
             assert_eq!(reals, is);
         });
     }
