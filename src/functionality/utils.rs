@@ -24,6 +24,8 @@ pub struct FilteredMsgRelay<R> {
     relay: R,
     in_buf: Vec<(BytesMut, usize, MessageTag)>,
     expected: HashMap<MsgId, (usize, MessageTag)>,
+    unexpected: HashMap<MsgId, BytesMut>,
+    party_index: usize,
 }
 
 impl<R: Relay> FilteredMsgRelay<R> {
@@ -32,7 +34,9 @@ impl<R: Relay> FilteredMsgRelay<R> {
         Self {
             relay,
             expected: HashMap::new(),
+            unexpected: HashMap::new(),
             in_buf: vec![],
+            party_index: usize::MAX,
         }
     }
 
@@ -46,6 +50,9 @@ impl<R: Relay> FilteredMsgRelay<R> {
         ttl: Duration,
     ) -> Result<(), MessageSendError> {
         self.relay.ask(&id, ttl).await?;
+        if let Some(msg) = self.unexpected.remove(&id) {
+            self.in_buf.push((msg, party_id, tag));
+        }
         self.expected.insert(id, (party_id, tag));
 
         Ok(())
@@ -88,6 +95,8 @@ impl<R: Relay> FilteredMsgRelay<R> {
                             self.in_buf.push((msg, p, t));
                         }
                     }
+                } else {
+                    self.unexpected.insert(*id, msg);
                 }
             }
         }
@@ -131,14 +140,13 @@ impl<R: Relay> FilteredMsgRelay<R> {
             }
 
             count += 1;
-            self.expect_message(
-                setup.msg_id_from(sender_index, receiver, tag),
-                tag,
-                sender_index,
-                setup.message_ttl(),
-            )
-            .await?;
+
+            let id = setup.msg_id_from(sender_index, receiver, tag);
+            self.expect_message(id, tag, sender_index, setup.message_ttl())
+                .await?;
         }
+
+        self.party_index = my_party_index;
 
         Ok(count)
     }
@@ -167,7 +175,7 @@ impl<'a, R: Relay> Round<'a, R> {
             if msg.is_err() {
                 for (id, (p, t)) in &self.relay.expected {
                     if t == &self.tag {
-                        println!("waiting for {:X} {} {:?}", id, p, t);
+                        eprintln!("waiting for {:X} {} {:?}", id, p, t);
                     }
                 }
             }
@@ -538,21 +546,20 @@ pub fn run_init(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
 pub async fn run_common_randomness<T, R>(
     setup: &T,
     seed: &[u8; 32],
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
 ) -> Result<CommonRandomness, ProtocolError>
 where
     T: ProtocolParticipant,
     R: Relay,
 {
-    let mut relay = FilteredMsgRelay::new(relay);
-    pub const COMMON_RAND_MSG: MessageTag = MessageTag::tag(2);
+    const COMMON_RAND_MSG: MessageTag = MessageTag::tag(2);
     relay.ask_messages(setup, COMMON_RAND_MSG, true).await?;
 
     let mut rng = ChaCha20Rng::from_seed(*seed);
     let key_next: [u8; 32] = rng.gen();
 
     let key_prev =
-        p2p_send_to_next_receive_from_prev(setup, COMMON_RAND_MSG, key_next, &mut relay).await?;
+        p2p_send_to_next_receive_from_prev(setup, COMMON_RAND_MSG, key_next, relay).await?;
 
     if key_prev == key_next {
         return Err(ProtocolError::VerificationError);

@@ -1,7 +1,8 @@
 use garbled_circuit::{
     functionality::{
         circuit_eval::yao_circuit_eval_functionality, input::run_batch_input_from_all_yao,
-        output::batch_output_yao_functionality, utils_dep::TagOffsetCounter,
+        output::batch_output_yao_functionality, utils::FilteredMsgRelay,
+        utils_dep::TagOffsetCounter,
     },
     utilities::{
         commitments::Commitment,
@@ -23,7 +24,7 @@ use crate::{
 #[allow(clippy::too_many_arguments)]
 pub async fn run_scalar_rss_to_yao<S, R, C, G, H>(
     setup: &S,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
     tag_offset_counter: &mut TagOffsetCounter,
     share: &PrivKeyShare<ProjectivePoint>,
     yao_setup: &YaoSetup,
@@ -103,7 +104,7 @@ mod tests {
     use garbled_circuit::{
         functionality::{
             output::batch_output_yao_functionality, setup::setup_yao_functionality,
-            utils_dep::TagOffsetCounter,
+            utils::FilteredMsgRelay, utils_dep::TagOffsetCounter,
         },
         utilities::{commitments::HashCommitment, hash_function::AesHash, types::YaoSetup},
     };
@@ -127,7 +128,7 @@ mod tests {
         S: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = relay;
+        let mut relay = FilteredMsgRelay::new(relay);
 
         let mut cnt = TagOffsetCounter::new();
 

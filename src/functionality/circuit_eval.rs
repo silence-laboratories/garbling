@@ -49,7 +49,7 @@ where
 pub async fn yao_circuit_eval_functionality<T, R, G, H>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
     input: &[Vec<YaoShare>],
     circuit: &BinaryCircuit,
     rng: Option<&mut G>,
@@ -62,8 +62,6 @@ where
     G: RngCore + CryptoRng,
     H: HashFunction,
 {
-    let mut relay = FilteredMsgRelay::new(relay);
-
     let tag_offset = tag_offset_counter.next_value();
     let tag1 = MessageTag::tag1(YAO_CIRC_EVAL_FUNC_MSG1, tag_offset);
     relay.ask_messages(setup, tag1, true).await?;
@@ -73,7 +71,7 @@ where
     relay.ask_messages(setup, tag2, true).await?;
 
     let output = yao_circuit_eval_functionality_inner(
-        setup, &mut relay, input, circuit, rng, hash, yao_setup, tag1, tag2,
+        setup, relay, input, circuit, rng, hash, yao_setup, tag1, tag2,
     )
     .await?;
 
@@ -149,7 +147,7 @@ where
 pub async fn yao_map_circuit_eval_functionality<'a, T, R, G, H>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
     inputs: &MapArg<'a, &[Vec<YaoShare>]>,
     circuits: &MapArg<'a, &'a BinaryCircuit>,
     rng: Option<&mut G>,
@@ -162,8 +160,6 @@ where
     G: RngCore + CryptoRng,
     H: HashFunction,
 {
-    let mut relay = FilteredMsgRelay::new(relay);
-
     let tag_offset = tag_offset_counter.next_value();
     let tag1 = MessageTag::tag1(YAO_CIRC_EVAL_FUNC_MSG1, tag_offset);
     relay.ask_messages(setup, tag1, true).await?;
@@ -173,7 +169,7 @@ where
     relay.ask_messages(setup, tag2, true).await?;
 
     let output = yao_map_circuit_eval_functionality_inner(
-        setup, &mut relay, inputs, circuits, rng, hash, yao_setup, tag1, tag2,
+        setup, relay, inputs, circuits, rng, hash, yao_setup, tag1, tag2,
     )
     .await?;
 
@@ -501,7 +497,7 @@ mod tests {
                 output_yao_functionality, output_yao_to_functionality, validate_yao_share,
             },
             setup::setup_yao_functionality,
-            utils::SetupMessage,
+            utils::{FilteredMsgRelay, SetupMessage},
             utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
         },
         utilities::{
@@ -520,12 +516,13 @@ mod tests {
         circuit: Arc<BinaryCircuit>,
         garb_input: Vec<bool>,
         eval_input: Vec<bool>,
-        mut relay: R,
+        relay: R,
     ) -> Result<(usize, Vec<bool>), ProtocolError>
     where
         T: ProtocolParticipant,
         R: Relay,
     {
+        let mut relay = FilteredMsgRelay::new(relay);
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
@@ -925,7 +922,7 @@ mod tests {
         T: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = relay;
+        let mut relay = FilteredMsgRelay::new(relay);
 
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];

@@ -62,7 +62,7 @@ where
 pub async fn yao_to_binary_functionality<T, G, C, R>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
     input: &YaoShare,
     rng: Option<&mut G>,
     comm: &C,
@@ -74,8 +74,6 @@ where
     C: Commitment,
     G: RngCore + CryptoRng,
 {
-    let mut relay = FilteredMsgRelay::new(relay);
-
     let tag_offset = tag_offset_counter.next_value();
     let tag1 = MessageTag::tag1(Y2B_FUNC_MSG1, tag_offset);
     relay.ask_messages(setup, tag1, true).await?;
@@ -89,7 +87,7 @@ where
     relay.ask_messages(setup, tag3, true).await?;
 
     let output = yao_to_binary_functionality_inner(
-        setup, &mut relay, input, rng, comm, yao_setup, tag1, tag2, tag3,
+        setup, relay, input, rng, comm, yao_setup, tag1, tag2, tag3,
     )
     .await?;
 
@@ -235,7 +233,7 @@ where
 pub async fn batch_yao_to_binary_functionality<T, G, C, R>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
     input: &[YaoShare],
     rng: Option<&mut G>,
     comm: &C,
@@ -247,8 +245,6 @@ where
     C: Commitment,
     G: RngCore + CryptoRng,
 {
-    let mut relay = FilteredMsgRelay::new(relay);
-
     let tag_offset = tag_offset_counter.next_value();
     let tag1 = MessageTag::tag1(Y2B_FUNC_MSG1, tag_offset);
     relay.ask_messages(setup, tag1, true).await?;
@@ -266,7 +262,7 @@ where
     relay.ask_messages(setup, tag4, true).await?;
 
     let output = batch_yao_to_binary_functionality_inner(
-        setup, &mut relay, input, rng, comm, yao_setup, tag1, tag2, tag3, tag4,
+        setup, relay, input, rng, comm, yao_setup, tag1, tag2, tag3, tag4,
     )
     .await?;
 
@@ -546,7 +542,7 @@ mod tests {
         T: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = relay;
+        let mut relay = FilteredMsgRelay::new(relay);
 
         let mut init_seed = [0u8; 32];
         let common_randomness_seed = [setup.participant_index() as u8; 32];
@@ -686,7 +682,7 @@ mod tests {
     pub async fn run_batch_open_binary_share<T, R>(
         setup: &T,
         tag_offset_counter: &mut TagOffsetCounter,
-        relay: &mut R,
+        r: &mut FilteredMsgRelay<R>,
         shares: &[BinaryShare],
         serverstate: &mut ServerState,
     ) -> Result<Vec<Binary>, ProtocolError>
@@ -694,7 +690,6 @@ mod tests {
         T: ProtocolParticipant,
         R: Relay,
     {
-        let mut r = FilteredMsgRelay::new(relay);
         let tag_offset = tag_offset_counter.next_value();
         r.ask_messages(setup, MessageTag::tag1(OPEN_MSG, tag_offset), true)
             .await?;
@@ -705,7 +700,7 @@ mod tests {
             setup,
             MessageTag::tag1(OPEN_MSG, tag_offset),
             msg,
-            &mut r,
+            r,
         )
         .await?;
 
@@ -732,7 +727,7 @@ mod tests {
         T: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = relay;
+        let mut relay = FilteredMsgRelay::new(relay);
 
         let mut init_seed = [0u8; 32];
         let common_randomness_seed = [setup.participant_index() as u8; 32];

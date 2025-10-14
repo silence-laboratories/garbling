@@ -3,6 +3,7 @@ use garbled_circuit::{
     functionality::{
         circuit_eval::{yao_circuit_eval_functionality, yao_map_circuit_eval_functionality},
         output::batch_output_yao_functionality,
+        utils::FilteredMsgRelay,
         utils_dep::TagOffsetCounter,
     },
     utilities::{
@@ -24,7 +25,7 @@ use crate::{
 #[allow(clippy::too_many_arguments)]
 pub async fn run_derive_child_key<S, R, G, H>(
     setup: &S,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
     tag_offset_counter: &mut TagOffsetCounter,
     parent_key: &PrivKeyShareBip,
     index_child: &ChildIndex,
@@ -88,7 +89,7 @@ where
 #[allow(clippy::too_many_arguments)]
 pub async fn run_batch_derive_child_key<S, R, G, H>(
     setup: &S,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
     tag_offset_counter: &mut TagOffsetCounter,
     parent_key: &[&PrivKeyShareBip],
     index_child: &[ChildIndex],
@@ -207,7 +208,7 @@ mod tests {
     use garbled_circuit::{
         functionality::{
             input::batch_input_yao_functionality, setup::setup_yao_functionality,
-            utils_dep::TagOffsetCounter,
+            utils::FilteredMsgRelay, utils_dep::TagOffsetCounter,
         },
         utilities::{commitments::HashCommitment, hash_function::AesHash, types::YaoSetup},
     };
@@ -239,7 +240,7 @@ mod tests {
         S: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = relay;
+        let mut relay = FilteredMsgRelay::new(relay);
 
         let mut cnt = TagOffsetCounter::new();
 
@@ -303,7 +304,7 @@ mod tests {
         S: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = relay;
+        let mut relay = FilteredMsgRelay::new(relay);
 
         let mut cnt = TagOffsetCounter::new();
 

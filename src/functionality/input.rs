@@ -48,7 +48,7 @@ where
 pub async fn input_yao_functionality<T, R, G>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut R,
+    r: &mut FilteredMsgRelay<R>,
     input: bool,
     rng: Option<&mut G>,
     yao_setup: &YaoSetup,
@@ -58,12 +58,11 @@ where
     R: Relay,
     G: RngCore + CryptoRng,
 {
-    let mut r = FilteredMsgRelay::new(relay);
     let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(INPUT_YAO_FUNC_MSG1.try_into().unwrap(), tag_offset);
+    let tag1 = MessageTag::tag1(INPUT_YAO_FUNC_MSG1, tag_offset);
     r.ask_messages(setup, tag1, true).await?;
 
-    let output = input_yao_functionality_inner(setup, &mut r, input, rng, yao_setup, tag1).await?;
+    let output = input_yao_functionality_inner(setup, r, input, rng, yao_setup, tag1).await?;
     Ok(output)
 }
 
@@ -110,7 +109,7 @@ where
 pub async fn batch_input_yao_functionality<T, R, G>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut R,
+    r: &mut FilteredMsgRelay<R>,
     input: &[bool],
     rng: Option<&mut G>,
     yao_setup: &YaoSetup,
@@ -120,13 +119,11 @@ where
     R: Relay,
     G: RngCore + CryptoRng,
 {
-    let mut r = FilteredMsgRelay::new(relay);
     let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(INPUT_YAO_FUNC_MSG1.try_into().unwrap(), tag_offset);
+    let tag1 = MessageTag::tag1(INPUT_YAO_FUNC_MSG1, tag_offset);
     r.ask_messages(setup, tag1, true).await?;
 
-    let output =
-        batch_input_yao_functionality_inner(setup, &mut r, input, rng, yao_setup, tag1).await?;
+    let output = batch_input_yao_functionality_inner(setup, r, input, rng, yao_setup, tag1).await?;
     Ok(output)
 }
 
@@ -275,7 +272,7 @@ where
 pub async fn input_yao_from_functionality<T, C, R, G>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut R,
+    r: &mut FilteredMsgRelay<R>,
     input: bool,
     pid: usize,
     rng: Option<&mut G>,
@@ -288,7 +285,6 @@ where
     G: RngCore + CryptoRng,
     C: Commitment,
 {
-    let mut r = FilteredMsgRelay::new(relay);
     let tag_offset = tag_offset_counter.next_value();
     let tag1 = MessageTag::tag1(INPUT_YAO_FROM_FUNC_MSG1, tag_offset);
     r.ask_messages(setup, tag1, true).await?;
@@ -297,10 +293,9 @@ where
     let tag2 = MessageTag::tag1(INPUT_YAO_FROM_FUNC_MSG2, tag_offset);
     r.ask_messages(setup, tag2, true).await?;
 
-    let output = input_yao_from_functionality_inner(
-        setup, &mut r, input, pid, rng, comm, yao_setup, tag1, tag2,
-    )
-    .await?;
+    let output =
+        input_yao_from_functionality_inner(setup, r, input, pid, rng, comm, yao_setup, tag1, tag2)
+            .await?;
 
     Ok(output)
 }
@@ -497,7 +492,7 @@ where
 pub async fn batch_input_yao_from_functionality<T, C, R, G>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut R,
+    r: &mut FilteredMsgRelay<R>,
     input: &[Option<bool>],
     pid: usize,
     rng: Option<&mut G>,
@@ -510,7 +505,6 @@ where
     G: RngCore + CryptoRng,
     C: Commitment,
 {
-    let mut r = FilteredMsgRelay::new(relay);
     let tag_offset = tag_offset_counter.next_value();
     let tag1 = MessageTag::tag1(INPUT_YAO_FROM_FUNC_MSG1, tag_offset);
     r.ask_messages(setup, tag1, true).await?;
@@ -520,7 +514,7 @@ where
     r.ask_messages(setup, tag2, true).await?;
 
     let output = batch_input_yao_from_functionality_inner(
-        setup, &mut r, input, pid, rng, comm, yao_setup, tag1, tag2,
+        setup, r, input, pid, rng, comm, yao_setup, tag1, tag2,
     )
     .await?;
     Ok(output)
@@ -1295,7 +1289,7 @@ where
 pub async fn run_batch_input_from_all_yao<S, R, G, C>(
     setup: &S,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
     input: &[bool],
     input_p1_len: usize,
     input_p2_len: usize,
@@ -1310,15 +1304,13 @@ where
     G: RngCore + CryptoRng,
     C: Commitment,
 {
-    let mut relay = FilteredMsgRelay::new(relay);
-
     let tag1 = MessageTag::tag1(INPUT_YAO_FROM_ALL_MSG1, tag_offset_counter.next_value());
     let tag2 = MessageTag::tag1(INPUT_YAO_FROM_ALL_MSG2, tag_offset_counter.next_value());
     let tag3 = MessageTag::tag1(INPUT_YAO_FROM_ALL_MSG3, tag_offset_counter.next_value());
 
     let output = run_batch_input_from_all_yao_inner(
         setup,
-        &mut relay,
+        relay,
         input,
         input_p1_len,
         input_p2_len,
