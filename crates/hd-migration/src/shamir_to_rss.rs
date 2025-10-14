@@ -10,7 +10,7 @@ use crate::{
 
 /// Converts an RSS-shared Scalar value (`PrivKeyShare`) to a shamir shared value
 /// for party with id `party_id` for a set of evaluation points.
-pub fn scalar_to_shamir(
+pub fn scalar_rss_to_shamir(
     inp: &PrivKeyShare<ProjectivePoint>,
     party_id: &usize,
     evaluation_points: &[NonZeroScalar],
@@ -58,9 +58,9 @@ pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
 ) -> Result<PrivKeyShare<ProjectivePoint>, HardDerivationError> {
     let my_party_id = setup.participant_index();
 
-    let r_scalar = PrivKeyShare::<ProjectivePoint>::get_random_share(randomness);
+    let r_scalar_rss = PrivKeyShare::<ProjectivePoint>::get_random_share(randomness);
 
-    let r_shamir = scalar_to_shamir(&r_scalar, &(my_party_id + 1), evaluation_points);
+    let r_shamir = scalar_rss_to_shamir(&r_scalar_rss, &(my_party_id + 1), evaluation_points);
 
     let padded_shamir = share + r_shamir;
 
@@ -75,18 +75,18 @@ pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
 
     let out_rss = if my_party_id == 0 {
         PrivKeyShare::<ProjectivePoint> {
-            prev_share: padded - r_scalar.prev_share,
-            next_share: -r_scalar.next_share,
+            prev_share: padded - r_scalar_rss.prev_share,
+            next_share: -r_scalar_rss.next_share,
         }
     } else if my_party_id == 1 {
         PrivKeyShare::<ProjectivePoint> {
-            prev_share: -r_scalar.prev_share,
-            next_share: -r_scalar.next_share,
+            prev_share: -r_scalar_rss.prev_share,
+            next_share: -r_scalar_rss.next_share,
         }
     } else {
         PrivKeyShare::<ProjectivePoint> {
-            prev_share: -r_scalar.prev_share,
-            next_share: padded - r_scalar.next_share,
+            prev_share: -r_scalar_rss.prev_share,
+            next_share: padded - r_scalar_rss.next_share,
         }
     };
 

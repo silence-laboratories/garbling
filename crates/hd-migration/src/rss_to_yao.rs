@@ -15,7 +15,7 @@ use rand::{CryptoRng, RngCore};
 use sl_messages::relay::Relay;
 
 use crate::{
-    circuits::build_scalar_to_y_verification_circuit,
+    circuits::build_scalar_rss_to_y_verification_circuit,
     types::{HardDerivationError, PrivKeyShare, ProtocolParticipant},
     utils::bytes_to_bits_le,
 };
@@ -69,7 +69,7 @@ where
     inputs[4].extend_from_slice(&i2_yao[..256]);
     inputs[5].extend_from_slice(&i3_yao[..256]);
 
-    let circ = build_scalar_to_y_verification_circuit();
+    let circ = build_scalar_rss_to_y_verification_circuit();
 
     let outp = yao_circuit_eval_functionality(
         setup,
@@ -119,7 +119,7 @@ mod tests {
         utils::run_init,
     };
 
-    async fn test_run_scalar_to_yao<S, R>(
+    async fn test_run_scalar_rss_to_yao<S, R>(
         setup: S,
         share: PrivKeyShare<ProjectivePoint>,
         relay: R,
@@ -176,7 +176,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_scalar_to_yao() {
+    async fn test_scalar_rss_to_yao() {
         let mut rng = rngs::StdRng::from_entropy();
 
         let mut bytes = [0u8; 32];
@@ -212,7 +212,7 @@ mod tests {
         #[allow(clippy::explicit_counter_loop)]
         for (setup, _) in run_init(None) {
             let relay = coord.connect();
-            parties.spawn(test_run_scalar_to_yao(setup, shares[cnt], relay));
+            parties.spawn(test_run_scalar_rss_to_yao(setup, shares[cnt], relay));
             cnt += 1;
         }
 

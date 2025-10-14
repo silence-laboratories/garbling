@@ -343,7 +343,7 @@ pub fn build_sha512_circuit(len: u128) -> BinaryCircuit {
     builder.finish()
 }
 
-pub fn build_scalar_to_y_verification_circuit() -> BinaryCircuit {
+pub fn build_scalar_rss_to_y_verification_circuit() -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
     let p1_next = builder.new_inputs(256);
@@ -374,7 +374,7 @@ pub fn build_scalar_to_y_verification_circuit() -> BinaryCircuit {
     builder.finish()
 }
 
-pub fn build_scalar_to_y_circuit() -> BinaryCircuit {
+pub fn build_scalar_rss_to_y_circuit() -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
     let x1_ids = builder.new_inputs(256);
