@@ -168,7 +168,7 @@ mod tests {
         S: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = relay;
+        let mut relay = FilteredMsgRelay::new(relay);
 
         let mut tag_offset_counter = TagOffsetCounter::new();
 
@@ -199,7 +199,7 @@ mod tests {
         )
         .await?;
 
-        let mut r = FilteredMsgRelay::new(relay);
+        let mut r = relay;
 
         let tag1 = MessageTag::tag(511);
         r.ask_messages(&setup, tag1, true).await?;

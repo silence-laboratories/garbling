@@ -14,14 +14,12 @@ use crate::{
 pub async fn setup_yao_functionality<T, R>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
 ) -> Result<YaoSetup, ProtocolError>
 where
     T: ProtocolParticipant,
     R: Relay,
 {
-    let mut relay = FilteredMsgRelay::new(relay);
-
     let tag_offset = tag_offset_counter.next_value();
     let tag1 = MessageTag::tag1(SETUP_YAO_FUNC_MSG1, tag_offset);
     relay.ask_messages(setup, tag1, true).await?;
@@ -29,7 +27,7 @@ where
     let tag2 = MessageTag::tag1(SETUP_YAO_FUNC_MSG2, tag_offset);
     relay.ask_messages(setup, tag2, true).await?;
 
-    let output = setup_yao_functionality_inner(setup, &mut relay, tag1, tag2).await?;
+    let output = setup_yao_functionality_inner(setup, relay, tag1, tag2).await?;
 
     Ok(output)
 }

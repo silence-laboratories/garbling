@@ -1,4 +1,4 @@
-use garbled_circuit::functionality::utils_dep::TagOffsetCounter;
+use garbled_circuit::functionality::{utils::FilteredMsgRelay, utils_dep::TagOffsetCounter};
 use k256::{NonZeroScalar, ProjectivePoint, Scalar};
 use sl_compute_common::CommonRandomness;
 use sl_messages::relay::Relay;
@@ -50,7 +50,7 @@ pub fn scalar_to_shamir(
 /// Converts a Shamir-shared Scalar valueto an RSS-shared Scalar value (`PrivKeyShare`)
 pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
     setup: &S,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
     tag_offset_counter: &mut TagOffsetCounter,
     share: &Scalar,
     evaluation_points: &[NonZeroScalar],
@@ -96,7 +96,8 @@ pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
 #[cfg(test)]
 mod tests {
     use garbled_circuit::functionality::{
-        utils::run_common_randomness, utils_dep::TagOffsetCounter,
+        utils::{FilteredMsgRelay, run_common_randomness},
+        utils_dep::TagOffsetCounter,
     };
     use k256::{NonZeroScalar, ProjectivePoint, Scalar};
     use rand::{
@@ -122,7 +123,7 @@ mod tests {
         S: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = relay;
+        let mut relay = FilteredMsgRelay::new(relay);
 
         let mut cnt = TagOffsetCounter::new();
 

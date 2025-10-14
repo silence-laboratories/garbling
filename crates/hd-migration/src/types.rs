@@ -1,6 +1,6 @@
 use garbled_circuit::{
     functionality::{
-        utils::{FixedExternalSize, SetupMessage, Wrap},
+        utils::{FixedExternalSize, Wrap},
         utils_dep::{Error, ProtocolError},
     },
     utilities::types::YaoShare,
@@ -10,6 +10,8 @@ use k256::{FieldBytes, ProjectivePoint, Scalar, elliptic_curve::ops::Reduce};
 use sl_compute_common::CommonRandomness;
 use sl_messages::relay::MessageSendError;
 
+pub use garbled_circuit::functionality::utils_dep::ProtocolParticipant;
+
 /// Trait to convert any random byte array into a Group scalar.
 /// The input bytes need not necessarily be the byte representation of the scalar.
 /// The input bytes can be modified to make sure a valid Scalar is returned.
@@ -17,7 +19,7 @@ pub trait ScalarFromBytes: Sized {
     fn from_bytes(bytes: [u8; 32]) -> Self;
 }
 
-impl ScalarFromBytes for k256::Scalar {
+impl ScalarFromBytes for Scalar {
     fn from_bytes(bytes: [u8; 32]) -> Self {
         let hval = k256::U256::from_be_slice(&bytes);
         k256::Scalar::reduce(hval)
@@ -126,13 +128,6 @@ impl From<ProtocolError> for HardDerivationError {
         }
     }
 }
-
-pub trait ProtocolParticipant:
-    garbled_circuit::functionality::utils_dep::ProtocolParticipant
-{
-}
-
-impl ProtocolParticipant for SetupMessage {}
 
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 pub struct PrivKeyShare<T: Group + GroupEncoding> {

@@ -16,17 +16,17 @@ pub fn reconstruct_shamir_process_msg1(
     share_next: &Scalar,
     share_prev: &Scalar,
     party_points: &[NonZeroScalar],
-    party_id: &usize,
+    party_id: usize,
 ) -> Scalar {
     let evals = [*share, *share_prev];
     let (ppts, next_eval) = match party_id {
-        1 => ([party_points[0], party_points[2]], party_points[1]),
-        2 => ([party_points[1], party_points[0]], party_points[2]),
-        3 => ([party_points[2], party_points[1]], party_points[0]),
+        0 => ([party_points[0], party_points[2]], &party_points[1]),
+        1 => ([party_points[1], party_points[0]], &party_points[2]),
+        2 => ([party_points[2], party_points[1]], &party_points[0]),
         _ => unreachable!(),
     };
 
-    let next_val = get_evaluation(&ppts, evals.as_ref(), &next_eval);
+    let next_val = get_evaluation(&ppts, &evals, next_eval);
     assert_eq!(*share_next, next_val);
 
     get_evaluation(&ppts, &evals, &Scalar::ZERO)
@@ -35,20 +35,18 @@ pub fn reconstruct_shamir_process_msg1(
 /// Function to reconstruct a shamir shared Scalar value to all parties
 pub async fn run_reconstruct_shamir<R: Relay, S: ProtocolParticipant>(
     setup: &S,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
     tag_offset_counter: &mut TagOffsetCounter,
     share: &Scalar,
     evaluation_points: &[NonZeroScalar],
 ) -> Result<Scalar, HardDerivationError> {
-    let mut relay = FilteredMsgRelay::new(relay);
-
     let tag1 = MessageTag::tag1(RECONSTRUCT_SHAMIR_MSG1, tag_offset_counter.next_value());
     let tag2 = MessageTag::tag1(RECONSTRUCT_SHAMIR_MSG1, tag_offset_counter.next_value());
     relay.ask_messages(setup, tag1, true).await?;
     relay.ask_messages(setup, tag2, true).await?;
 
-    let out = run_reconstruct_shamir_inner(setup, &mut relay, share, evaluation_points, tag1, tag2)
-        .await?;
+    let out =
+        run_reconstruct_shamir_inner(setup, relay, share, evaluation_points, tag1, tag2).await?;
 
     Ok(out)
 }
@@ -74,14 +72,14 @@ async fn run_reconstruct_shamir_inner<R: Relay, S: ProtocolParticipant>(
     let shares_recv_p: Vec<ScalarVal> =
         receive_from_parties(setup, tag2, &[prev_party], relay).await?;
 
-    let share_prev = shares_recv_p[0].0;
-    let share_next = shares_recv_n[0].0;
+    let share_prev = &shares_recv_p[0].0;
+    let share_next = &shares_recv_n[0].0;
     let out = reconstruct_shamir_process_msg1(
         share,
-        &share_next,
-        &share_prev,
+        share_next,
+        share_prev,
         evaluation_points,
-        &(my_party_id + 1),
+        my_party_id,
     );
 
     Ok(out)
@@ -90,7 +88,7 @@ async fn run_reconstruct_shamir_inner<R: Relay, S: ProtocolParticipant>(
 #[cfg(test)]
 mod tests {
 
-    use garbled_circuit::functionality::utils_dep::TagOffsetCounter;
+    use garbled_circuit::functionality::{utils::FilteredMsgRelay, utils_dep::TagOffsetCounter};
     use k256::{NonZeroScalar, Scalar};
     use rand::{CryptoRng, RngCore, SeedableRng, rngs};
 
@@ -118,7 +116,7 @@ mod tests {
         S: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = relay;
+        let mut relay = FilteredMsgRelay::new(relay);
 
         let mut cnt = TagOffsetCounter::new();
 

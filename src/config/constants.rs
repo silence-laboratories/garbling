@@ -16,7 +16,7 @@ pub const AES_NONCE: [u8; 12] = [1u8; 12];
 /// This can be used as a default or placeholder key in cryptographic hash functions.
 pub const HASH_KEY: Block = [1u8; BLOCK_SIZE];
 
-pub const INPUT_YAO_FUNC_MSG1: i32 = 200;
+pub const INPUT_YAO_FUNC_MSG1: u32 = 200;
 
 pub const INPUT_YAO_FROM_FUNC_MSG1: u32 = 201;
 pub const INPUT_YAO_FROM_FUNC_MSG2: u32 = 202;

@@ -274,7 +274,7 @@ where
 pub async fn binary_to_yao_functionality<T, R, C, G>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
     share: &BinaryShare,
     yao_setup: &YaoSetup,
     rng: Option<&mut G>,
@@ -286,15 +286,12 @@ where
     G: RngCore + CryptoRng,
     C: Commitment,
 {
-    let mut relay = FilteredMsgRelay::new(relay);
-
     let tag_offset = tag_offset_counter.next_value();
     let tag = MessageTag::tag1(B2Y_FUNC_MSG1, tag_offset);
     relay.ask_messages(setup, tag, true).await?;
 
     let output =
-        binary_to_yao_functionality_inner(setup, &mut relay, share, yao_setup, rng, comm, tag)
-            .await?;
+        binary_to_yao_functionality_inner(setup, relay, share, yao_setup, rng, comm, tag).await?;
 
     Ok(output)
 }
@@ -368,7 +365,7 @@ where
 pub async fn batch_binary_to_yao_functionality<T, R, C, G>(
     setup: &T,
     tag_offset_counter: &mut TagOffsetCounter,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
     share: &[BinaryShare],
     yao_setup: &YaoSetup,
     rng: Option<&mut G>,
@@ -380,16 +377,13 @@ where
     G: RngCore + CryptoRng,
     C: Commitment,
 {
-    let mut relay = FilteredMsgRelay::new(relay);
-
     let tag_offset = tag_offset_counter.next_value();
     let tag = MessageTag::tag1(B2Y_FUNC_MSG1, tag_offset);
     relay.ask_messages(setup, tag, true).await?;
 
-    let output = batch_binary_to_yao_functionality_inner(
-        setup, &mut relay, share, yao_setup, rng, comm, tag,
-    )
-    .await?;
+    let output =
+        batch_binary_to_yao_functionality_inner(setup, relay, share, yao_setup, rng, comm, tag)
+            .await?;
 
     Ok(output)
 }
@@ -499,12 +493,11 @@ mod tests {
     use sl_messages::relay::{MessageRelayService, Relay, SimpleMessageRelay};
     use tokio::task::JoinSet;
 
-    #[cfg(any(test, feature = "test-support"))]
-    use crate::functionality::utils::SetupMessage;
     use crate::{
         functionality::{
             output::batch_output_yao_functionality,
             setup::setup_yao_functionality,
+            utils::{FilteredMsgRelay, SetupMessage},
             utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
         },
         utilities::{
@@ -526,7 +519,7 @@ mod tests {
         T: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = relay;
+        let mut relay = FilteredMsgRelay::new(relay);
 
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];
@@ -596,7 +589,7 @@ mod tests {
         T: ProtocolParticipant,
         R: Relay,
     {
-        let mut relay = relay;
+        let mut relay = FilteredMsgRelay::new(relay);
 
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];

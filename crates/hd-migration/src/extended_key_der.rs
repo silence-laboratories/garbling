@@ -5,7 +5,7 @@ use garbled_circuit::{
         input::run_batch_input_from_all_yao,
         output::{batch_output_yao_functionality, output_yao_functionality},
         setup::setup_yao_functionality,
-        utils::run_common_randomness,
+        utils::{FilteredMsgRelay, run_common_randomness},
         utils_dep::TagOffsetCounter,
     },
     utilities::{
@@ -31,9 +31,9 @@ use crate::{
 
 /// Implements the child key derivation protocol for BIP-32 on secret-shared inputs.
 #[allow(clippy::too_many_arguments)]
-pub async fn run_extended_key_derivation_round1<S, R, G, H, C>(
+async fn run_extended_key_derivation_round1<S, R, G, H, C>(
     setup: &S,
-    relay: &mut R,
+    relay: &mut FilteredMsgRelay<R>,
     tag_offset_counter: &mut TagOffsetCounter,
     share: Scalar,
     evaluation_points: Vec<NonZeroScalar>,
@@ -166,7 +166,7 @@ where
 {
     let mut tag_offset_counter = TagOffsetCounter::new();
 
-    let mut relay = relay;
+    let mut relay = FilteredMsgRelay::new(relay);
 
     let mut rng = StdRng::from_entropy();
     let mut seed = [0u8; 32];
@@ -248,7 +248,7 @@ where
 {
     let mut tag_offset_counter = TagOffsetCounter::new();
 
-    let mut relay = relay;
+    let mut relay = FilteredMsgRelay::new(relay);
 
     let mut rng = StdRng::from_entropy();
     let mut seed = [0u8; 32];
