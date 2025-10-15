@@ -12,10 +12,10 @@ use crate::{
 /// for party with id `party_id` for a set of evaluation points.
 pub fn scalar_rss_to_shamir(
     inp: &PrivKeyShare<ProjectivePoint>,
-    party_id: &usize,
+    party_id: usize,
     evaluation_points: &[NonZeroScalar],
 ) -> Scalar {
-    assert!((1..=3).contains(party_id));
+    assert!((0..3).contains(&party_id));
 
     // helper closure f_A(j) = (j - m)/(-m)
     let f = |j: NonZeroScalar, m: NonZeroScalar| -> Scalar {
@@ -25,19 +25,19 @@ pub fn scalar_rss_to_shamir(
     };
 
     match party_id {
-        1 => {
+        0 => {
             // subsets containing 1: {1,2} (next_share), {1,3} (prev_share)
             let term12 = inp.next_share * f(evaluation_points[0], evaluation_points[2]);
             let term13 = inp.prev_share * f(evaluation_points[0], evaluation_points[1]);
             term12 + term13
         }
-        2 => {
+        1 => {
             // subsets containing 2: {1,2} (prev_share), {2,3} (next_share)
             let term12 = inp.prev_share * f(evaluation_points[1], evaluation_points[2]);
             let term23 = inp.next_share * f(evaluation_points[1], evaluation_points[0]);
             term12 + term23
         }
-        3 => {
+        2 => {
             // subsets containing 3: {1,3} (next_share), {2,3} (prev_share)
             let term13 = inp.next_share * f(evaluation_points[2], evaluation_points[1]);
             let term23 = inp.prev_share * f(evaluation_points[2], evaluation_points[0]);
@@ -60,7 +60,7 @@ pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
 
     let r_scalar_rss = PrivKeyShare::<ProjectivePoint>::get_random_share(randomness);
 
-    let r_shamir = scalar_rss_to_shamir(&r_scalar_rss, &(my_party_id + 1), evaluation_points);
+    let r_shamir = scalar_rss_to_shamir(&r_scalar_rss, my_party_id, evaluation_points);
 
     let padded_shamir = share + r_shamir;
 

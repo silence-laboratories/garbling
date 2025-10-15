@@ -341,7 +341,6 @@ mod tests {
     use rand::rngs::StdRng;
     use rand::{RngCore, SeedableRng};
     use sl_messages::relay::{Relay, SimpleMessageRelay};
-    use sl_mpc_mate::math;
 
     use crate::extended_key_der::{
         run_extended_key_derivation, run_extended_key_derivation_multiple_children,
@@ -512,9 +511,9 @@ mod tests {
                 + shares[1].1[i].keyshare.next_share
                 + shares[2].1[i].keyshare.next_share;
 
-            let shamir_p1 = scalar_rss_to_shamir(&shares[0].1[i].keyshare, &1, &evaluation_points);
-            let shamir_p2 = scalar_rss_to_shamir(&shares[1].1[i].keyshare, &2, &evaluation_points);
-            let shamir_p3 = scalar_rss_to_shamir(&shares[2].1[i].keyshare, &3, &evaluation_points);
+            let shamir_p1 = scalar_rss_to_shamir(&shares[0].1[i].keyshare, 0, &evaluation_points);
+            let shamir_p2 = scalar_rss_to_shamir(&shares[1].1[i].keyshare, 1, &evaluation_points);
+            let shamir_p3 = scalar_rss_to_shamir(&shares[2].1[i].keyshare, 2, &evaluation_points);
 
             let s3 = get_evaluation(
                 &[evaluation_points[0], evaluation_points[1]],
@@ -642,9 +641,9 @@ mod tests {
                 + shares[1].1[i].keyshare.next_share
                 + shares[2].1[i].keyshare.next_share;
 
-            let shamir_p1 = scalar_rss_to_shamir(&shares[0].1[i].keyshare, &1, &evaluation_points);
-            let shamir_p2 = scalar_rss_to_shamir(&shares[1].1[i].keyshare, &2, &evaluation_points);
-            let shamir_p3 = scalar_rss_to_shamir(&shares[2].1[i].keyshare, &3, &evaluation_points);
+            let shamir_p1 = scalar_rss_to_shamir(&shares[0].1[i].keyshare, 0, &evaluation_points);
+            let shamir_p2 = scalar_rss_to_shamir(&shares[1].1[i].keyshare, 1, &evaluation_points);
+            let shamir_p3 = scalar_rss_to_shamir(&shares[2].1[i].keyshare, 2, &evaluation_points);
 
             let s3 = get_evaluation(
                 &[evaluation_points[0], evaluation_points[1]],
