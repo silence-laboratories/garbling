@@ -147,6 +147,44 @@ pub trait ProtocolParticipant {
     }
 }
 
+impl<S: ProtocolParticipant> ProtocolParticipant for &S {
+    type MessageSignature = S::MessageSignature;
+    type MessageSigner = S::MessageSigner;
+    type MessageVerifier = S::MessageVerifier;
+
+    fn total_participants(&self) -> usize {
+        (**self).total_participants()
+    }
+
+    fn verifier(&self, index: usize) -> &Self::MessageVerifier {
+        (**self).verifier(index)
+    }
+
+    fn signer(&self) -> &Self::MessageSigner {
+        (**self).signer()
+    }
+
+    fn participant_index(&self) -> usize {
+        (**self).participant_index()
+    }
+
+    fn participant_verifier(&self) -> &Self::MessageVerifier {
+        (**self).participant_verifier()
+    }
+
+    fn instance_id(&self) -> &InstanceId {
+        (**self).instance_id()
+    }
+
+    fn message_ttl(&self) -> Duration {
+        (**self).message_ttl()
+    }
+
+    fn setup_hash(&self) -> &[u8] {
+        (**self).setup_hash()
+    }
+}
+
 /// Relay Errors
 pub enum Error {
     /// Abort
