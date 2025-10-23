@@ -11,6 +11,7 @@ use std::{
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use signature::{SignatureEncoding, Signer, Verifier};
+
 use sl_compute_common::{BinaryString, CommonRandomness};
 use sl_messages::{
     message::{InstanceId, MessageTag, MsgHdr, MsgId},
@@ -20,7 +21,9 @@ use sl_messages::{
     BytesMut,
 };
 
-use crate::functionality::utils_dep::{Error, ProtocolError, ProtocolParticipant};
+use crate::functionality::utils_dep::{
+    Error, ProtocolError, ProtocolParticipant,
+};
 
 /// custom message relay
 pub struct FilteredMsgRelay<R> {
@@ -61,7 +64,12 @@ impl<R: Relay> FilteredMsgRelay<R> {
         Ok(())
     }
 
-    fn put_back(&mut self, msg: &[u8], tag: MessageTag, party_id: usize) -> bool {
+    fn put_back(
+        &mut self,
+        msg: &[u8],
+        tag: MessageTag,
+        party_id: usize,
+    ) -> bool {
         // TODO Should we ASK it again?
 
         msg.try_into()
@@ -71,7 +79,10 @@ impl<R: Relay> FilteredMsgRelay<R> {
 
     /// Receive an expected message with given tag, and return a
     /// party-id associated with it.
-    pub async fn recv(&mut self, tag: MessageTag) -> Result<(BytesMut, usize, bool), Error> {
+    pub async fn recv(
+        &mut self,
+        tag: MessageTag,
+    ) -> Result<(BytesMut, usize, bool), Error> {
         if let Some(idx) = self.in_buf.iter().position(|ent| ent.2 == tag) {
             let (msg, p, _) = self.in_buf.swap_remove(idx);
             return Ok((msg, p, false));
@@ -113,8 +124,13 @@ impl<R: Relay> FilteredMsgRelay<R> {
         tag: MessageTag,
         p2p: bool,
     ) -> Result<usize, MessageSendError> {
-        self.ask_messages_from_iter(setup, tag, setup.all_other_parties(), p2p)
-            .await
+        self.ask_messages_from_iter(
+            setup,
+            tag,
+            setup.all_other_parties(),
+            p2p,
+        )
+        .await
     }
 
     /// Ask set of messages with a given `tag` from a set of `parties`.
@@ -164,7 +180,11 @@ pub struct Round<'a, R> {
 
 impl<'a, R: Relay> Round<'a, R> {
     /// Create a new round with a given number of messages to receive.
-    pub fn new(count: usize, tag: MessageTag, relay: &'a mut FilteredMsgRelay<R>) -> Self {
+    pub fn new(
+        count: usize,
+        tag: MessageTag,
+        relay: &'a mut FilteredMsgRelay<R>,
+    ) -> Self {
         Self { count, tag, relay }
     }
 
@@ -172,7 +192,9 @@ impl<'a, R: Relay> Round<'a, R> {
     /// On success returns Ok(Some(message, party_index, is_abort_flag)).
     /// At the end of the round it returns Ok(None).
     ///
-    pub async fn recv(&mut self) -> Result<Option<(BytesMut, usize, bool)>, Error> {
+    pub async fn recv(
+        &mut self,
+    ) -> Result<Option<(BytesMut, usize, bool)>, Error> {
         Ok(if self.count > 0 {
             let msg = self.relay.recv(self.tag).await;
             if msg.is_err() {
@@ -299,9 +321,12 @@ where
             continue;
         }
 
-        let v1 = SignedMessage::<(), _>::verify_with_trailer(&msg, setup.verifier(party_id))
-            .and_then(|(_, buf)| T::read(buf))
-            .ok_or(ProtocolError::InvalidMessage)?;
+        let v1 = SignedMessage::<(), _>::verify_with_trailer(
+            &msg,
+            setup.verifier(party_id),
+        )
+        .and_then(|(_, buf)| T::read(buf))
+        .ok_or(ProtocolError::InvalidMessage)?;
 
         p0.push(party_id, v1);
     }
@@ -352,9 +377,12 @@ where
             continue;
         }
 
-        let v1 = SignedMessage::<(), _>::verify_with_trailer(&msg, setup.verifier(party_id))
-            .and_then(|(_, buf)| T::read(buf))
-            .ok_or(ProtocolError::InvalidMessage)?;
+        let v1 = SignedMessage::<(), _>::verify_with_trailer(
+            &msg,
+            setup.verifier(party_id),
+        )
+        .and_then(|(_, buf)| T::read(buf))
+        .ok_or(ProtocolError::InvalidMessage)?;
 
         return Ok(v1);
     }
@@ -423,13 +451,21 @@ impl AsRef<[u8]> for NoVerifyingKey {
 }
 
 impl Verifier<NoSignature> for NoVerifyingKey {
-    fn verify(&self, _: &[u8], _: &NoSignature) -> Result<(), signature::Error> {
+    fn verify(
+        &self,
+        _: &[u8],
+        _: &NoSignature,
+    ) -> Result<(), signature::Error> {
         Ok(())
     }
 }
 
 #[derive(Clone)]
-pub struct SetupMessage<SK = NoSigningKey, VK = NoVerifyingKey, MS = NoSignature> {
+pub struct SetupMessage<
+    SK = NoSigningKey,
+    VK = NoVerifyingKey,
+    MS = NoSignature,
+> {
     n: usize,
     party_id: usize,
     sk: SK,
@@ -440,7 +476,12 @@ pub struct SetupMessage<SK = NoSigningKey, VK = NoVerifyingKey, MS = NoSignature
 }
 
 impl<SK, VK, MS> SetupMessage<SK, VK, MS> {
-    pub fn new(inst: InstanceId, sk: SK, party_id: usize, vk: Vec<VK>) -> Self {
+    pub fn new(
+        inst: InstanceId,
+        sk: SK,
+        party_id: usize,
+        vk: Vec<VK>,
+    ) -> Self {
         Self {
             n: 3,
             party_id,
@@ -524,8 +565,13 @@ pub fn run_init(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
         .into_iter()
         .enumerate()
         .map(|(party_id, sk)| {
-            SetupMessage::new(InstanceId::new(instance), sk, party_id, party_vk.clone())
-                .with_ttl(Duration::from_secs(1000)) // for dkls-metrics benchmarks
+            SetupMessage::new(
+                InstanceId::new(instance),
+                sk,
+                party_id,
+                party_vk.clone(),
+            )
+            .with_ttl(Duration::from_secs(1000)) // for dkls-metrics benchmarks
         })
         .map(|setup| {
             use sha2::{Digest, Sha256};
@@ -561,8 +607,13 @@ where
     let mut rng = ChaCha20Rng::from_seed(*seed);
     let key_next: [u8; 32] = rng.gen();
 
-    let key_prev =
-        p2p_send_to_next_receive_from_prev(setup, COMMON_RAND_MSG, key_next, relay).await?;
+    let key_prev = p2p_send_to_next_receive_from_prev(
+        setup,
+        COMMON_RAND_MSG,
+        key_next,
+        relay,
+    )
+    .await?;
 
     if key_prev == key_next {
         return Err(ProtocolError::VerificationError);

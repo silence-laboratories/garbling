@@ -33,7 +33,8 @@ where
     for (i, gate) in circuit.gates.iter().enumerate() {
         let (out_gate, f_label) = match *gate {
             BinaryGate::Input { no, id, wire } => {
-                let share = input_shares[no as usize][id as usize].as_garbler();
+                let share =
+                    input_shares[no as usize][id as usize].as_garbler();
                 (wire, share.f_label)
             }
 

@@ -2,6 +2,13 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use derivation_path::{ChildIndex, DerivationPath};
+use k256::{NonZeroScalar, ProjectivePoint, Scalar};
+use rand::{CryptoRng, RngCore, SeedableRng, rngs::StdRng};
+use rand_chacha::ChaCha8Rng;
+
+use sl_compute_common::CommonRandomness;
+use sl_messages::relay::Relay;
+
 use garbled_circuit::{
     functionality::{
         circuit_eval::yao_circuit_eval_functionality,
@@ -17,11 +24,6 @@ use garbled_circuit::{
         types::YaoSetup,
     },
 };
-use k256::{NonZeroScalar, ProjectivePoint, Scalar};
-use rand::{CryptoRng, RngCore, SeedableRng, rngs::StdRng};
-use rand_chacha::ChaCha8Rng;
-use sl_compute_common::CommonRandomness;
-use sl_messages::relay::Relay;
 
 use crate::{
     circuits::build_child_key_der_hmac_round1_circuit,
@@ -99,7 +101,11 @@ where
 
     let child = derivation_path.path()[0];
 
-    let circ = build_child_key_der_hmac_round1_circuit(&public_key, &child, chain_code);
+    let circ = build_child_key_der_hmac_round1_circuit(
+        &public_key,
+        &child,
+        chain_code,
+    );
 
     let output = yao_circuit_eval_functionality(
         setup,
@@ -123,14 +129,27 @@ where
     let mut child_sk_yao = ops[257..513].to_vec();
     let child_chain_yao = ops[513..].to_vec();
 
-    let verification = output_yao_functionality(setup, tag_offset_counter, relay, ver).await?;
+    let verification =
+        output_yao_functionality(setup, tag_offset_counter, relay, ver)
+            .await?;
     assert!(verification);
 
-    let scalar_rss_child =
-        run_yao_to_scalar_rss_keypair(setup, relay, tag_offset_counter, &child_sk_yao, rng).await?;
+    let scalar_rss_child = run_yao_to_scalar_rss_keypair(
+        setup,
+        relay,
+        tag_offset_counter,
+        &child_sk_yao,
+        rng,
+    )
+    .await?;
 
-    let child_cc_pub =
-        batch_output_yao_functionality(setup, tag_offset_counter, relay, &child_chain_yao).await?;
+    let child_cc_pub = batch_output_yao_functionality(
+        setup,
+        tag_offset_counter,
+        relay,
+        &child_chain_yao,
+    )
+    .await?;
 
     let child_cc = bool_vec_to_u8_vec(child_cc_pub);
 
@@ -176,10 +195,13 @@ where
     rng.fill_bytes(&mut seed);
 
     // run setup for serverstate
-    let mut randomness = run_common_randomness(&setup, &seed, &mut relay).await?;
+    let mut randomness =
+        run_common_randomness(&setup, &seed, &mut relay).await?;
 
     // run setup for yao protocols
-    let yao_setup = setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
+    let yao_setup =
+        setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay)
+            .await?;
 
     let (mut rng, hash, comm) = match &yao_setup {
         YaoSetup::E(e) => {
@@ -258,10 +280,13 @@ where
     rng.fill_bytes(&mut seed);
 
     // run setup for serverstate
-    let mut randomness = run_common_randomness(&setup, &seed, &mut relay).await?;
+    let mut randomness =
+        run_common_randomness(&setup, &seed, &mut relay).await?;
 
     // run setup for yao protocols
-    let yao_setup = setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
+    let yao_setup =
+        setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay)
+            .await?;
 
     let (mut rng, hash, comm) = match &yao_setup {
         YaoSetup::E(e) => {
@@ -340,13 +365,17 @@ mod tests {
     use k256::elliptic_curve::bigint::Encoding;
     use k256::elliptic_curve::{Curve, ops::Reduce};
     use k256::{FieldBytes, NonZeroScalar};
-    use k256::{ProjectivePoint, Scalar, Secp256k1, U256, elliptic_curve::sec1::ToEncodedPoint};
+    use k256::{
+        ProjectivePoint, Scalar, Secp256k1, U256,
+        elliptic_curve::sec1::ToEncodedPoint,
+    };
     use rand::rngs::StdRng;
     use rand::{RngCore, SeedableRng};
     use sl_messages::relay::{Relay, SimpleMessageRelay};
 
     use crate::extended_key_der::{
-        run_extended_key_derivation, run_extended_key_derivation_multiple_children,
+        run_extended_key_derivation,
+        run_extended_key_derivation_multiple_children,
     };
     use crate::shamir_to_rss::scalar_rss_to_shamir;
     use crate::types::{HardDerivationError, PrivKeyShareBip};
@@ -364,18 +393,21 @@ mod tests {
     ) {
         // test input evaluation points
         let x_1 = NonZeroScalar::from_repr(*FieldBytes::from_slice(&[
-            100, 48, 244, 185, 61, 88, 116, 164, 93, 235, 5, 61, 37, 167, 19, 87, 244, 186, 51, 41,
-            28, 223, 10, 96, 117, 115, 12, 238, 100, 70, 71, 48,
+            100, 48, 244, 185, 61, 88, 116, 164, 93, 235, 5, 61, 37, 167, 19,
+            87, 244, 186, 51, 41, 28, 223, 10, 96, 117, 115, 12, 238, 100,
+            70, 71, 48,
         ]))
         .expect("Conversion Failed");
         let x_2 = NonZeroScalar::from_repr(*FieldBytes::from_slice(&[
-            119, 139, 180, 247, 206, 8, 172, 176, 83, 173, 134, 148, 56, 72, 245, 140, 242, 169,
-            145, 48, 227, 164, 1, 193, 59, 173, 50, 139, 100, 219, 68, 4,
+            119, 139, 180, 247, 206, 8, 172, 176, 83, 173, 134, 148, 56, 72,
+            245, 140, 242, 169, 145, 48, 227, 164, 1, 193, 59, 173, 50, 139,
+            100, 219, 68, 4,
         ]))
         .expect("Conversion Failed");
         let x_3 = NonZeroScalar::from_repr(*FieldBytes::from_slice(&[
-            197, 148, 247, 13, 223, 180, 119, 249, 87, 162, 0, 13, 123, 239, 115, 202, 165, 205,
-            215, 176, 2, 81, 199, 180, 122, 80, 197, 187, 176, 1, 90, 229,
+            197, 148, 247, 13, 223, 180, 119, 249, 87, 162, 0, 13, 123, 239,
+            115, 202, 165, 205, 215, 176, 2, 81, 199, 180, 122, 80, 197, 187,
+            176, 1, 90, 229,
         ]))
         .expect("Conversion Failed");
 
@@ -405,14 +437,16 @@ mod tests {
         privkey: Scalar,
     ) -> (Scalar, Vec<u8>) {
         let result = if child_index.is_normal() {
-            let mut hmac_hasher = Hmac::<sha2::Sha512>::new_from_slice(cc).unwrap();
+            let mut hmac_hasher =
+                Hmac::<sha2::Sha512>::new_from_slice(cc).unwrap();
 
             hmac_hasher.update(pubkey.to_encoded_point(true).as_bytes());
 
             hmac_hasher.update(&child_index.to_bits().to_be_bytes());
             hmac_hasher.finalize().into_bytes()
         } else {
-            let mut hmac_hasher = Hmac::<sha2::Sha512>::new_from_slice(cc).unwrap();
+            let mut hmac_hasher =
+                Hmac::<sha2::Sha512>::new_from_slice(cc).unwrap();
 
             hmac_hasher.update(&[0]);
             hmac_hasher.update(&privkey.to_bytes());
@@ -461,9 +495,11 @@ mod tests {
             Err(e) => Err(e),
         }
     }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn test_hard_derivation_import() {
-        let (s1, s2, s3, s, chaincode, pubkey, evaluation_points) = generate_random_input();
+        let (s1, s2, s3, s, chaincode, pubkey, evaluation_points) =
+            generate_random_input();
 
         let derivation_path = DerivationPath::from_str("m/0'/1/2'").unwrap();
 
@@ -514,9 +550,21 @@ mod tests {
                 + shares[1].1[i].keyshare.next_share
                 + shares[2].1[i].keyshare.next_share;
 
-            let shamir_p1 = scalar_rss_to_shamir(&shares[0].1[i].keyshare, 0, &evaluation_points);
-            let shamir_p2 = scalar_rss_to_shamir(&shares[1].1[i].keyshare, 1, &evaluation_points);
-            let shamir_p3 = scalar_rss_to_shamir(&shares[2].1[i].keyshare, 2, &evaluation_points);
+            let shamir_p1 = scalar_rss_to_shamir(
+                &shares[0].1[i].keyshare,
+                0,
+                &evaluation_points,
+            );
+            let shamir_p2 = scalar_rss_to_shamir(
+                &shares[1].1[i].keyshare,
+                1,
+                &evaluation_points,
+            );
+            let shamir_p3 = scalar_rss_to_shamir(
+                &shares[2].1[i].keyshare,
+                2,
+                &evaluation_points,
+            );
 
             let s3 = get_evaluation(
                 &[evaluation_points[0], evaluation_points[1]],
@@ -577,9 +625,11 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_hard_derivation_import_multiple_children() {
-        let (s1, s2, s3, s, chaincode, pubkey, evaluation_points) = generate_random_input();
+        let (s1, s2, s3, s, chaincode, pubkey, evaluation_points) =
+            generate_random_input();
 
-        let derivation_path = DerivationPath::from_str("m/44'/60'/0'/0").unwrap();
+        let derivation_path =
+            DerivationPath::from_str("m/44'/60'/0'/0").unwrap();
 
         let mut children = Vec::new();
         for i in 1..4 {
@@ -644,9 +694,21 @@ mod tests {
                 + shares[1].1[i].keyshare.next_share
                 + shares[2].1[i].keyshare.next_share;
 
-            let shamir_p1 = scalar_rss_to_shamir(&shares[0].1[i].keyshare, 0, &evaluation_points);
-            let shamir_p2 = scalar_rss_to_shamir(&shares[1].1[i].keyshare, 1, &evaluation_points);
-            let shamir_p3 = scalar_rss_to_shamir(&shares[2].1[i].keyshare, 2, &evaluation_points);
+            let shamir_p1 = scalar_rss_to_shamir(
+                &shares[0].1[i].keyshare,
+                0,
+                &evaluation_points,
+            );
+            let shamir_p2 = scalar_rss_to_shamir(
+                &shares[1].1[i].keyshare,
+                1,
+                &evaluation_points,
+            );
+            let shamir_p3 = scalar_rss_to_shamir(
+                &shares[2].1[i].keyshare,
+                2,
+                &evaluation_points,
+            );
 
             let s3 = get_evaluation(
                 &[evaluation_points[0], evaluation_points[1]],

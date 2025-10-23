@@ -29,7 +29,8 @@ impl HashFunction for Sha512Hash {
         for i in 0..BLOCK_SIZE / 2 {
             y[i] = x[i] ^ x[i + BLOCK_SIZE / 2];
         }
-        y[BLOCK_SIZE / 2..BLOCK_SIZE].copy_from_slice(&x[BLOCK_SIZE / 2..BLOCK_SIZE]);
+        y[BLOCK_SIZE / 2..BLOCK_SIZE]
+            .copy_from_slice(&x[BLOCK_SIZE / 2..BLOCK_SIZE]);
         self.cr_hash(&y)
     }
 

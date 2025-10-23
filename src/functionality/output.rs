@@ -5,7 +5,9 @@ use sl_compute_common::BinaryString;
 use sl_messages::{message::MessageTag, relay::Relay};
 
 use crate::{
-    config::constants::{OUTPUT_YAO_FUNC_MSG1, OUTPUT_YAO_FUNC_MSG2, OUTPUT_YAO_TO_FUNC_MSG1},
+    config::constants::{
+        OUTPUT_YAO_FUNC_MSG1, OUTPUT_YAO_FUNC_MSG2, OUTPUT_YAO_TO_FUNC_MSG1,
+    },
     functionality::{
         utils::{receive_from_parties, send_to_party, FilteredMsgRelay},
         utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
@@ -15,7 +17,6 @@ use crate::{
         utils::{lsb, xor_blocks},
     },
 };
-use std::vec;
 
 pub async fn validate_yao_share<T, R>(
     setup: &T,
@@ -38,7 +39,8 @@ where
         send_to_party(setup, tag1, share.label, 1, r).await?;
         Ok(true)
     } else {
-        let out: Vec<Block> = receive_from_parties(setup, tag1, &[2], r).await?;
+        let out: Vec<Block> =
+            receive_from_parties(setup, tag1, &[2], r).await?;
         let share = input.as_garbler();
         let val1 = share.f_label == out[0];
         let val2 = xor_blocks(&share.f_label, &share.delta) == out[0];
@@ -65,7 +67,8 @@ where
     let tag2 = MessageTag::tag1(OUTPUT_YAO_FUNC_MSG2, tag_offset);
     r.ask_messages(setup, tag2, true).await?;
 
-    let output = output_yao_functionality_inner(setup, r, input, tag1, tag2).await?;
+    let output =
+        output_yao_functionality_inner(setup, r, input, tag1, tag2).await?;
 
     Ok(output)
 }
@@ -87,7 +90,8 @@ where
     if party_id == 0 || party_id == 1 {
         let share = input.as_garbler();
 
-        let wxs: Vec<Block> = receive_from_parties(setup, tag1, &[2], relay).await?;
+        let wxs: Vec<Block> =
+            receive_from_parties(setup, tag1, &[2], relay).await?;
 
         let t1 = wxs[0] == share.f_label;
         let t2 = wxs[0] == xor_blocks(&share.f_label, &share.delta);
@@ -104,7 +108,8 @@ where
         send_to_party(setup, tag1, share.label, 0, relay).await?;
         send_to_party(setup, tag1, share.label, 1, relay).await?;
 
-        let outs: Vec<u16> = receive_from_parties(setup, tag2, &[0, 1], relay).await?;
+        let outs: Vec<u16> =
+            receive_from_parties(setup, tag2, &[0, 1], relay).await?;
 
         assert_eq!(outs[0], outs[1]);
         output = outs[0] != 0;
@@ -131,7 +136,9 @@ where
     let tag2 = MessageTag::tag1(OUTPUT_YAO_FUNC_MSG2, tag_offset);
     r.ask_messages(setup, tag2, true).await?;
 
-    let output = batch_output_yao_functionality_inner(setup, r, input, tag1, tag2).await?;
+    let output =
+        batch_output_yao_functionality_inner(setup, r, input, tag1, tag2)
+            .await?;
 
     Ok(output)
 }
@@ -152,7 +159,8 @@ where
     let party_id = setup.participant_index();
 
     if party_id == 0 || party_id == 1 {
-        let wxs: Vec<Vec<u8>> = receive_from_parties(setup, tag1, &[2], relay).await?;
+        let wxs: Vec<Vec<u8>> =
+            receive_from_parties(setup, tag1, &[2], relay).await?;
 
         let mut xval = BinaryString::new();
 
@@ -177,14 +185,16 @@ where
         let mut xval = BinaryString::new();
         for i in 0..batch_size {
             let share = input[i].as_evaluator();
-            msg[BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)].copy_from_slice(&share.label);
+            msg[BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)]
+                .copy_from_slice(&share.label);
             xval.push(false);
         }
 
         send_to_party(setup, tag1, msg.clone(), 0, relay).await?;
         send_to_party(setup, tag1, msg, 1, relay).await?;
 
-        let outs: Vec<Vec<u8>> = receive_from_parties(setup, tag2, &[0, 1], relay).await?;
+        let outs: Vec<Vec<u8>> =
+            receive_from_parties(setup, tag2, &[0, 1], relay).await?;
 
         assert_eq!(outs[0], outs[1]);
         xval.value = outs[0].clone();
@@ -209,10 +219,14 @@ where
     R: Relay,
 {
     let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(OUTPUT_YAO_TO_FUNC_MSG1.try_into().unwrap(), tag_offset);
+    let tag1 = MessageTag::tag1(
+        OUTPUT_YAO_TO_FUNC_MSG1.try_into().unwrap(),
+        tag_offset,
+    );
     r.ask_messages(setup, tag1, true).await?;
 
-    let output = output_yao_to_functionality_inner(setup, r, pid, input, tag1).await?;
+    let output =
+        output_yao_to_functionality_inner(setup, r, pid, input, tag1).await?;
 
     Ok(output)
 }
@@ -235,14 +249,16 @@ where
         if party_id == 2 {
             let share = input.as_evaluator();
 
-            let ds: Vec<u16> = receive_from_parties(setup, tag1, &[0, 1], relay).await?;
+            let ds: Vec<u16> =
+                receive_from_parties(setup, tag1, &[0, 1], relay).await?;
 
             assert_eq!(ds[0], ds[1]);
             output = Some((ds[0] as u8 ^ lsb(&share.label)) != 0);
         } else {
             let share = input.as_garbler();
 
-            send_to_party(setup, tag1, lsb(&share.f_label) as u16, 2, relay).await?;
+            send_to_party(setup, tag1, lsb(&share.f_label) as u16, 2, relay)
+                .await?;
         }
     } else if party_id == 2 {
         let share = input.as_evaluator();
@@ -251,7 +267,8 @@ where
     } else if party_id == pid {
         let share = input.as_garbler();
 
-        let wxs: Vec<Block> = receive_from_parties(setup, tag1, &[2], relay).await?;
+        let wxs: Vec<Block> =
+            receive_from_parties(setup, tag1, &[2], relay).await?;
 
         let t1 = wxs[0] == share.f_label;
         let t2 = wxs[0] == xor_blocks(&share.f_label, &share.delta);
@@ -284,7 +301,8 @@ where
             for _ in 0..batch_size {
                 d.push(false);
             }
-            let ds: Vec<Vec<u8>> = receive_from_parties(setup, tag1, &[0, 1], relay).await?;
+            let ds: Vec<Vec<u8>> =
+                receive_from_parties(setup, tag1, &[0, 1], relay).await?;
             assert_eq!(ds[0], ds[1]);
             d.value = ds[0].clone();
 
@@ -308,11 +326,13 @@ where
 
         for i in 0..batch_size {
             let share = input[i].as_evaluator();
-            msg[BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)].copy_from_slice(&share.label);
+            msg[BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)]
+                .copy_from_slice(&share.label);
         }
         send_to_party(setup, tag1, msg, pid, relay).await?;
     } else if party_id == pid {
-        let wxs: Vec<Vec<u8>> = receive_from_parties(setup, tag1, &[2], relay).await?;
+        let wxs: Vec<Vec<u8>> =
+            receive_from_parties(setup, tag1, &[2], relay).await?;
 
         for i in 0..batch_size {
             let share = input[i].as_garbler();
@@ -343,10 +363,15 @@ where
     R: Relay,
 {
     let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(OUTPUT_YAO_TO_FUNC_MSG1.try_into().unwrap(), tag_offset);
+    let tag1 = MessageTag::tag1(
+        OUTPUT_YAO_TO_FUNC_MSG1.try_into().unwrap(),
+        tag_offset,
+    );
     r.ask_messages(setup, tag1, true).await?;
 
-    let output = batch_output_yao_to_functionality_inner(setup, r, pid, input, tag1).await?;
+    let output =
+        batch_output_yao_to_functionality_inner(setup, r, pid, input, tag1)
+            .await?;
 
     Ok(output)
 }

@@ -6,7 +6,9 @@ use std::collections::HashMap;
 use criterion::{criterion_group, criterion_main, Criterion};
 use garbled_circuit::{
     circuitop::circuit::BinaryCircuit,
-    config::constants::{AES128_CIRCUIT, AES256_CIRCUIT, AES_KEY, SHA256_CIRCUIT},
+    config::constants::{
+        AES128_CIRCUIT, AES256_CIRCUIT, AES_KEY, SHA256_CIRCUIT,
+    },
     functionality::garble::garble_functionality,
     utilities::{
         garble_hash::AesGarbleHash,

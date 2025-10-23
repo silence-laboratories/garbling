@@ -1,10 +1,6 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use garbled_circuit::utilities::{
-    types::{YaoEvaluatorShare, YaoGarblerShare},
-    utils::{lsb, xor_blocks},
-};
 use group::{
     Group, GroupEncoding,
     ff::{Field, PrimeField},
@@ -12,6 +8,11 @@ use group::{
 use k256::{ProjectivePoint, Scalar};
 use rand::{CryptoRng, RngCore};
 use sha2::Digest;
+
+use garbled_circuit::utilities::{
+    types::{YaoEvaluatorShare, YaoGarblerShare},
+    utils::{lsb, xor_blocks},
+};
 
 use crate::types::ScalarFromBytes;
 
@@ -68,7 +69,10 @@ where
     for i in 0..eta {
         let pi = lsb(&garbled_inputs[i].f_label) != 0;
 
-        let hk0 = kdf::<ProjectivePoint>(&i.to_be_bytes(), &garbled_inputs[i].f_label);
+        let hk0 = kdf::<ProjectivePoint>(
+            &i.to_be_bytes(),
+            &garbled_inputs[i].f_label,
+        );
         let hk1 = kdf::<ProjectivePoint>(
             &i.to_be_bytes(),
             &xor_blocks(&garbled_inputs[i].f_label, &garbled_inputs[i].delta),
@@ -91,7 +95,10 @@ where
 }
 
 /// Implementation of the evaluate algorithm of garbling gadget from the paper (2.1)
-pub fn evaluate_gadget<G>(cvec: &[G::Scalar], garbled_inputs: &[YaoEvaluatorShare]) -> G::Scalar
+pub fn evaluate_gadget<G>(
+    cvec: &[G::Scalar],
+    garbled_inputs: &[YaoEvaluatorShare],
+) -> G::Scalar
 where
     G: Group + GroupEncoding,
     G::Scalar: PrimeField + ScalarFromBytes,
@@ -117,7 +124,10 @@ where
 }
 
 /// Implementation of the decode algorithm of garbling gadget from the paper (2.1)
-pub fn decode_gadget<G>(dec: &(G::Scalar, G::Scalar), z: G::Scalar) -> G::Scalar
+pub fn decode_gadget<G>(
+    dec: &(G::Scalar, G::Scalar),
+    z: G::Scalar,
+) -> G::Scalar
 where
     G: Group + GroupEncoding,
 {
@@ -156,8 +166,8 @@ mod tests {
     use crate::{
         arith_gadget::{decode_gadget, evaluate_gadget, garble_gadget},
         types::{
-            HardDerivationError, ProtocolParticipant, ScalarVal, vec_scalar_2_scalarvals,
-            vec_scalarval_2_scalars,
+            HardDerivationError, ProtocolParticipant, ScalarVal,
+            vec_scalar_2_scalarvals, vec_scalarval_2_scalars,
         },
         utils::{run_init, u8_vec_to_bool_vec},
     };
@@ -175,8 +185,12 @@ mod tests {
 
         let mut tag_offset_counter = TagOffsetCounter::new();
 
-        let yao_setup =
-            setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
+        let yao_setup = setup_yao_functionality(
+            &setup,
+            &mut tag_offset_counter,
+            &mut relay,
+        )
+        .await?;
 
         let (mut rng, _, _) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -234,7 +248,8 @@ mod tests {
             send_to_party(&setup, tag2, ScalarVal(z), 0, &mut r).await?;
             send_to_party(&setup, tag2, ScalarVal(z), 1, &mut r).await?;
 
-            let outs: Vec<ScalarVal> = receive_from_parties(&setup, tag3, &[0, 1], &mut r).await?;
+            let outs: Vec<ScalarVal> =
+                receive_from_parties(&setup, tag3, &[0, 1], &mut r).await?;
 
             assert_eq!(outs[0].0, outs[1].0);
             outs[0].0
@@ -251,7 +266,8 @@ mod tests {
 
             send_to_party(&setup, tag1, svcvec, 2, &mut r).await?;
 
-            let zs: Vec<ScalarVal> = receive_from_parties(&setup, tag2, &[2], &mut r).await?;
+            let zs: Vec<ScalarVal> =
+                receive_from_parties(&setup, tag2, &[2], &mut r).await?;
 
             let out = decode_gadget::<ProjectivePoint>(&de, zs[0].0);
 

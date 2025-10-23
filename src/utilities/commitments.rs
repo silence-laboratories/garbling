@@ -13,7 +13,12 @@ pub trait Commitment {
 
     /// Returns whether a given commitment `Block` is consistent with
     /// a given message and witness `Block`.
-    fn verify(&self, message: &Block, witness: &Block, commitment: &Block) -> bool;
+    fn verify(
+        &self,
+        message: &Block,
+        witness: &Block,
+        commitment: &Block,
+    ) -> bool;
 }
 
 /// Represents a structure composed of a hash function.
@@ -43,7 +48,12 @@ impl<H: HashFunction> Commitment for HashCommitment<H> {
     }
 
     /// Implementation of the `verify` function for a `HashCommitment`
-    fn verify(&self, message: &Block, witness: &Block, commitment: &Block) -> bool {
+    fn verify(
+        &self,
+        message: &Block,
+        witness: &Block,
+        commitment: &Block,
+    ) -> bool {
         let mut temp = [0u8; BLOCK_SIZE * 2];
         temp[..BLOCK_SIZE].copy_from_slice(message);
         temp[BLOCK_SIZE..BLOCK_SIZE * 2].copy_from_slice(witness);

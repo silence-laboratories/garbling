@@ -2,16 +2,18 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use derivation_path::ChildIndex;
-use garbled_circuit::{
-    circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder},
-    config::constants::SHA512_CIRCUIT,
-};
 use hmac::{Hmac, Mac};
 use k256::{
     ProjectivePoint, U256,
     elliptic_curve::{bigint::Encoding, sec1::ToEncodedPoint},
 };
+
 use sl_compute_common::BinaryString;
+
+use garbled_circuit::{
+    circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder},
+    config::constants::SHA512_CIRCUIT,
+};
 
 use crate::{constants::SECP256_K1_Q, utils::u8_vec_to_bool_vec};
 
@@ -77,12 +79,14 @@ pub fn build_child_key_der_hmac_round1_circuit(
         }
         data_ids.extend_from_slice(&index_ids);
 
-        let hmac_circuit = build_hmac_512_circuit(chain_par_ids.len(), data_ids.len());
+        let hmac_circuit =
+            build_hmac_512_circuit(chain_par_ids.len(), data_ids.len());
         builder.add_circuit(&hmac_circuit, &[&chain_par_ids, &data_ids])
     } else {
         // Normal child
         // data = pubkey_par || index (all in big endian)
-        let mut hmac_hasher = Hmac::<sha2::Sha512>::new_from_slice(&chain_code).unwrap();
+        let mut hmac_hasher =
+            Hmac::<sha2::Sha512>::new_from_slice(&chain_code).unwrap();
 
         hmac_hasher.update(public_key_par.to_encoded_point(true).as_bytes());
 
@@ -163,12 +167,14 @@ pub fn build_child_key_der_hmac_circuit(
         }
         data_ids.extend_from_slice(&index_ids);
 
-        let hmac_circuit = build_hmac_512_circuit(chain_par_ids.len(), data_ids.len());
+        let hmac_circuit =
+            build_hmac_512_circuit(chain_par_ids.len(), data_ids.len());
         builder.add_circuit(&hmac_circuit, &[&chain_par_ids, &data_ids])
     } else {
         // Normal child
         // data = pubkey_par || index (all in big endian)
-        let mut hmac_hasher = Hmac::<sha2::Sha512>::new_from_slice(&chain_code).unwrap();
+        let mut hmac_hasher =
+            Hmac::<sha2::Sha512>::new_from_slice(&chain_code).unwrap();
 
         hmac_hasher.update(public_key_par.to_encoded_point(true).as_bytes());
 
@@ -204,7 +210,10 @@ pub fn build_child_key_der_hmac_circuit(
 
 /// Returns a hmac circuit which takes `key_length` bits of key and `message_length` bits of messages
 /// The key bits are the garbler's inputs and the message bits are the evaluator's inputs
-pub fn build_hmac_512_circuit(key_length: usize, message_length: usize) -> BinaryCircuit {
+pub fn build_hmac_512_circuit(
+    key_length: usize,
+    message_length: usize,
+) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
     let key_ids = builder.new_inputs(key_length as u16);
@@ -334,7 +343,8 @@ pub fn build_sha512_circuit(len: u128) -> BinaryCircuit {
         let mut block_inp = padded[1024 * i..1024 * (i + 1)].to_vec();
         block_inp.reverse();
 
-        chain_input = builder.add_circuit(&sha512_circuit, &[&block_inp, &chain_input]);
+        chain_input =
+            builder.add_circuit(&sha512_circuit, &[&block_inp, &chain_input]);
     }
 
     chain_input.reverse();
@@ -484,7 +494,8 @@ fn build_mod_add_circut(size: usize, prime: U256) -> BinaryCircuit {
     let comps = vec![comp[0]; size];
 
     let ifthenelse_circ = build_if_then_else_circuit(size);
-    let out = builder.add_circuit(&ifthenelse_circ, &[&comps, &sub[..size], &add[..size]]);
+    let out = builder
+        .add_circuit(&ifthenelse_circ, &[&comps, &sub[..size], &add[..size]]);
 
     for i in out {
         builder.output(i);
@@ -497,7 +508,10 @@ fn build_mod_add_circut(size: usize, prime: U256) -> BinaryCircuit {
 /// bit length `size` by a constant `prime`.
 ///
 /// The input is set as the garbler's input
-pub fn build_subtract_order_circuit(size: usize, prime: U256) -> BinaryCircuit {
+pub fn build_subtract_order_circuit(
+    size: usize,
+    prime: U256,
+) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
     let gin = builder.new_inputs(size as u16);
@@ -652,7 +666,11 @@ pub fn build_compare_ge_circuit(size: usize) -> BinaryCircuit {
 /// Returns the `BinaryCircuit` which implements the recursion for
 /// compare ge protocol, which compares two binary values of `size`
 /// bit length
-pub fn build_compare_ge_rec_circuit(size: usize, lo: usize, hi: usize) -> BinaryCircuit {
+pub fn build_compare_ge_rec_circuit(
+    size: usize,
+    lo: usize,
+    hi: usize,
+) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
     let xvals = builder.new_inputs(size as u16);
@@ -680,7 +698,8 @@ pub fn build_compare_ge_rec_circuit(size: usize, lo: usize, hi: usize) -> Binary
     let (subres_h, diff_h) = (highout[0], highout[1]);
 
     let ifelse_circ = build_if_then_else_circuit(1);
-    let subres = builder.add_circuit(&ifelse_circ, &[&[diff_h], &[subres_h], &[subres_l]]);
+    let subres = builder
+        .add_circuit(&ifelse_circ, &[&[diff_h], &[subres_h], &[subres_l]]);
 
     let mut diff = builder.xor(diff_h, diff_l);
     let temp = builder.and(diff_h, diff_l);

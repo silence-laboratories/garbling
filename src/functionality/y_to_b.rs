@@ -2,23 +2,31 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+
 use sl_compute_common::BinaryShare;
 use sl_messages::{message::MessageTag, relay::Relay};
 
 use crate::{
-    config::constants::{Y2B_FUNC_MSG1, Y2B_FUNC_MSG2, Y2B_FUNC_MSG3, Y2B_FUNC_MSG4},
+    config::constants::{
+        Y2B_FUNC_MSG1, Y2B_FUNC_MSG2, Y2B_FUNC_MSG3, Y2B_FUNC_MSG4,
+    },
     functionality::{
         utils::{receive_from_parties, send_to_party, FilteredMsgRelay},
         utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
     },
     utilities::{
         commitments::Commitment,
-        types::{Block, GarblerSetup, YaoGarblerShare, YaoSetup, YaoShare, BLOCK_SIZE},
+        types::{
+            Block, GarblerSetup, YaoGarblerShare, YaoSetup, YaoShare,
+            BLOCK_SIZE,
+        },
         utils::{lsb, xor_blocks},
     },
 };
 
-fn create_yao_to_binary_msg1(yao_setup: &GarblerSetup) -> (bool, Block, Block) {
+fn create_yao_to_binary_msg1(
+    yao_setup: &GarblerSetup,
+) -> (bool, Block, Block) {
     let mut rng = rand::rngs::StdRng::from_entropy();
     let y = rng.gen_bool(0.5);
     let wyr = rng.gen();
@@ -151,7 +159,8 @@ where
             } else {
                 assert!(party_id == 1);
 
-                let msg1s: Vec<Block> = receive_from_parties(setup, tag1, &[0], relay).await?;
+                let msg1s: Vec<Block> =
+                    receive_from_parties(setup, tag1, &[0], relay).await?;
                 let wr0 = &msg1s[0];
 
                 let r = rng.unwrap();
@@ -165,7 +174,8 @@ where
 
                 send_to_party(setup, tag2, msg, 2, relay).await?;
 
-                let msg2s: Vec<Block> = receive_from_parties(setup, tag3, &[2], relay).await?;
+                let msg2s: Vec<Block> =
+                    receive_from_parties(setup, tag3, &[2], relay).await?;
                 let mut wxz = Block::default();
                 wxz.copy_from_slice(&msg2s[0]);
 
@@ -197,7 +207,8 @@ where
 
             send_to_party(setup, tag3, wxz, 1, relay).await?;
 
-            let msg2s: Vec<Vec<u8>> = receive_from_parties(setup, tag2, &[0, 1], relay).await?;
+            let msg2s: Vec<Vec<u8>> =
+                receive_from_parties(setup, tag2, &[0, 1], relay).await?;
 
             let mut com0 = Block::default();
             let mut com1 = Block::default();
@@ -306,7 +317,8 @@ where
                     .iter()
                     .map(YaoShare::as_garbler)
                     .map(|share| {
-                        let (y, wyr, wr0) = create_yao_to_binary_msg1(yaosetup);
+                        let (y, wyr, wr0) =
+                            create_yao_to_binary_msg1(yaosetup);
                         let mut msg = [0u8; BLOCK_SIZE + 1];
 
                         msg[0..BLOCK_SIZE].copy_from_slice(&wyr);
@@ -346,20 +358,20 @@ where
             } else {
                 assert!(party_id == 1);
 
-                let msg1s: Vec<Vec<u8>> = receive_from_parties(setup, tag1, &[0], relay).await?;
+                let msg1s: Vec<Vec<u8>> =
+                    receive_from_parties(setup, tag1, &[0], relay).await?;
 
                 let mut msgs = Vec::new();
                 let mut wr0s = Vec::new();
                 let mut wz0s = Vec::new();
                 let mut wz1s = Vec::new();
 
-                input
-                    .iter()
-                    .map(YaoShare::as_garbler)
-                    .enumerate()
-                    .for_each(|(i, share)| {
+                input.iter().map(YaoShare::as_garbler).enumerate().for_each(
+                    |(i, share)| {
                         let mut wr0 = Block::default();
-                        wr0.copy_from_slice(&msg1s[0][BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)]);
+                        wr0.copy_from_slice(
+                            &msg1s[0][BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)],
+                        );
 
                         let (com0, com1, wz0, wz1, _, _) =
                             create_yao_to_binary_msg2(&wr0, comm, r, share);
@@ -371,20 +383,23 @@ where
                         wr0s.push(wr0);
                         wz0s.push(wz0);
                         wz1s.push(wz1);
-                    });
+                    },
+                );
 
                 send_to_party(setup, tag4, msgs, 2, relay).await?;
 
-                let msg2s: Vec<Vec<u8>> = receive_from_parties(setup, tag3, &[2], relay).await?;
+                let msg2s: Vec<Vec<u8>> =
+                    receive_from_parties(setup, tag3, &[2], relay).await?;
 
                 Ok(input
                     .iter()
                     .map(YaoShare::as_garbler)
                     .enumerate()
                     .map(|(i, share)| {
-                        let wxz =
-                            <&Block>::try_from(&msg2s[0][BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)])
-                                .unwrap();
+                        let wxz = <&Block>::try_from(
+                            &msg2s[0][BLOCK_SIZE * i..BLOCK_SIZE * (i + 1)],
+                        )
+                        .unwrap();
 
                         let val1 = wxz == &wz0s[i];
                         let val2 = wxz == &wz1s[i];
@@ -405,7 +420,8 @@ where
         }
 
         YaoSetup::E(_e) => {
-            let msg1s: Vec<Vec<u8>> = receive_from_parties(setup, tag1, &[0], relay).await?;
+            let msg1s: Vec<Vec<u8>> =
+                receive_from_parties(setup, tag1, &[0], relay).await?;
 
             let mut wxzs = Vec::new();
             let mut ys = Vec::new();
@@ -418,7 +434,8 @@ where
                 .for_each(|(i, share)| {
                     let mut wyr = Block::default();
                     wyr.copy_from_slice(
-                        &msg1s[0][(BLOCK_SIZE + 1) * i..((BLOCK_SIZE + 1) * i + BLOCK_SIZE)],
+                        &msg1s[0][(BLOCK_SIZE + 1) * i
+                            ..((BLOCK_SIZE + 1) * i + BLOCK_SIZE)],
                     );
                     let y = msg1s[0][(BLOCK_SIZE + 1) * i + BLOCK_SIZE] != 0;
 
@@ -433,9 +450,11 @@ where
 
             send_to_party(setup, tag3, wxzs, 1, relay).await?;
 
-            let msg2s_0: Vec<Vec<u8>> = receive_from_parties(setup, tag2, &[0], relay).await?;
+            let msg2s_0: Vec<Vec<u8>> =
+                receive_from_parties(setup, tag2, &[0], relay).await?;
 
-            let msg2s_1: Vec<Vec<u8>> = receive_from_parties(setup, tag4, &[1], relay).await?;
+            let msg2s_1: Vec<Vec<u8>> =
+                receive_from_parties(setup, tag4, &[1], relay).await?;
 
             let outputs = input
                 .iter()
@@ -447,7 +466,8 @@ where
                     // conversion can’t fail
 
                     let com0 = <&Block>::try_from(
-                        &msg2s_0[0][BLOCK_SIZE * 4 * i..(BLOCK_SIZE * 4 * i + BLOCK_SIZE)],
+                        &msg2s_0[0][BLOCK_SIZE * 4 * i
+                            ..(BLOCK_SIZE * 4 * i + BLOCK_SIZE)],
                     )
                     .unwrap();
 
@@ -458,7 +478,8 @@ where
                     .unwrap();
 
                     let com01 = <&Block>::try_from(
-                        &msg2s_1[0][BLOCK_SIZE * 2 * i..(BLOCK_SIZE * 2 * i + BLOCK_SIZE)],
+                        &msg2s_1[0][BLOCK_SIZE * 2 * i
+                            ..(BLOCK_SIZE * 2 * i + BLOCK_SIZE)],
                     )
                     .unwrap();
 
@@ -527,20 +548,27 @@ mod tests {
             output::validate_yao_share,
             setup::setup_yao_functionality,
             utils::{
-                p2p_send_to_next_receive_from_prev, run_common_randomness, FilteredMsgRelay,
-                SetupMessage,
+                p2p_send_to_next_receive_from_prev, run_common_randomness,
+                FilteredMsgRelay, SetupMessage,
             },
-            utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
+            utils_dep::{
+                ProtocolError, ProtocolParticipant, TagOffsetCounter,
+            },
         },
         utilities::{
-            commitments::HashCommitment, garble_hash::AesGarbleHash, shahash::Sha512Hash,
-            types::YaoSetup, utils::bool_vec_to_hex,
+            commitments::HashCommitment, garble_hash::AesGarbleHash,
+            shahash::Sha512Hash, types::YaoSetup, utils::bool_vec_to_hex,
         },
     };
 
-    use super::{batch_yao_to_binary_functionality, yao_to_binary_functionality};
+    use super::{
+        batch_yao_to_binary_functionality, yao_to_binary_functionality,
+    };
 
-    async fn test_run_y_to_b<T, R>(setup: T, relay: R) -> Result<(usize, Vec<bool>), ProtocolError>
+    async fn test_run_y_to_b<T, R>(
+        setup: T,
+        relay: R,
+    ) -> Result<(usize, Vec<bool>), ProtocolError>
     where
         T: ProtocolParticipant,
         R: Relay,
@@ -554,13 +582,21 @@ mod tests {
 
         let mut tag_offset_counter = TagOffsetCounter::new();
 
-        let common_randomness =
-            run_common_randomness(&setup, &common_randomness_seed, &mut relay).await?;
+        let common_randomness = run_common_randomness(
+            &setup,
+            &common_randomness_seed,
+            &mut relay,
+        )
+        .await?;
 
         let mut serverstate = ServerState::new(common_randomness);
 
-        let yao_setup =
-            setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
+        let yao_setup = setup_yao_functionality(
+            &setup,
+            &mut tag_offset_counter,
+            &mut relay,
+        )
+        .await?;
 
         let (mut rng, hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -598,8 +634,13 @@ mod tests {
                 .await?;
 
                 for i in &jointsh {
-                    let val =
-                        validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, i).await?;
+                    let val = validate_yao_share(
+                        &setup,
+                        &mut tag_offset_counter,
+                        &mut relay,
+                        i,
+                    )
+                    .await?;
                     assert!(val);
                 }
 
@@ -626,8 +667,13 @@ mod tests {
 
                 let mut out_bin = vec![];
                 for i in &out_yao {
-                    let val =
-                        validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, i).await?;
+                    let val = validate_yao_share(
+                        &setup,
+                        &mut tag_offset_counter,
+                        &mut relay,
+                        i,
+                    )
+                    .await?;
                     assert!(val);
                     let temp = yao_to_binary_functionality(
                         &setup,
@@ -697,7 +743,8 @@ mod tests {
         r.ask_messages(setup, MessageTag::tag1(OPEN_MSG, tag_offset), true)
             .await?;
 
-        let msg: Vec<u8> = shares.iter().map(|share| share.value1 as u8).collect();
+        let msg: Vec<u8> =
+            shares.iter().map(|share| share.value1 as u8).collect();
 
         let msg_from_prev = p2p_send_to_next_receive_from_prev(
             setup,
@@ -739,13 +786,21 @@ mod tests {
 
         let mut tag_offset_counter = TagOffsetCounter::new();
 
-        let common_randomness =
-            run_common_randomness(&setup, &common_randomness_seed, &mut relay).await?;
+        let common_randomness = run_common_randomness(
+            &setup,
+            &common_randomness_seed,
+            &mut relay,
+        )
+        .await?;
 
         let mut serverstate = ServerState::new(common_randomness);
 
-        let yao_setup =
-            setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
+        let yao_setup = setup_yao_functionality(
+            &setup,
+            &mut tag_offset_counter,
+            &mut relay,
+        )
+        .await?;
 
         let (mut rng, hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -794,8 +849,13 @@ mod tests {
                 .await?;
 
                 for i in &jointsh {
-                    let val =
-                        validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, i).await?;
+                    let val = validate_yao_share(
+                        &setup,
+                        &mut tag_offset_counter,
+                        &mut relay,
+                        i,
+                    )
+                    .await?;
                     assert!(val);
                 }
 
@@ -871,7 +931,9 @@ mod tests {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    fn setup_y_to_b(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
+    fn setup_y_to_b(
+        instance: Option<[u8; 32]>,
+    ) -> Vec<(SetupMessage, [u8; 32])> {
         use sha2::{Digest, Sha256};
         use sl_messages::message::InstanceId;
         use std::time::Duration;
@@ -881,9 +943,10 @@ mod tests {
         let instance = instance.unwrap_or_else(rand::random);
 
         // a signing key for each party.
-        let party_sk: Vec<NoSigningKey> = std::iter::repeat_with(|| NoSigningKey)
-            .take(3usize)
-            .collect();
+        let party_sk: Vec<NoSigningKey> =
+            std::iter::repeat_with(|| NoSigningKey)
+                .take(3usize)
+                .collect();
 
         let party_vk: Vec<NoVerifyingKey> = party_sk
             .iter()
@@ -895,8 +958,13 @@ mod tests {
             .into_iter()
             .enumerate()
             .map(|(party_id, sk)| {
-                SetupMessage::new(InstanceId::new(instance), sk, party_id, party_vk.clone())
-                    .with_ttl(Duration::from_secs(1000))
+                SetupMessage::new(
+                    InstanceId::new(instance),
+                    sk,
+                    party_id,
+                    party_vk.clone(),
+                )
+                .with_ttl(Duration::from_secs(1000))
             })
             .map(|setup| {
                 let mixin = [setup.participant_index() as u8 + 1];

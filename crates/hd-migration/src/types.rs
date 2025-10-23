@@ -1,6 +1,14 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
+use group::{Group, GroupEncoding, ff::PrimeField};
+use k256::{
+    FieldBytes, ProjectivePoint, Scalar, elliptic_curve::ops::Reduce,
+};
+
+use sl_compute_common::CommonRandomness;
+use sl_messages::relay::MessageSendError;
+
 use garbled_circuit::{
     functionality::{
         utils::{FixedExternalSize, Wrap},
@@ -8,10 +16,6 @@ use garbled_circuit::{
     },
     utilities::types::YaoShare,
 };
-use group::{Group, GroupEncoding, ff::PrimeField};
-use k256::{FieldBytes, ProjectivePoint, Scalar, elliptic_curve::ops::Reduce};
-use sl_compute_common::CommonRandomness;
-use sl_messages::relay::MessageSendError;
 
 pub use garbled_circuit::functionality::utils_dep::ProtocolParticipant;
 
@@ -123,11 +127,19 @@ impl From<Error> for HardDerivationError {
 impl From<ProtocolError> for HardDerivationError {
     fn from(err: ProtocolError) -> Self {
         match err {
-            ProtocolError::InvalidMessage => HardDerivationError::InvalidMessage,
-            ProtocolError::MissingMessage => HardDerivationError::MissingMessage,
+            ProtocolError::InvalidMessage => {
+                HardDerivationError::InvalidMessage
+            }
+            ProtocolError::MissingMessage => {
+                HardDerivationError::MissingMessage
+            }
             ProtocolError::SendMessage => HardDerivationError::SendMessage,
-            ProtocolError::VerificationError => HardDerivationError::AbortProtocol(usize::MAX),
-            ProtocolError::AbortProtocol(v) => HardDerivationError::AbortProtocol(v),
+            ProtocolError::VerificationError => {
+                HardDerivationError::AbortProtocol(usize::MAX)
+            }
+            ProtocolError::AbortProtocol(v) => {
+                HardDerivationError::AbortProtocol(v)
+            }
         }
     }
 }

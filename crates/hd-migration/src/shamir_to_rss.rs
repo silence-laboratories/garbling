@@ -1,10 +1,14 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use garbled_circuit::functionality::{utils::FilteredMsgRelay, utils_dep::TagOffsetCounter};
 use k256::{NonZeroScalar, ProjectivePoint, Scalar};
+
 use sl_compute_common::CommonRandomness;
 use sl_messages::relay::Relay;
+
+use garbled_circuit::functionality::{
+    utils::FilteredMsgRelay, utils_dep::TagOffsetCounter,
+};
 
 use crate::{
     reconstruct_shamir::run_reconstruct_shamir,
@@ -30,20 +34,26 @@ pub fn scalar_rss_to_shamir(
     match party_id {
         0 => {
             // subsets containing 1: {1,2} (next_share), {1,3} (prev_share)
-            let term12 = inp.next_share * f(evaluation_points[0], evaluation_points[2]);
-            let term13 = inp.prev_share * f(evaluation_points[0], evaluation_points[1]);
+            let term12 = inp.next_share
+                * f(evaluation_points[0], evaluation_points[2]);
+            let term13 = inp.prev_share
+                * f(evaluation_points[0], evaluation_points[1]);
             term12 + term13
         }
         1 => {
             // subsets containing 2: {1,2} (prev_share), {2,3} (next_share)
-            let term12 = inp.prev_share * f(evaluation_points[1], evaluation_points[2]);
-            let term23 = inp.next_share * f(evaluation_points[1], evaluation_points[0]);
+            let term12 = inp.prev_share
+                * f(evaluation_points[1], evaluation_points[2]);
+            let term23 = inp.next_share
+                * f(evaluation_points[1], evaluation_points[0]);
             term12 + term23
         }
         2 => {
             // subsets containing 3: {1,3} (next_share), {2,3} (prev_share)
-            let term13 = inp.next_share * f(evaluation_points[2], evaluation_points[1]);
-            let term23 = inp.prev_share * f(evaluation_points[2], evaluation_points[0]);
+            let term13 = inp.next_share
+                * f(evaluation_points[2], evaluation_points[1]);
+            let term23 = inp.prev_share
+                * f(evaluation_points[2], evaluation_points[0]);
             term13 + term23
         }
         _ => unreachable!(),
@@ -61,9 +71,11 @@ pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
 ) -> Result<PrivKeyShare<ProjectivePoint>, HardDerivationError> {
     let my_party_id = setup.participant_index();
 
-    let r_scalar_rss = PrivKeyShare::<ProjectivePoint>::get_random_share(randomness);
+    let r_scalar_rss =
+        PrivKeyShare::<ProjectivePoint>::get_random_share(randomness);
 
-    let r_shamir = scalar_rss_to_shamir(&r_scalar_rss, my_party_id, evaluation_points);
+    let r_shamir =
+        scalar_rss_to_shamir(&r_scalar_rss, my_party_id, evaluation_points);
 
     let padded_shamir = share + r_shamir;
 
@@ -112,7 +124,10 @@ mod tests {
 
     use crate::{
         shamir_to_rss::run_shamir_to_scalar_rss,
-        types::{HardDerivationError, PrivKeyShare, ProtocolParticipant, ScalarFromBytes},
+        types::{
+            HardDerivationError, PrivKeyShare, ProtocolParticipant,
+            ScalarFromBytes,
+        },
         utils::{get_evaluation, run_init},
     };
 
@@ -133,7 +148,8 @@ mod tests {
         let mut seed = [0u8; 32];
         let mut r = StdRng::from_entropy();
         r.fill_bytes(&mut seed);
-        let mut randomness = run_common_randomness(&setup, &seed, &mut relay).await?;
+        let mut randomness =
+            run_common_randomness(&setup, &seed, &mut relay).await?;
 
         let output = run_shamir_to_scalar_rss(
             &setup,
@@ -198,8 +214,12 @@ mod tests {
             }
         }
 
-        let output = shares[0].1.next_share + shares[1].1.next_share + shares[2].1.next_share;
-        let output2 = shares[0].1.prev_share + shares[1].1.prev_share + shares[2].1.prev_share;
+        let output = shares[0].1.next_share
+            + shares[1].1.next_share
+            + shares[2].1.next_share;
+        let output2 = shares[0].1.prev_share
+            + shares[1].1.prev_share
+            + shares[2].1.prev_share;
         let s = get_evaluation(&[x1, x2], &[s1, s2], &Scalar::ZERO);
 
         assert_eq!(output, s);

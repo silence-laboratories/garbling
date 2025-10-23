@@ -28,7 +28,8 @@ where
     for (i, gate) in circuit.gates.iter().enumerate() {
         let (out_gate, f_label) = match *gate {
             BinaryGate::Input { no, id, wire } => {
-                let share = input_encoding_shares[no as usize][id as usize].as_evaluator();
+                let share = input_encoding_shares[no as usize][id as usize]
+                    .as_evaluator();
                 (wire, share.label)
             }
 

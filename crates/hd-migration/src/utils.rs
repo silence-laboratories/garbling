@@ -90,7 +90,9 @@ pub fn get_evaluation(
 pub fn run_init(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
     use std::time::Duration;
 
-    use garbled_circuit::functionality::utils::{NoSigningKey, NoVerifyingKey};
+    use garbled_circuit::functionality::utils::{
+        NoSigningKey, NoVerifyingKey,
+    };
     use sl_messages::message::InstanceId;
 
     let n = 3;
