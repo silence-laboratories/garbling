@@ -3,6 +3,7 @@
 
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+
 use sl_messages::{message::MessageTag, relay::Relay};
 
 use crate::{
@@ -30,7 +31,8 @@ where
     let tag2 = MessageTag::tag1(SETUP_YAO_FUNC_MSG2, tag_offset);
     relay.ask_messages(setup, tag2, true).await?;
 
-    let output = setup_yao_functionality_inner(setup, relay, tag1, tag2).await?;
+    let output =
+        setup_yao_functionality_inner(setup, relay, tag1, tag2).await?;
 
     Ok(output)
 }
@@ -57,7 +59,8 @@ where
 
         Ok(YaoSetup::E(EvaluatorSetup { comm_crs: crs }))
     } else {
-        let crss: Vec<Block> = receive_from_parties(setup, tag1, &[2], relay).await?;
+        let crss: Vec<Block> =
+            receive_from_parties(setup, tag1, &[2], relay).await?;
 
         let mut rng = rand::rngs::StdRng::from_entropy();
         let seed = if party_id == 0 {
@@ -67,7 +70,8 @@ where
             send_to_party(setup, tag2, seed, 1, relay).await?;
             seed
         } else {
-            let seed: Vec<[u8; 32]> = receive_from_parties(setup, tag2, &[0], relay).await?;
+            let seed: Vec<[u8; 32]> =
+                receive_from_parties(setup, tag2, &[0], relay).await?;
             seed[0]
         };
 

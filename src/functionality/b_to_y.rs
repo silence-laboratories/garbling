@@ -8,14 +8,20 @@ use sl_messages::{message::MessageTag, relay::Relay};
 use crate::{
     config::constants::B2Y_FUNC_MSG1,
     functionality::{
-        utils::{receive_from_parties, send_to_party, FilteredMsgRelay, FixedExternalSize, Wrap},
+        utils::{
+            receive_from_parties, send_to_party, FilteredMsgRelay,
+            FixedExternalSize, Wrap,
+        },
         utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
     },
     utilities::{
         commitments::Commitment,
         hash_function::HashFunction,
         shahash::Sha512Hash,
-        types::{Block, YaoEvaluatorShare, YaoGarblerShare, YaoSetup, YaoShare, BLOCK_SIZE},
+        types::{
+            Block, YaoEvaluatorShare, YaoGarblerShare, YaoSetup, YaoShare,
+            BLOCK_SIZE,
+        },
         utils::xor_blocks,
     },
 };
@@ -249,15 +255,31 @@ where
     assert_eq!(h3, msg1_p2.hash);
 
     if x2 {
-        assert!(comm.verify(&msg1_p2.decom.0, &msg1_p2.decom.1, &msg1_p2.true_com))
+        assert!(comm.verify(
+            &msg1_p2.decom.0,
+            &msg1_p2.decom.1,
+            &msg1_p2.true_com
+        ))
     } else {
-        assert!(comm.verify(&msg1_p2.decom.0, &msg1_p2.decom.1, &msg1_p2.false_com))
+        assert!(comm.verify(
+            &msg1_p2.decom.0,
+            &msg1_p2.decom.1,
+            &msg1_p2.false_com
+        ))
     }
 
     if x3 {
-        assert!(comm.verify(&msg1_p1.decom.0, &msg1_p1.decom.1, &msg1_p1.true_com))
+        assert!(comm.verify(
+            &msg1_p1.decom.0,
+            &msg1_p1.decom.1,
+            &msg1_p1.true_com
+        ))
     } else {
-        assert!(comm.verify(&msg1_p1.decom.0, &msg1_p1.decom.1, &msg1_p1.false_com))
+        assert!(comm.verify(
+            &msg1_p1.decom.0,
+            &msg1_p1.decom.1,
+            &msg1_p1.false_com
+        ))
     }
 
     (
@@ -293,8 +315,10 @@ where
     let tag = MessageTag::tag1(B2Y_FUNC_MSG1, tag_offset);
     relay.ask_messages(setup, tag, true).await?;
 
-    let output =
-        binary_to_yao_functionality_inner(setup, relay, share, yao_setup, rng, comm, tag).await?;
+    let output = binary_to_yao_functionality_inner(
+        setup, relay, share, yao_setup, rng, comm, tag,
+    )
+    .await?;
 
     Ok(output)
 }
@@ -324,7 +348,12 @@ where
 
             if party_id == 0 {
                 let (msg1, share_x1, share_x2, share_x3) =
-                    bit_to_yao_create_msg1_p1(share, &yaosetup.delta, &mut *r, comm);
+                    bit_to_yao_create_msg1_p1(
+                        share,
+                        &yaosetup.delta,
+                        &mut *r,
+                        comm,
+                    );
 
                 send_to_party(setup, tag, msg1, 2, relay).await?;
 
@@ -336,7 +365,12 @@ where
                 assert!(party_id == 1);
 
                 let (msg1, share_x1, share_x2, share_x3) =
-                    bit_to_yao_create_msg1_p2(share, &yaosetup.delta, &mut *r, comm);
+                    bit_to_yao_create_msg1_p2(
+                        share,
+                        &yaosetup.delta,
+                        &mut *r,
+                        comm,
+                    );
 
                 send_to_party(setup, tag, msg1, 2, relay).await?;
 
@@ -348,7 +382,8 @@ where
         }
 
         YaoSetup::E(_e) => {
-            let recv: Vec<B2YMsg1> = receive_from_parties(setup, tag, &[0, 1], relay).await?;
+            let recv: Vec<B2YMsg1> =
+                receive_from_parties(setup, tag, &[0, 1], relay).await?;
 
             let msg1_p1 = recv[0].clone();
             let msg1_p2 = recv[1].clone();
@@ -384,9 +419,10 @@ where
     let tag = MessageTag::tag1(B2Y_FUNC_MSG1, tag_offset);
     relay.ask_messages(setup, tag, true).await?;
 
-    let output =
-        batch_binary_to_yao_functionality_inner(setup, relay, share, yao_setup, rng, comm, tag)
-            .await?;
+    let output = batch_binary_to_yao_functionality_inner(
+        setup, relay, share, yao_setup, rng, comm, tag,
+    )
+    .await?;
 
     Ok(output)
 }
@@ -422,7 +458,12 @@ where
                     .iter()
                     .map(|share| {
                         let (msg1, share_x1, share_x2, share_x3) =
-                            bit_to_yao_create_msg1_p1(share, &yaosetup.delta, r, comm);
+                            bit_to_yao_create_msg1_p1(
+                                share,
+                                &yaosetup.delta,
+                                r,
+                                comm,
+                            );
 
                         msg1s.push(msg1);
 
@@ -445,7 +486,12 @@ where
                     .iter()
                     .map(|share| {
                         let (msg1, share_x1, share_x2, share_x3) =
-                            bit_to_yao_create_msg1_p2(share, &yaosetup.delta, r, comm);
+                            bit_to_yao_create_msg1_p2(
+                                share,
+                                &yaosetup.delta,
+                                r,
+                                comm,
+                            );
 
                         msg1s.push(msg1);
 
@@ -463,7 +509,8 @@ where
         }
 
         YaoSetup::E(_e) => {
-            let recv: Vec<Vec<B2YMsg1>> = receive_from_parties(setup, tag, &[0, 1], relay).await?;
+            let recv: Vec<Vec<B2YMsg1>> =
+                receive_from_parties(setup, tag, &[0, 1], relay).await?;
 
             let msg1_p1 = &recv[0];
             let msg1_p2 = &recv[1];
@@ -473,7 +520,12 @@ where
                 .enumerate()
                 .map(|(i, share)| {
                     let (share_x1, share_x2, share_x3) =
-                        bit_to_yao_process_msg1_p3(share, &msg1_p1[i], &msg1_p2[i], comm);
+                        bit_to_yao_process_msg1_p3(
+                            share,
+                            &msg1_p1[i],
+                            &msg1_p2[i],
+                            comm,
+                        );
 
                     let temp = share_x1.xor(&share_x2);
                     let out = temp.xor(&share_x3);
@@ -493,7 +545,9 @@ mod tests {
     use rand::{rngs::StdRng, RngCore, SeedableRng};
     use rand_chacha::ChaCha8Rng;
     use sl_compute_common::{BinaryString, BinaryStringShare};
-    use sl_messages::relay::{MessageRelayService, Relay, SimpleMessageRelay};
+    use sl_messages::relay::{
+        MessageRelayService, Relay, SimpleMessageRelay,
+    };
     use tokio::task::JoinSet;
 
     use crate::{
@@ -501,7 +555,9 @@ mod tests {
             output::batch_output_yao_functionality,
             setup::setup_yao_functionality,
             utils::{FilteredMsgRelay, SetupMessage},
-            utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
+            utils_dep::{
+                ProtocolError, ProtocolParticipant, TagOffsetCounter,
+            },
         },
         utilities::{
             commitments::HashCommitment,
@@ -511,7 +567,9 @@ mod tests {
         },
     };
 
-    use super::{batch_binary_to_yao_functionality, binary_to_yao_functionality};
+    use super::{
+        batch_binary_to_yao_functionality, binary_to_yao_functionality,
+    };
 
     async fn test_run_b_to_y<T, R>(
         setup: T,
@@ -528,12 +586,19 @@ mod tests {
         let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
-        transcript.challenge_bytes(b"common-randomness-seed", &mut common_randomness_seed);
+        transcript.challenge_bytes(
+            b"common-randomness-seed",
+            &mut common_randomness_seed,
+        );
 
         let mut tag_offset_counter = TagOffsetCounter::new();
 
-        let yao_setup =
-            setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
+        let yao_setup = setup_yao_functionality(
+            &setup,
+            &mut tag_offset_counter,
+            &mut relay,
+        )
+        .await?;
 
         let (mut rng, _, comm) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -549,7 +614,8 @@ mod tests {
             }
         };
 
-        let key = BinaryStringShare::from_constant(&s, setup.participant_index());
+        let key =
+            BinaryStringShare::from_constant(&s, setup.participant_index());
 
         let mut yao_out = vec![];
 
@@ -568,9 +634,13 @@ mod tests {
             yao_out.push(out);
         }
 
-        let act_out =
-            batch_output_yao_functionality(&setup, &mut tag_offset_counter, &mut relay, &yao_out)
-                .await?;
+        let act_out = batch_output_yao_functionality(
+            &setup,
+            &mut tag_offset_counter,
+            &mut relay,
+            &yao_out,
+        )
+        .await?;
 
         let mut o = BinaryString::new();
         for i in act_out {
@@ -598,12 +668,19 @@ mod tests {
         let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
-        transcript.challenge_bytes(b"common-randomness-seed", &mut common_randomness_seed);
+        transcript.challenge_bytes(
+            b"common-randomness-seed",
+            &mut common_randomness_seed,
+        );
 
         let mut tag_offset_counter = TagOffsetCounter::new();
 
-        let yao_setup =
-            setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
+        let yao_setup = setup_yao_functionality(
+            &setup,
+            &mut tag_offset_counter,
+            &mut relay,
+        )
+        .await?;
 
         let (mut rng, _, comm) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -619,7 +696,8 @@ mod tests {
             }
         };
 
-        let key = BinaryStringShare::from_constant(&s, setup.participant_index());
+        let key =
+            BinaryStringShare::from_constant(&s, setup.participant_index());
 
         let mut yao_bin = vec![];
         for i in 0..key.length as usize {
@@ -637,9 +715,13 @@ mod tests {
         )
         .await?;
 
-        let act_out =
-            batch_output_yao_functionality(&setup, &mut tag_offset_counter, &mut relay, &yao_out)
-                .await?;
+        let act_out = batch_output_yao_functionality(
+            &setup,
+            &mut tag_offset_counter,
+            &mut relay,
+            &yao_out,
+        )
+        .await?;
 
         let mut o = BinaryString::new();
         for i in act_out {
@@ -652,7 +734,9 @@ mod tests {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    fn setup_b_to_y(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
+    fn setup_b_to_y(
+        instance: Option<[u8; 32]>,
+    ) -> Vec<(SetupMessage, [u8; 32])> {
         use sha2::{Digest, Sha256};
         use std::time::Duration;
 
@@ -661,9 +745,10 @@ mod tests {
         let instance = instance.unwrap_or_else(rand::random);
 
         // a signing key for each party.
-        let party_sk: Vec<NoSigningKey> = std::iter::repeat_with(|| NoSigningKey)
-            .take(3usize)
-            .collect();
+        let party_sk: Vec<NoSigningKey> =
+            std::iter::repeat_with(|| NoSigningKey)
+                .take(3usize)
+                .collect();
 
         let party_vk: Vec<NoVerifyingKey> = party_sk
             .iter()
@@ -677,8 +762,13 @@ mod tests {
             .map(|(party_id, sk)| {
                 use sl_messages::message::InstanceId;
 
-                SetupMessage::new(InstanceId::new(instance), sk, party_id, party_vk.clone())
-                    .with_ttl(Duration::from_secs(1000))
+                SetupMessage::new(
+                    InstanceId::new(instance),
+                    sk,
+                    party_id,
+                    party_vk.clone(),
+                )
+                .with_ttl(Duration::from_secs(1000))
             })
             .map(|setup| {
                 let mixin = [setup.participant_index() as u8 + 1];
@@ -696,7 +786,11 @@ mod tests {
             .collect::<Vec<_>>()
     }
 
-    async fn sim_b_to_y<S, R>(coord: S, s: BinaryString, batch: bool) -> Vec<Vec<bool>>
+    async fn sim_b_to_y<S, R>(
+        coord: S,
+        s: BinaryString,
+        batch: bool,
+    ) -> Vec<Vec<bool>>
     where
         S: MessageRelayService<MessageRelay = R>,
         R: Relay + Send + 'static,
@@ -752,7 +846,9 @@ mod tests {
             length: (s.len() * 8) as u64,
             value: s.to_vec(),
         };
-        let _ = sim_b_to_y(SimpleMessageRelay::new(), val.clone(), !batch).await;
-        let _ = sim_b_to_y(SimpleMessageRelay::new(), val.clone(), batch).await;
+        let _ =
+            sim_b_to_y(SimpleMessageRelay::new(), val.clone(), !batch).await;
+        let _ =
+            sim_b_to_y(SimpleMessageRelay::new(), val.clone(), batch).await;
     }
 }

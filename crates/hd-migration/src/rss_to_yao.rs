@@ -1,9 +1,15 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
+use k256::ProjectivePoint;
+use rand::{CryptoRng, RngCore};
+
+use sl_messages::relay::Relay;
+
 use garbled_circuit::{
     functionality::{
-        circuit_eval::yao_circuit_eval_functionality, input::run_batch_input_from_all_yao,
+        circuit_eval::yao_circuit_eval_functionality,
+        input::run_batch_input_from_all_yao,
         output::batch_output_yao_functionality, utils::FilteredMsgRelay,
         utils_dep::TagOffsetCounter,
     },
@@ -13,9 +19,6 @@ use garbled_circuit::{
         types::{YaoSetup, YaoShare},
     },
 };
-use k256::ProjectivePoint;
-use rand::{CryptoRng, RngCore};
-use sl_messages::relay::Relay;
 
 use crate::{
     circuits::build_scalar_rss_to_y_verification_circuit,
@@ -92,8 +95,13 @@ where
         .map(|id| outp.get(id).unwrap().clone())
         .collect();
 
-    let verification =
-        batch_output_yao_functionality(setup, tag_offset_counter, relay, &veradd[..1]).await?;
+    let verification = batch_output_yao_functionality(
+        setup,
+        tag_offset_counter,
+        relay,
+        &veradd[..1],
+    )
+    .await?;
 
     assert!(verification[0]);
 
@@ -106,10 +114,14 @@ where
 mod tests {
     use garbled_circuit::{
         functionality::{
-            output::batch_output_yao_functionality, setup::setup_yao_functionality,
-            utils::FilteredMsgRelay, utils_dep::TagOffsetCounter,
+            output::batch_output_yao_functionality,
+            setup::setup_yao_functionality, utils::FilteredMsgRelay,
+            utils_dep::TagOffsetCounter,
         },
-        utilities::{commitments::HashCommitment, hash_function::AesHash, types::YaoSetup},
+        utilities::{
+            commitments::HashCommitment, hash_function::AesHash,
+            types::YaoSetup,
+        },
     };
     use k256::{ProjectivePoint, Scalar};
     use rand::{RngCore, SeedableRng, rngs};
@@ -118,7 +130,10 @@ mod tests {
 
     use crate::{
         rss_to_yao::run_scalar_rss_to_yao,
-        types::{HardDerivationError, PrivKeyShare, ProtocolParticipant, ScalarFromBytes},
+        types::{
+            HardDerivationError, PrivKeyShare, ProtocolParticipant,
+            ScalarFromBytes,
+        },
         utils::run_init,
     };
 
@@ -135,7 +150,8 @@ mod tests {
 
         let mut cnt = TagOffsetCounter::new();
 
-        let yao_setup = setup_yao_functionality(&setup, &mut cnt, &mut relay).await?;
+        let yao_setup =
+            setup_yao_functionality(&setup, &mut cnt, &mut relay).await?;
 
         let (mut rng, hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -163,7 +179,10 @@ mod tests {
         )
         .await?;
 
-        let op = batch_output_yao_functionality(&setup, &mut cnt, &mut relay, &output).await?;
+        let op = batch_output_yao_functionality(
+            &setup, &mut cnt, &mut relay, &output,
+        )
+        .await?;
 
         let mut sum = Scalar::ZERO;
         let two = Scalar::ONE + Scalar::ONE;
@@ -215,7 +234,11 @@ mod tests {
         #[allow(clippy::explicit_counter_loop)]
         for (setup, _) in run_init(None) {
             let relay = coord.connect();
-            parties.spawn(test_run_scalar_rss_to_yao(setup, shares[cnt], relay));
+            parties.spawn(test_run_scalar_rss_to_yao(
+                setup,
+                shares[cnt],
+                relay,
+            ));
             cnt += 1;
         }
 

@@ -71,10 +71,12 @@ impl BinaryCircuit {
             .next()
             .map(|line| line.split_whitespace())
             .and_then(|mut parts| {
-                let num_inp_wires = parts.next().and_then(|s| s.parse().ok())?;
+                let num_inp_wires =
+                    parts.next().and_then(|s| s.parse().ok())?;
                 let mut input_sizes = Vec::with_capacity(num_inp_wires);
                 for _ in 0..num_inp_wires {
-                    let num_iplen = parts.next().and_then(|s| s.parse().ok())?;
+                    let num_iplen =
+                        parts.next().and_then(|s| s.parse().ok())?;
                     input_sizes.push(num_iplen);
                 }
 
@@ -86,7 +88,8 @@ impl BinaryCircuit {
             .next()
             .map(|line| line.split_whitespace())
             .and_then(|mut parts| {
-                let n_output_usizes: usize = parts.next().and_then(|s| s.parse().ok())?;
+                let n_output_usizes: usize =
+                    parts.next().and_then(|s| s.parse().ok())?;
 
                 (n_output_usizes == 1)
                     .then(|| parts.next().and_then(|s| s.parse().ok()))
@@ -121,8 +124,10 @@ impl BinaryCircuit {
                 .next()
                 .map(|line| line.split_whitespace())
                 .and_then(|mut parts| {
-                    let num_input: u32 = parts.next().and_then(|s| s.parse().ok())?;
-                    let _num_output: u32 = parts.next().and_then(|s| s.parse().ok())?;
+                    let num_input: u32 =
+                        parts.next().and_then(|s| s.parse().ok())?;
+                    let _num_output: u32 =
+                        parts.next().and_then(|s| s.parse().ok())?;
                     let input0 = parts.next().and_then(|s| s.parse().ok())?;
 
                     let input1 = if num_input == 2 {
@@ -304,14 +309,19 @@ impl BinaryCircuit {
                     println!("Input: no: {} id: {} wire: {}", no, id, wire)
                 }
 
-                BinaryGate::Constant { val, wire: _ } => println!("Constantinput: val: {}", val),
+                BinaryGate::Constant { val, wire: _ } => {
+                    println!("Constantinput: val: {}", val)
+                }
 
                 BinaryGate::Inv { xid, out } => {
                     println!("InverseGate: inp: {} output: {}", xid, out)
                 }
 
                 BinaryGate::Xor { xid, yid, out } => {
-                    println!("XorGate: inp1: {} inp2: {} output: {}", xid, yid, out)
+                    println!(
+                        "XorGate: inp1: {} inp2: {} output: {}",
+                        xid, yid, out
+                    )
                 }
 
                 BinaryGate::And {
@@ -319,7 +329,10 @@ impl BinaryCircuit {
                     yid,
                     id: _,
                     out,
-                } => println!("AndGate: inp1: {} inp2: {} output: {}", xid, yid, out),
+                } => println!(
+                    "AndGate: inp1: {} inp2: {} output: {}",
+                    xid, yid, out
+                ),
             };
         }
 

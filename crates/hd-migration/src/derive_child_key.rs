@@ -2,9 +2,16 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use derivation_path::ChildIndex;
+use rand::{CryptoRng, RngCore};
+
+use sl_messages::relay::Relay;
+
 use garbled_circuit::{
     functionality::{
-        circuit_eval::{yao_circuit_eval_functionality, yao_map_circuit_eval_functionality},
+        circuit_eval::{
+            yao_circuit_eval_functionality,
+            yao_map_circuit_eval_functionality,
+        },
         output::batch_output_yao_functionality,
         utils::FilteredMsgRelay,
         utils_dep::TagOffsetCounter,
@@ -14,14 +21,14 @@ use garbled_circuit::{
         types::{MapArg, YaoSetup, YaoShare},
     },
 };
-use rand::{CryptoRng, RngCore};
-use sl_messages::relay::Relay;
 
 use crate::{
     circuits::build_child_key_der_hmac_circuit,
     types::{HardDerivationError, PrivKeyShareBip, ProtocolParticipant},
     utils::bool_vec_to_u8_vec,
-    yao_to_rss::{run_batch_yao_to_scalar_rss_keypair, run_yao_to_scalar_rss_keypair},
+    yao_to_rss::{
+        run_batch_yao_to_scalar_rss_keypair, run_yao_to_scalar_rss_keypair,
+    },
 };
 
 /// Implements the child key derivation protocol for BIP-32 on secret-shared inputs.
@@ -42,8 +49,11 @@ where
     G: RngCore + CryptoRng,
     H: HashFunction,
 {
-    let circuit =
-        build_child_key_der_hmac_circuit(&parent_key.pubkey, index_child, parent_key.chain_code);
+    let circuit = build_child_key_der_hmac_circuit(
+        &parent_key.pubkey,
+        index_child,
+        parent_key.chain_code,
+    );
 
     let inputs = [parent_key.yao_share.to_vec()];
 
@@ -67,14 +77,25 @@ where
 
     let (il_int, child_chain_code) = hash_out.split_at(32 * 8);
 
-    let scalar_rss_out =
-        run_yao_to_scalar_rss_keypair(setup, relay, tag_offset_counter, il_int, rng).await?;
+    let scalar_rss_out = run_yao_to_scalar_rss_keypair(
+        setup,
+        relay,
+        tag_offset_counter,
+        il_int,
+        rng,
+    )
+    .await?;
 
     let mut child_yao_share = il_int.to_vec();
     child_yao_share.reverse();
 
-    let child_cc_pub =
-        batch_output_yao_functionality(setup, tag_offset_counter, relay, child_chain_code).await?;
+    let child_cc_pub = batch_output_yao_functionality(
+        setup,
+        tag_offset_counter,
+        relay,
+        child_chain_code,
+    )
+    .await?;
 
     let child_cc = bool_vec_to_u8_vec(child_cc_pub);
 
@@ -128,7 +149,8 @@ where
         .map(|v| vec![v.yao_share.to_vec()])
         .collect();
 
-    let inputs: Vec<&[Vec<YaoShare>]> = yao_share_vecs.iter().map(|v| v.as_slice()).collect();
+    let inputs: Vec<&[Vec<YaoShare>]> =
+        yao_share_vecs.iter().map(|v| v.as_slice()).collect();
 
     let hashed_vals = yao_map_circuit_eval_functionality(
         setup,
@@ -163,24 +185,36 @@ where
         child_chain_codes.push(child_chain_code.to_vec());
     });
 
-    let il_int_slices: Vec<&[YaoShare]> = il_ints.iter().map(|x| x.as_slice()).collect();
+    let il_int_slices: Vec<&[YaoShare]> =
+        il_ints.iter().map(|x| x.as_slice()).collect();
 
-    let scalar_rss_out =
-        run_batch_yao_to_scalar_rss_keypair(setup, relay, tag_offset_counter, &il_int_slices, rng)
-            .await?;
+    let scalar_rss_out = run_batch_yao_to_scalar_rss_keypair(
+        setup,
+        relay,
+        tag_offset_counter,
+        &il_int_slices,
+        rng,
+    )
+    .await?;
 
     let mut ccoutinput = Vec::new();
     for i in child_chain_codes.iter() {
         ccoutinput.extend_from_slice(i);
     }
 
-    let child_cc_pub_vals =
-        batch_output_yao_functionality(setup, tag_offset_counter, relay, &ccoutinput).await?;
+    let child_cc_pub_vals = batch_output_yao_functionality(
+        setup,
+        tag_offset_counter,
+        relay,
+        &ccoutinput,
+    )
+    .await?;
 
     let mut child_ccs = Vec::new();
     let ccsize = child_chain_codes[0].len();
     for i in 0..batch_size {
-        let child_cc_pub = child_cc_pub_vals[i * ccsize..(i + 1) * ccsize].to_vec();
+        let child_cc_pub =
+            child_cc_pub_vals[i * ccsize..(i + 1) * ccsize].to_vec();
         let child_cc = bool_vec_to_u8_vec(child_cc_pub);
 
         child_ccs.push(child_cc);
@@ -196,7 +230,10 @@ where
                 .expect("Conversion failed"),
             pubkey: scalar_rss_out[i].pubkey,
             keyshare: scalar_rss_out[i].keyshare,
-            chain_code: child_ccs[i].clone().try_into().expect("Conversion failed"),
+            chain_code: child_ccs[i]
+                .clone()
+                .try_into()
+                .expect("Conversion failed"),
         };
 
         out.push(val);
@@ -210,10 +247,14 @@ mod tests {
     use derivation_path::ChildIndex;
     use garbled_circuit::{
         functionality::{
-            input::batch_input_yao_functionality, setup::setup_yao_functionality,
-            utils::FilteredMsgRelay, utils_dep::TagOffsetCounter,
+            input::batch_input_yao_functionality,
+            setup::setup_yao_functionality, utils::FilteredMsgRelay,
+            utils_dep::TagOffsetCounter,
         },
-        utilities::{commitments::HashCommitment, hash_function::AesHash, types::YaoSetup},
+        utilities::{
+            commitments::HashCommitment, hash_function::AesHash,
+            types::YaoSetup,
+        },
     };
     use hmac::{Hmac, Mac};
     use k256::{
@@ -226,8 +267,13 @@ mod tests {
     use sl_messages::relay::{Relay, SimpleMessageRelay};
 
     use crate::{
-        derive_child_key::{run_batch_derive_child_key, run_derive_child_key},
-        types::{HardDerivationError, PrivKeyShare, PrivKeyShareBip, ProtocolParticipant},
+        derive_child_key::{
+            run_batch_derive_child_key, run_derive_child_key,
+        },
+        types::{
+            HardDerivationError, PrivKeyShare, PrivKeyShareBip,
+            ProtocolParticipant,
+        },
         utils::{run_init, u8_vec_to_bool_vec},
     };
 
@@ -247,7 +293,8 @@ mod tests {
 
         let mut cnt = TagOffsetCounter::new();
 
-        let yao_setup = setup_yao_functionality(&setup, &mut cnt, &mut relay).await?;
+        let yao_setup =
+            setup_yao_functionality(&setup, &mut cnt, &mut relay).await?;
 
         let (mut rng, hash, _) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -311,7 +358,8 @@ mod tests {
 
         let mut cnt = TagOffsetCounter::new();
 
-        let yao_setup = setup_yao_functionality(&setup, &mut cnt, &mut relay).await?;
+        let yao_setup =
+            setup_yao_functionality(&setup, &mut cnt, &mut relay).await?;
 
         let (mut rng, hash, _) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -340,7 +388,10 @@ mod tests {
         let mut inputs = Vec::new();
         for _ in 0..child_index.len() {
             let share = PrivKeyShareBip {
-                yao_share: rpk_yao.clone().try_into().expect("Conversion failed"),
+                yao_share: rpk_yao
+                    .clone()
+                    .try_into()
+                    .expect("Conversion failed"),
                 keyshare: PrivKeyShare::<ProjectivePoint>::default(),
                 pubkey: public_key,
                 chain_code: rcc_bool,
@@ -382,14 +433,16 @@ mod tests {
         privkey: Scalar,
     ) -> (Scalar, Vec<u8>) {
         let result = if child_index.is_normal() {
-            let mut hmac_hasher = Hmac::<sha2::Sha512>::new_from_slice(cc).unwrap();
+            let mut hmac_hasher =
+                Hmac::<sha2::Sha512>::new_from_slice(cc).unwrap();
 
             hmac_hasher.update(pubkey.to_encoded_point(true).as_bytes());
 
             hmac_hasher.update(&child_index.to_bits().to_be_bytes());
             hmac_hasher.finalize().into_bytes()
         } else {
-            let mut hmac_hasher = Hmac::<sha2::Sha512>::new_from_slice(cc).unwrap();
+            let mut hmac_hasher =
+                Hmac::<sha2::Sha512>::new_from_slice(cc).unwrap();
 
             hmac_hasher.update(&[0]);
             hmac_hasher.update(&privkey.to_bytes());
@@ -411,7 +464,8 @@ mod tests {
 
     async fn test_derive_child_key_util(child_index: ChildIndex) {
         let (root_public_key, root_private_key, root_chain_code) = setup();
-        let rpk_bool = u8_vec_to_bool_vec(root_private_key.to_bytes().to_vec());
+        let rpk_bool =
+            u8_vec_to_bool_vec(root_private_key.to_bytes().to_vec());
 
         let mut parties = tokio::task::JoinSet::new();
         let coord = SimpleMessageRelay::new();
@@ -458,9 +512,12 @@ mod tests {
         );
     }
 
-    async fn test_derive_child_key_batched_util(child_index: Vec<ChildIndex>) {
+    async fn test_derive_child_key_batched_util(
+        child_index: Vec<ChildIndex>,
+    ) {
         let (root_public_key, root_private_key, root_chain_code) = setup();
-        let rpk_bool = u8_vec_to_bool_vec(root_private_key.to_bytes().to_vec());
+        let rpk_bool =
+            u8_vec_to_bool_vec(root_private_key.to_bytes().to_vec());
 
         let mut parties = tokio::task::JoinSet::new();
         let coord = SimpleMessageRelay::new();
@@ -494,12 +551,13 @@ mod tests {
                 + shares[1].1[i].keyshare.next_share
                 + shares[2].1[i].keyshare.next_share;
 
-            let (child_privkey_ideal, child_chaincode_ideal) = get_ideal_output(
-                &root_chain_code,
-                &root_public_key,
-                child_index[i],
-                root_private_key,
-            );
+            let (child_privkey_ideal, child_chaincode_ideal) =
+                get_ideal_output(
+                    &root_chain_code,
+                    &root_public_key,
+                    child_index[i],
+                    root_private_key,
+                );
 
             assert_eq!(child_privkey_ideal, child_privkey_obtained);
             assert_eq!(

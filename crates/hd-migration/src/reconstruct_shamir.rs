@@ -1,12 +1,14 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
+use k256::{NonZeroScalar, Scalar};
+
+use sl_messages::{message::MessageTag, relay::Relay};
+
 use garbled_circuit::functionality::{
     utils::{FilteredMsgRelay, receive_from_parties, send_to_party},
     utils_dep::TagOffsetCounter,
 };
-use k256::{NonZeroScalar, Scalar};
-use sl_messages::{message::MessageTag, relay::Relay};
 
 use crate::{
     constants::RECONSTRUCT_SHAMIR_MSG1,
@@ -43,13 +45,26 @@ pub async fn run_reconstruct_shamir<R: Relay, S: ProtocolParticipant>(
     share: &Scalar,
     evaluation_points: &[NonZeroScalar],
 ) -> Result<Scalar, HardDerivationError> {
-    let tag1 = MessageTag::tag1(RECONSTRUCT_SHAMIR_MSG1, tag_offset_counter.next_value());
-    let tag2 = MessageTag::tag1(RECONSTRUCT_SHAMIR_MSG1, tag_offset_counter.next_value());
+    let tag1 = MessageTag::tag1(
+        RECONSTRUCT_SHAMIR_MSG1,
+        tag_offset_counter.next_value(),
+    );
+    let tag2 = MessageTag::tag1(
+        RECONSTRUCT_SHAMIR_MSG1,
+        tag_offset_counter.next_value(),
+    );
     relay.ask_messages(setup, tag1, true).await?;
     relay.ask_messages(setup, tag2, true).await?;
 
-    let out =
-        run_reconstruct_shamir_inner(setup, relay, share, evaluation_points, tag1, tag2).await?;
+    let out = run_reconstruct_shamir_inner(
+        setup,
+        relay,
+        share,
+        evaluation_points,
+        tag1,
+        tag2,
+    )
+    .await?;
 
     Ok(out)
 }
@@ -91,7 +106,9 @@ async fn run_reconstruct_shamir_inner<R: Relay, S: ProtocolParticipant>(
 #[cfg(test)]
 mod tests {
 
-    use garbled_circuit::functionality::{utils::FilteredMsgRelay, utils_dep::TagOffsetCounter};
+    use garbled_circuit::functionality::{
+        utils::FilteredMsgRelay, utils_dep::TagOffsetCounter,
+    };
     use k256::{NonZeroScalar, Scalar};
     use rand::{CryptoRng, RngCore, SeedableRng, rngs};
 
@@ -123,9 +140,14 @@ mod tests {
 
         let mut cnt = TagOffsetCounter::new();
 
-        let output =
-            run_reconstruct_shamir(&setup, &mut relay, &mut cnt, &share, &evaluation_points)
-                .await?;
+        let output = run_reconstruct_shamir(
+            &setup,
+            &mut relay,
+            &mut cnt,
+            &share,
+            &evaluation_points,
+        )
+        .await?;
 
         Ok((setup.participant_index(), output))
     }

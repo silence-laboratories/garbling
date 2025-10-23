@@ -3,6 +3,11 @@
 
 use std::collections::HashMap;
 
+use rand::{CryptoRng, RngCore};
+use sha2::{Digest, Sha256};
+
+use sl_messages::{message::MessageTag, relay::Relay};
+
 use crate::{
     circuitop::circuit::BinaryCircuit,
     config::constants::{YAO_CIRC_EVAL_FUNC_MSG1, YAO_CIRC_EVAL_FUNC_MSG2},
@@ -13,12 +18,11 @@ use crate::{
     },
     utilities::{
         hash_function::HashFunction,
-        types::{Block, GarblerSetup, MapArg, YaoSetup, YaoShare, BLOCK_SIZE},
+        types::{
+            Block, GarblerSetup, MapArg, YaoSetup, YaoShare, BLOCK_SIZE,
+        },
     },
 };
-use rand::{CryptoRng, RngCore};
-use sha2::{Digest, Sha256};
-use sl_messages::{message::MessageTag, relay::Relay};
 
 use super::garble::garble_functionality;
 
@@ -102,13 +106,17 @@ where
     let party_id = setup.participant_index();
 
     assert_eq!(input.len(), circuit.num_inputs() as _);
-    (0..input.len()).for_each(|i| assert_eq!(input[i].len(), circuit.input_gate_ids[i].len()));
+    (0..input.len()).for_each(|i| {
+        assert_eq!(input[i].len(), circuit.input_gate_ids[i].len())
+    });
 
     match yao_setup {
         YaoSetup::E(_) => {
-            let hashes: Vec<[u8; 32]> = receive_from_parties(setup, tag2, &[0], relay).await?;
+            let hashes: Vec<[u8; 32]> =
+                receive_from_parties(setup, tag2, &[0], relay).await?;
 
-            let fs: Vec<Vec<Block>> = receive_from_parties(setup, tag1, &[1], relay).await?;
+            let fs: Vec<Vec<Block>> =
+                receive_from_parties(setup, tag1, &[1], relay).await?;
 
             let mut hasher = Sha256::new();
             for i in &fs[0] {
@@ -125,7 +133,13 @@ where
         }
 
         YaoSetup::G(g) => {
-            let (f, out) = yao_circuit_eval_create_msg1_p01(input, g, circuit, rng.unwrap(), hash);
+            let (f, out) = yao_circuit_eval_create_msg1_p01(
+                input,
+                g,
+                circuit,
+                rng.unwrap(),
+                hash,
+            );
             // let tf = block_vec2tblock_vec(&f);
 
             if party_id == 0 {
@@ -206,10 +220,12 @@ where
             MapArg::Scalar(circuit) => match *inputs {
                 MapArg::Scalar(input) => {
                     let hashes: Vec<[u8; 32]> =
-                        receive_from_parties(setup, tag2, &[0], relay).await?;
+                        receive_from_parties(setup, tag2, &[0], relay)
+                            .await?;
 
                     let fs: Vec<Vec<Block>> =
-                        receive_from_parties(setup, tag1, &[1], relay).await?;
+                        receive_from_parties(setup, tag1, &[1], relay)
+                            .await?;
 
                     let mut hasher = Sha256::new();
                     for i in &fs[0] {
@@ -220,17 +236,21 @@ where
 
                     assert_eq!(hashout, hashes[0]);
 
-                    let temp = yao_circuit_eval_process_msg1_p2(input, &fs[0], circuit, hash);
+                    let temp = yao_circuit_eval_process_msg1_p2(
+                        input, &fs[0], circuit, hash,
+                    );
 
                     output.push(temp);
                 }
 
                 MapArg::Vector(input) => {
                     let hashes: Vec<[u8; 32]> =
-                        receive_from_parties(setup, tag2, &[0], relay).await?;
+                        receive_from_parties(setup, tag2, &[0], relay)
+                            .await?;
 
                     let fs: Vec<Vec<Block>> =
-                        receive_from_parties(setup, tag1, &[1], relay).await?;
+                        receive_from_parties(setup, tag1, &[1], relay)
+                            .await?;
 
                     let mut hasher = Sha256::new();
 
@@ -244,11 +264,15 @@ where
 
                     assert_eq!(hashout, hashes[0]);
 
-                    let complen = 2 * circuit.num_nonfree_gates + circuit.constant_map.len();
+                    let complen = 2 * circuit.num_nonfree_gates
+                        + circuit.constant_map.len();
                     let mut temp = Vec::new();
                     (0..input.len()).for_each(|i| {
-                        let f = fs[0][complen * i..complen * (i + 1)].to_vec();
-                        let out = yao_circuit_eval_process_msg1_p2(input[i], &f, circuit, hash);
+                        let f =
+                            fs[0][complen * i..complen * (i + 1)].to_vec();
+                        let out = yao_circuit_eval_process_msg1_p2(
+                            input[i], &f, circuit, hash,
+                        );
                         temp.push(out);
                     });
                     output = temp;
@@ -258,10 +282,12 @@ where
             MapArg::Vector(circuits) => match inputs {
                 MapArg::Scalar(input) => {
                     let hashes: Vec<[u8; 32]> =
-                        receive_from_parties(setup, tag2, &[0], relay).await?;
+                        receive_from_parties(setup, tag2, &[0], relay)
+                            .await?;
 
                     let fs: Vec<Vec<Block>> =
-                        receive_from_parties(setup, tag1, &[1], relay).await?;
+                        receive_from_parties(setup, tag1, &[1], relay)
+                            .await?;
 
                     let mut hasher = Sha256::new();
                     for f in &fs {
@@ -277,9 +303,12 @@ where
                     let mut temp = Vec::new();
                     let mut len = 0;
                     circuits.iter().for_each(|circuit| {
-                        let complen = 2 * circuit.num_nonfree_gates + circuit.constant_map.len();
+                        let complen = 2 * circuit.num_nonfree_gates
+                            + circuit.constant_map.len();
                         let f = fs[0][len..len + complen].to_vec();
-                        let out = yao_circuit_eval_process_msg1_p2(input, &f, circuit, hash);
+                        let out = yao_circuit_eval_process_msg1_p2(
+                            input, &f, circuit, hash,
+                        );
                         len += complen;
                         temp.push(out);
                     });
@@ -291,10 +320,12 @@ where
                     assert_eq!(input.len(), circuits.len());
 
                     let hashes: Vec<[u8; 32]> =
-                        receive_from_parties(setup, tag2, &[0], relay).await?;
+                        receive_from_parties(setup, tag2, &[0], relay)
+                            .await?;
 
                     let fs: Vec<Vec<Block>> =
-                        receive_from_parties(setup, tag1, &[1], relay).await?;
+                        receive_from_parties(setup, tag1, &[1], relay)
+                            .await?;
 
                     let mut hasher = Sha256::new();
                     for f in &fs {
@@ -310,9 +341,12 @@ where
                     let mut temp = Vec::new();
                     let mut len = 0;
                     circuits.iter().zip(input).for_each(|(circuit, ip)| {
-                        let complen = 2 * circuit.num_nonfree_gates + circuit.constant_map.len();
+                        let complen = 2 * circuit.num_nonfree_gates
+                            + circuit.constant_map.len();
                         let f = fs[0][len..len + complen].to_vec();
-                        let out = yao_circuit_eval_process_msg1_p2(ip, &f, circuit, hash);
+                        let out = yao_circuit_eval_process_msg1_p2(
+                            ip, &f, circuit, hash,
+                        );
                         len += complen;
                         temp.push(out);
                     });
@@ -327,8 +361,9 @@ where
             match circuits {
                 MapArg::Scalar(circuit) => match inputs {
                     MapArg::Scalar(input) => {
-                        let (f, out) =
-                            yao_circuit_eval_create_msg1_p01(input, g, circuit, rng, hash);
+                        let (f, out) = yao_circuit_eval_create_msg1_p01(
+                            input, g, circuit, rng, hash,
+                        );
                         // let tf = block_vec2tblock_vec(&f);
 
                         if party_id == 0 {
@@ -342,7 +377,8 @@ where
 
                             let hashval: [u8; 32] = hasher.finalize().into();
 
-                            send_to_party(setup, tag2, hashval, 2, relay).await?;
+                            send_to_party(setup, tag2, hashval, 2, relay)
+                                .await?;
                         } else {
                             send_to_party(setup, tag1, f, 2, relay).await?;
                         }
@@ -352,12 +388,20 @@ where
                     }
 
                     &MapArg::Vector(input) => {
-                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<u32, YaoShare>>) = input
+                        let (f, out): (
+                            Vec<Vec<Block>>,
+                            Vec<HashMap<u32, YaoShare>>,
+                        ) = input
                             .iter()
-                            .map(|ip| yao_circuit_eval_create_msg1_p01(ip, g, circuit, rng, hash))
+                            .map(|ip| {
+                                yao_circuit_eval_create_msg1_p01(
+                                    ip, g, circuit, rng, hash,
+                                )
+                            })
                             .collect();
 
-                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
+                        let len = (2 * circuit.num_nonfree_gates
+                            + circuit.constant_map.len())
                             * BLOCK_SIZE
                             * input.len();
 
@@ -376,10 +420,12 @@ where
                             let mut hasher = Sha256::new();
                             hasher.update(hval);
                             let hashval: [u8; 32] = hasher.finalize().into();
-                            send_to_party(setup, tag2, hashval, 2, relay).await?;
+                            send_to_party(setup, tag2, hashval, 2, relay)
+                                .await?;
                         } else {
                             // let tf = block_vec2tblock_vec(&fvec);
-                            send_to_party(setup, tag1, fvec, 2, relay).await?;
+                            send_to_party(setup, tag1, fvec, 2, relay)
+                                .await?;
                         }
 
                         let temp = out;
@@ -389,16 +435,22 @@ where
 
                 &MapArg::Vector(circuits) => match inputs {
                     MapArg::Scalar(input) => {
-                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<u32, YaoShare>>) = circuits
+                        let (f, out): (
+                            Vec<Vec<Block>>,
+                            Vec<HashMap<u32, YaoShare>>,
+                        ) = circuits
                             .iter()
                             .map(|circuit| {
-                                yao_circuit_eval_create_msg1_p01(input, g, circuit, rng, hash)
+                                yao_circuit_eval_create_msg1_p01(
+                                    input, g, circuit, rng, hash,
+                                )
                             })
                             .collect();
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates
+                                + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -417,10 +469,12 @@ where
                             let mut hasher = Sha256::new();
                             hasher.update(hval);
                             let hashval: [u8; 32] = hasher.finalize().into();
-                            send_to_party(setup, tag2, hashval, 2, relay).await?;
+                            send_to_party(setup, tag2, hashval, 2, relay)
+                                .await?;
                         } else {
                             // let tf = block_vec2tblock_vec(&fvec);
-                            send_to_party(setup, tag1, fvec, 2, relay).await?;
+                            send_to_party(setup, tag1, fvec, 2, relay)
+                                .await?;
                         }
 
                         let temp = out;
@@ -429,17 +483,23 @@ where
 
                     &MapArg::Vector(input) => {
                         assert_eq!(input.len(), circuits.len());
-                        let (f, out): (Vec<Vec<Block>>, Vec<HashMap<u32, YaoShare>>) = circuits
+                        let (f, out): (
+                            Vec<Vec<Block>>,
+                            Vec<HashMap<u32, YaoShare>>,
+                        ) = circuits
                             .iter()
                             .zip(input)
                             .map(|(circuit, ip)| {
-                                yao_circuit_eval_create_msg1_p01(ip, g, circuit, rng, hash)
+                                yao_circuit_eval_create_msg1_p01(
+                                    ip, g, circuit, rng, hash,
+                                )
                             })
                             .collect();
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates
+                                + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
@@ -458,10 +518,12 @@ where
                             let mut hasher = Sha256::new();
                             hasher.update(hval);
                             let hashval: [u8; 32] = hasher.finalize().into();
-                            send_to_party(setup, tag2, hashval, 2, relay).await?;
+                            send_to_party(setup, tag2, hashval, 2, relay)
+                                .await?;
                         } else {
                             // let tf = block_vec2tblock_vec(&fvec);
-                            send_to_party(setup, tag1, fvec, 2, relay).await?;
+                            send_to_party(setup, tag1, fvec, 2, relay)
+                                .await?;
                         }
 
                         let temp = out;
@@ -482,7 +544,9 @@ mod tests {
     use merlin::Transcript;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
-    use sl_messages::relay::{MessageRelayService, Relay, SimpleMessageRelay};
+    use sl_messages::relay::{
+        MessageRelayService, Relay, SimpleMessageRelay,
+    };
     use tokio::task::JoinSet;
 
     use crate::{
@@ -492,16 +556,20 @@ mod tests {
         functionality::{
             circuit_eval::yao_map_circuit_eval_functionality,
             input::{
-                batch_input_yao_from_functionality, batch_input_yao_functionality,
-                input_yao_from_functionality, input_yao_functionality,
+                batch_input_yao_from_functionality,
+                batch_input_yao_functionality, input_yao_from_functionality,
+                input_yao_functionality,
             },
             output::{
-                batch_output_yao_functionality, batch_output_yao_to_functionality,
-                output_yao_functionality, output_yao_to_functionality, validate_yao_share,
+                batch_output_yao_functionality,
+                batch_output_yao_to_functionality, output_yao_functionality,
+                output_yao_to_functionality, validate_yao_share,
             },
             setup::setup_yao_functionality,
             utils::{FilteredMsgRelay, SetupMessage},
-            utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
+            utils_dep::{
+                ProtocolError, ProtocolParticipant, TagOffsetCounter,
+            },
         },
         utilities::{
             commitments::HashCommitment,
@@ -531,11 +599,18 @@ mod tests {
         let mut transcript = Transcript::new(b"test");
 
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
-        transcript.challenge_bytes(b"common-randomness-seed", &mut common_randomness_seed);
+        transcript.challenge_bytes(
+            b"common-randomness-seed",
+            &mut common_randomness_seed,
+        );
 
         let mut tag_offset_counter = TagOffsetCounter::new();
-        let yao_setup =
-            setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
+        let yao_setup = setup_yao_functionality(
+            &setup,
+            &mut tag_offset_counter,
+            &mut relay,
+        )
+        .await?;
 
         let (mut rng, hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -569,7 +644,13 @@ mod tests {
             )
             .await?;
 
-            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
+            let cor = validate_yao_share(
+                &setup,
+                &mut tag_offset_counter,
+                &mut relay,
+                &out,
+            )
+            .await?;
             assert!(cor);
 
             inputs[0].push(out);
@@ -604,7 +685,13 @@ mod tests {
                 .await?
             };
 
-            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
+            let cor = validate_yao_share(
+                &setup,
+                &mut tag_offset_counter,
+                &mut relay,
+                &out,
+            )
+            .await?;
             assert!(cor);
 
             inputs[0].push(out);
@@ -639,7 +726,13 @@ mod tests {
                 .await?
             };
 
-            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
+            let cor = validate_yao_share(
+                &setup,
+                &mut tag_offset_counter,
+                &mut relay,
+                &out,
+            )
+            .await?;
             assert!(cor);
 
             inputs[0].push(out);
@@ -674,7 +767,13 @@ mod tests {
                 .await?
             };
 
-            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
+            let cor = validate_yao_share(
+                &setup,
+                &mut tag_offset_counter,
+                &mut relay,
+                &out,
+            )
+            .await?;
             assert!(cor);
 
             inputs[0].push(out);
@@ -690,7 +789,13 @@ mod tests {
                 &yao_setup,
             )
             .await?;
-            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
+            let cor = validate_yao_share(
+                &setup,
+                &mut tag_offset_counter,
+                &mut relay,
+                &out,
+            )
+            .await?;
             assert!(cor);
             inputs[1].push(out);
             let out = input_yao_functionality(
@@ -702,7 +807,13 @@ mod tests {
                 &yao_setup,
             )
             .await?;
-            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
+            let cor = validate_yao_share(
+                &setup,
+                &mut tag_offset_counter,
+                &mut relay,
+                &out,
+            )
+            .await?;
             assert!(cor);
             notinputs[1].push(out);
         }
@@ -717,7 +828,13 @@ mod tests {
                 &yao_setup,
             )
             .await?;
-            let cor = validate_yao_share(&setup, &mut tag_offset_counter, &mut relay, &out).await?;
+            let cor = validate_yao_share(
+                &setup,
+                &mut tag_offset_counter,
+                &mut relay,
+                &out,
+            )
+            .await?;
             assert!(cor);
             notinputs[0].push(out);
         }
@@ -931,11 +1048,18 @@ mod tests {
         let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
-        transcript.challenge_bytes(b"common-randomness-seed", &mut common_randomness_seed);
+        transcript.challenge_bytes(
+            b"common-randomness-seed",
+            &mut common_randomness_seed,
+        );
 
         let mut tag_offset_counter = TagOffsetCounter::new();
-        let yao_setup =
-            setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay).await?;
+        let yao_setup = setup_yao_functionality(
+            &setup,
+            &mut tag_offset_counter,
+            &mut relay,
+        )
+        .await?;
 
         let (mut rng, hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -1129,9 +1253,13 @@ mod tests {
             shares.push(out_sh.get(i).unwrap().clone());
         }
 
-        let op =
-            batch_output_yao_functionality(&setup, &mut tag_offset_counter, &mut relay, &shares)
-                .await?;
+        let op = batch_output_yao_functionality(
+            &setup,
+            &mut tag_offset_counter,
+            &mut relay,
+            &shares,
+        )
+        .await?;
 
         let op1 = batch_output_yao_to_functionality(
             &setup,
@@ -1175,7 +1303,9 @@ mod tests {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    fn setup_entire_flow(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
+    fn setup_entire_flow(
+        instance: Option<[u8; 32]>,
+    ) -> Vec<(SetupMessage, [u8; 32])> {
         use sha2::{Digest, Sha256};
         use std::time::Duration;
 
@@ -1184,9 +1314,10 @@ mod tests {
         let instance = instance.unwrap_or_else(rand::random);
 
         // a signing key for each party.
-        let party_sk: Vec<NoSigningKey> = std::iter::repeat_with(|| NoSigningKey)
-            .take(3usize)
-            .collect();
+        let party_sk: Vec<NoSigningKey> =
+            std::iter::repeat_with(|| NoSigningKey)
+                .take(3usize)
+                .collect();
 
         let party_vk: Vec<NoVerifyingKey> = party_sk
             .iter()
@@ -1200,8 +1331,13 @@ mod tests {
             .map(|(party_id, sk)| {
                 use sl_messages::message::InstanceId;
 
-                SetupMessage::new(InstanceId::new(instance), sk, party_id, party_vk.clone())
-                    .with_ttl(Duration::from_secs(1000))
+                SetupMessage::new(
+                    InstanceId::new(instance),
+                    sk,
+                    party_id,
+                    party_vk.clone(),
+                )
+                .with_ttl(Duration::from_secs(1000))
             })
             .map(|setup| {
                 let mixin = [setup.participant_index() as u8 + 1];
@@ -1231,7 +1367,8 @@ mod tests {
         R: Relay + Send + 'static,
     {
         let parties = setup_entire_flow(None);
-        sim_parties_entire_flow(parties, coord, circuit, gin, ein, batched).await
+        sim_parties_entire_flow(parties, coord, circuit, gin, ein, batched)
+            .await
     }
 
     async fn sim_parties_entire_flow<S, R>(

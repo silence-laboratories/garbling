@@ -6,11 +6,17 @@ use std::collections::HashMap;
 use criterion::{criterion_group, criterion_main, Criterion};
 use garbled_circuit::{
     circuitop::circuit::BinaryCircuit,
-    config::constants::{AES128_CIRCUIT, AES256_CIRCUIT, AES_KEY, SHA256_CIRCUIT},
-    functionality::{evaluate::evaluate_functionality, garble::garble_functionality},
+    config::constants::{
+        AES128_CIRCUIT, AES256_CIRCUIT, AES_KEY, SHA256_CIRCUIT,
+    },
+    functionality::{
+        evaluate::evaluate_functionality, garble::garble_functionality,
+    },
     utilities::{
         garble_hash::AesGarbleHash,
-        types::{Block, GarblerSetup, YaoEvaluatorShare, YaoGarblerShare, YaoShare},
+        types::{
+            Block, GarblerSetup, YaoEvaluatorShare, YaoGarblerShare, YaoShare,
+        },
     },
 };
 use rand::{prelude::*, RngCore, SeedableRng};
@@ -67,7 +73,9 @@ pub fn eval_aes256_benchmark(c: &mut Criterion) {
 
     group.bench_function("aes256_eval", |b| {
         b.iter(|| {
-            let _ = evaluate_functionality::<YaoEvaluatorShare, _>(&circuit, &ein, &gc, &hash);
+            let _ = evaluate_functionality::<YaoEvaluatorShare, _>(
+                &circuit, &ein, &gc, &hash,
+            );
         })
     });
 
@@ -125,7 +133,9 @@ pub fn eval_aes128_benchmark(c: &mut Criterion) {
     );
     group.bench_function("aes128_eval", |b| {
         b.iter(|| {
-            let _ = evaluate_functionality::<YaoEvaluatorShare, _>(&circuit, &ein, &gc, &hash);
+            let _ = evaluate_functionality::<YaoEvaluatorShare, _>(
+                &circuit, &ein, &gc, &hash,
+            );
         })
     });
     group.finish();
@@ -181,7 +191,9 @@ pub fn eval_sha256_benchmark(c: &mut Criterion) {
     );
     group.bench_function("sha256_eval", |b| {
         b.iter(|| {
-            let _ = evaluate_functionality::<YaoEvaluatorShare, _>(&circuit, &ein, &gc, &hash);
+            let _ = evaluate_functionality::<YaoEvaluatorShare, _>(
+                &circuit, &ein, &gc, &hash,
+            );
         })
     });
     group.finish();

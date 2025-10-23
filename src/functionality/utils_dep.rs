@@ -4,6 +4,7 @@
 use std::time::Duration;
 
 use signature::{SignatureEncoding, Signer, Verifier};
+
 use sl_messages::{
     message::{InstanceId, MessageTag, MsgId},
     relay::MessageSendError,
@@ -130,7 +131,12 @@ pub trait ProtocolParticipant {
     /// Generates an ID for a message from a given sender to a given
     /// receiver.  The receiver is identified by its index and is
     /// `None` for a broadcast message.
-    fn msg_id_from(&self, sender: usize, receiver: Option<usize>, tag: MessageTag) -> MsgId {
+    fn msg_id_from(
+        &self,
+        sender: usize,
+        receiver: Option<usize>,
+        tag: MessageTag,
+    ) -> MsgId {
         let receiver = receiver
             .map(|p| self.verifier(p))
             .map(AsRef::<[u8]>::as_ref);
@@ -205,7 +211,9 @@ pub enum Error {
 /// Protocol errors
 pub enum ProtocolError {
     /// error while serializing or deserializing or invalid message data length
-    #[error("Error while deserializing message or invalid message data length")]
+    #[error(
+        "Error while deserializing message or invalid message data length"
+    )]
     InvalidMessage,
 
     /// Missing message

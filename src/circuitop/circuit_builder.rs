@@ -168,10 +168,18 @@ impl CircuitBuilder {
         self.circ.push_output_gate(id);
     }
 
-    pub fn add_circuit(&mut self, other_circuit: &BinaryCircuit, input_ids: &[&[ID]]) -> Vec<ID> {
+    pub fn add_circuit(
+        &mut self,
+        other_circuit: &BinaryCircuit,
+        input_ids: &[&[ID]],
+    ) -> Vec<ID> {
         assert_eq!(input_ids.len(), other_circuit.num_inputs() as _);
-        (0..input_ids.len())
-            .for_each(|i| assert_eq!(input_ids[i].len(), other_circuit.input_gate_ids[i].len()));
+        (0..input_ids.len()).for_each(|i| {
+            assert_eq!(
+                input_ids[i].len(),
+                other_circuit.input_gate_ids[i].len()
+            )
+        });
 
         let mut old_to_new_map = vec![0; other_circuit.num_wires as usize];
 
@@ -206,7 +214,8 @@ impl CircuitBuilder {
                 }
 
                 BinaryGate::Input { no, id, wire } => {
-                    old_to_new_map[wire as usize] = input_ids[no as usize][id as usize];
+                    old_to_new_map[wire as usize] =
+                        input_ids[no as usize][id as usize];
                 }
 
                 BinaryGate::Constant { val, wire } => {
