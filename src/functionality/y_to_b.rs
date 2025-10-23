@@ -12,7 +12,7 @@ use crate::{
     },
     functionality::{
         utils::{receive_from_parties, send_to_party, FilteredMsgRelay},
-        utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
+        utils_dep::{ProtocolError, ProtocolParticipant},
     },
     utilities::{
         commitments::Commitment,
@@ -72,7 +72,6 @@ where
 #[allow(clippy::too_many_arguments)]
 pub async fn yao_to_binary_functionality<T, G, C, R>(
     setup: &T,
-    tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut FilteredMsgRelay<R>,
     input: &YaoShare,
     rng: Option<&mut G>,
@@ -85,17 +84,9 @@ where
     C: Commitment,
     G: RngCore + CryptoRng,
 {
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(Y2B_FUNC_MSG1, tag_offset);
-    relay.ask_messages(setup, tag1, true).await?;
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag2 = MessageTag::tag1(Y2B_FUNC_MSG2, tag_offset);
-    relay.ask_messages(setup, tag2, true).await?;
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag3 = MessageTag::tag1(Y2B_FUNC_MSG3, tag_offset);
-    relay.ask_messages(setup, tag3, true).await?;
+    let tag1 = relay.next_tag(Y2B_FUNC_MSG1);
+    let tag2 = relay.next_tag(Y2B_FUNC_MSG2);
+    let tag3 = relay.next_tag(Y2B_FUNC_MSG3);
 
     let output = yao_to_binary_functionality_inner(
         setup, relay, input, rng, comm, yao_setup, tag1, tag2, tag3,
@@ -246,7 +237,6 @@ where
 #[allow(clippy::too_many_arguments)]
 pub async fn batch_yao_to_binary_functionality<T, G, C, R>(
     setup: &T,
-    tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut FilteredMsgRelay<R>,
     input: &[YaoShare],
     rng: Option<&mut G>,
@@ -259,21 +249,10 @@ where
     C: Commitment,
     G: RngCore + CryptoRng,
 {
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(Y2B_FUNC_MSG1, tag_offset);
-    relay.ask_messages(setup, tag1, true).await?;
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag2 = MessageTag::tag1(Y2B_FUNC_MSG2, tag_offset);
-    relay.ask_messages(setup, tag2, true).await?;
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag3 = MessageTag::tag1(Y2B_FUNC_MSG3, tag_offset);
-    relay.ask_messages(setup, tag3, true).await?;
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag4 = MessageTag::tag1(Y2B_FUNC_MSG4, tag_offset);
-    relay.ask_messages(setup, tag4, true).await?;
+    let tag1 = relay.next_tag(Y2B_FUNC_MSG1);
+    let tag2 = relay.next_tag(Y2B_FUNC_MSG2);
+    let tag3 = relay.next_tag(Y2B_FUNC_MSG3);
+    let tag4 = relay.next_tag(Y2B_FUNC_MSG4);
 
     let output = batch_yao_to_binary_functionality_inner(
         setup, relay, input, rng, comm, yao_setup, tag1, tag2, tag3, tag4,
@@ -533,9 +512,8 @@ mod tests {
     use merlin::Transcript;
     use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
     use sl_compute_common::{Binary, BinaryShare, ServerState};
-    use sl_messages::{
-        message::MessageTag,
-        relay::{MessageRelayService, Relay, SimpleMessageRelay},
+    use sl_messages::relay::{
+        MessageRelayService, Relay, SimpleMessageRelay,
     };
     use tokio::task::JoinSet;
 
@@ -551,9 +529,7 @@ mod tests {
                 p2p_send_to_next_receive_from_prev, run_common_randomness,
                 FilteredMsgRelay, SetupMessage,
             },
-            utils_dep::{
-                ProtocolError, ProtocolParticipant, TagOffsetCounter,
-            },
+            utils_dep::{ProtocolError, ProtocolParticipant},
         },
         utilities::{
             commitments::HashCommitment, garble_hash::AesGarbleHash,
@@ -580,8 +556,6 @@ mod tests {
         let mut transcript = Transcript::new(b"test");
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
 
-        let mut tag_offset_counter = TagOffsetCounter::new();
-
         let common_randomness = run_common_randomness(
             &setup,
             &common_randomness_seed,
@@ -591,12 +565,7 @@ mod tests {
 
         let mut serverstate = ServerState::new(common_randomness);
 
-        let yao_setup = setup_yao_functionality(
-            &setup,
-            &mut tag_offset_counter,
-            &mut relay,
-        )
-        .await?;
+        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
         let (mut rng, hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -625,7 +594,6 @@ mod tests {
 
                 let jointsh = batch_input_yao_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     &joint,
                     rng.as_mut(),
@@ -634,13 +602,8 @@ mod tests {
                 .await?;
 
                 for i in &jointsh {
-                    let val = validate_yao_share(
-                        &setup,
-                        &mut tag_offset_counter,
-                        &mut relay,
-                        i,
-                    )
-                    .await?;
+                    let val =
+                        validate_yao_share(&setup, &mut relay, i).await?;
                     assert!(val);
                 }
 
@@ -650,7 +613,6 @@ mod tests {
 
                 let output = yao_circuit_eval_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     &inputs,
                     &circuit,
@@ -667,17 +629,11 @@ mod tests {
 
                 let mut out_bin = vec![];
                 for i in &out_yao {
-                    let val = validate_yao_share(
-                        &setup,
-                        &mut tag_offset_counter,
-                        &mut relay,
-                        i,
-                    )
-                    .await?;
+                    let val =
+                        validate_yao_share(&setup, &mut relay, i).await?;
                     assert!(val);
                     let temp = yao_to_binary_functionality(
                         &setup,
-                        &mut tag_offset_counter,
                         &mut relay,
                         i,
                         rng.as_mut(),
@@ -690,7 +646,6 @@ mod tests {
 
                 let act_out = run_batch_open_binary_share(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     &out_bin,
                     &mut serverstate,
@@ -730,7 +685,6 @@ mod tests {
     /// Run batch Open Binary Share protocol
     pub async fn run_batch_open_binary_share<T, R>(
         setup: &T,
-        tag_offset_counter: &mut TagOffsetCounter,
         r: &mut FilteredMsgRelay<R>,
         shares: &[BinaryShare],
         serverstate: &mut ServerState,
@@ -739,20 +693,12 @@ mod tests {
         T: ProtocolParticipant,
         R: Relay,
     {
-        let tag_offset = tag_offset_counter.next_value();
-        r.ask_messages(setup, MessageTag::tag1(OPEN_MSG, tag_offset), true)
-            .await?;
-
+        let tag = r.next_tag(OPEN_MSG);
         let msg: Vec<u8> =
             shares.iter().map(|share| share.value1 as u8).collect();
 
-        let msg_from_prev = p2p_send_to_next_receive_from_prev(
-            setup,
-            MessageTag::tag1(OPEN_MSG, tag_offset),
-            msg,
-            r,
-        )
-        .await?;
+        let msg_from_prev =
+            p2p_send_to_next_receive_from_prev(setup, tag, msg, r).await?;
 
         let output: Vec<bool> = shares
             .iter()
@@ -784,8 +730,6 @@ mod tests {
         let mut transcript = Transcript::new(b"test");
         transcript.challenge_bytes(b"init-seed", &mut init_seed);
 
-        let mut tag_offset_counter = TagOffsetCounter::new();
-
         let common_randomness = run_common_randomness(
             &setup,
             &common_randomness_seed,
@@ -795,12 +739,7 @@ mod tests {
 
         let mut serverstate = ServerState::new(common_randomness);
 
-        let yao_setup = setup_yao_functionality(
-            &setup,
-            &mut tag_offset_counter,
-            &mut relay,
-        )
-        .await?;
+        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
         let (mut rng, hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -816,17 +755,6 @@ mod tests {
             }
         };
 
-        // let (mut rng, hash, comm) = if setup.participant_index() == 2 {
-        //     let hash = AesGarbleHash::new(yao_setup.e_setup.clone().unwrap().comm_crs);
-        //     let comm = HashCommitment::new(Sha512Hash::new());
-        //     (None, hash, comm)
-        // } else {
-        //     let hash = AesGarbleHash::new(yao_setup.g_setup.as_ref().unwrap().comm_crs);
-        //     let comm = HashCommitment::new(Sha512Hash::new());
-        //     let r = ChaCha8Rng::from_seed(yao_setup.g_setup.as_ref().unwrap().prf_key);
-        //     (Some(r), hash, comm)
-        // };
-
         let circuit = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
 
         for x in 0..2 {
@@ -840,7 +768,6 @@ mod tests {
 
                 let jointsh = batch_input_yao_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     &joint,
                     rng.as_mut(),
@@ -849,13 +776,8 @@ mod tests {
                 .await?;
 
                 for i in &jointsh {
-                    let val = validate_yao_share(
-                        &setup,
-                        &mut tag_offset_counter,
-                        &mut relay,
-                        i,
-                    )
-                    .await?;
+                    let val =
+                        validate_yao_share(&setup, &mut relay, i).await?;
                     assert!(val);
                 }
 
@@ -865,7 +787,6 @@ mod tests {
 
                 let output = yao_circuit_eval_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     &inputs,
                     &circuit,
@@ -882,7 +803,6 @@ mod tests {
 
                 let out_bin = batch_yao_to_binary_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     &out_yao,
                     rng.as_mut(),
@@ -893,7 +813,6 @@ mod tests {
 
                 let act_out = run_batch_open_binary_share(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     &out_bin,
                     &mut serverstate,

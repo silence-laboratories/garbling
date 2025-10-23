@@ -14,7 +14,6 @@ use garbled_circuit::{
         },
         output::batch_output_yao_functionality,
         utils::FilteredMsgRelay,
-        utils_dep::TagOffsetCounter,
     },
     utilities::{
         hash_function::HashFunction,
@@ -36,7 +35,6 @@ use crate::{
 pub async fn run_derive_child_key<S, R, G, H>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
-    tag_offset_counter: &mut TagOffsetCounter,
     parent_key: &PrivKeyShareBip,
     index_child: &ChildIndex,
     yao_setup: &YaoSetup,
@@ -59,7 +57,6 @@ where
 
     let hashed_vals = yao_circuit_eval_functionality(
         setup,
-        tag_offset_counter,
         relay,
         &inputs,
         &circuit,
@@ -77,25 +74,15 @@ where
 
     let (il_int, child_chain_code) = hash_out.split_at(32 * 8);
 
-    let scalar_rss_out = run_yao_to_scalar_rss_keypair(
-        setup,
-        relay,
-        tag_offset_counter,
-        il_int,
-        rng,
-    )
-    .await?;
+    let scalar_rss_out =
+        run_yao_to_scalar_rss_keypair(setup, relay, il_int, rng).await?;
 
     let mut child_yao_share = il_int.to_vec();
     child_yao_share.reverse();
 
-    let child_cc_pub = batch_output_yao_functionality(
-        setup,
-        tag_offset_counter,
-        relay,
-        child_chain_code,
-    )
-    .await?;
+    let child_cc_pub =
+        batch_output_yao_functionality(setup, relay, child_chain_code)
+            .await?;
 
     let child_cc = bool_vec_to_u8_vec(child_cc_pub);
 
@@ -114,7 +101,6 @@ where
 pub async fn run_batch_derive_child_key<S, R, G, H>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
-    tag_offset_counter: &mut TagOffsetCounter,
     parent_key: &[&PrivKeyShareBip],
     index_child: &[ChildIndex],
     yao_setup: &YaoSetup,
@@ -154,7 +140,6 @@ where
 
     let hashed_vals = yao_map_circuit_eval_functionality(
         setup,
-        tag_offset_counter,
         relay,
         &MapArg::Vector(&inputs),
         &MapArg::Vector(&circuits),
@@ -191,7 +176,6 @@ where
     let scalar_rss_out = run_batch_yao_to_scalar_rss_keypair(
         setup,
         relay,
-        tag_offset_counter,
         &il_int_slices,
         rng,
     )
@@ -202,13 +186,8 @@ where
         ccoutinput.extend_from_slice(i);
     }
 
-    let child_cc_pub_vals = batch_output_yao_functionality(
-        setup,
-        tag_offset_counter,
-        relay,
-        &ccoutinput,
-    )
-    .await?;
+    let child_cc_pub_vals =
+        batch_output_yao_functionality(setup, relay, &ccoutinput).await?;
 
     let mut child_ccs = Vec::new();
     let ccsize = child_chain_codes[0].len();
@@ -249,7 +228,6 @@ mod tests {
         functionality::{
             input::batch_input_yao_functionality,
             setup::setup_yao_functionality, utils::FilteredMsgRelay,
-            utils_dep::TagOffsetCounter,
         },
         utilities::{
             commitments::HashCommitment, hash_function::AesHash,
@@ -291,10 +269,7 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut cnt = TagOffsetCounter::new();
-
-        let yao_setup =
-            setup_yao_functionality(&setup, &mut cnt, &mut relay).await?;
+        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
         let (mut rng, hash, _) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -312,7 +287,6 @@ mod tests {
 
         let rpk_yao = batch_input_yao_functionality(
             &setup,
-            &mut cnt,
             &mut relay,
             &rpk_bool,
             rng.as_mut(),
@@ -330,7 +304,6 @@ mod tests {
         let output = run_derive_child_key(
             &setup,
             &mut relay,
-            &mut cnt,
             &share,
             &child_index,
             &yao_setup,
@@ -356,10 +329,7 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut cnt = TagOffsetCounter::new();
-
-        let yao_setup =
-            setup_yao_functionality(&setup, &mut cnt, &mut relay).await?;
+        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
         let (mut rng, hash, _) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -377,7 +347,6 @@ mod tests {
 
         let rpk_yao = batch_input_yao_functionality(
             &setup,
-            &mut cnt,
             &mut relay,
             &rpk_bool,
             rng.as_mut(),
@@ -404,7 +373,6 @@ mod tests {
         let output = run_batch_derive_child_key(
             &setup,
             &mut relay,
-            &mut cnt,
             &input_slices,
             &child_index,
             &yao_setup,

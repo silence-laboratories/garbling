@@ -145,7 +145,6 @@ mod tests {
             input::batch_input_yao_functionality,
             setup::setup_yao_functionality,
             utils::{FilteredMsgRelay, receive_from_parties, send_to_party},
-            utils_dep::TagOffsetCounter,
         },
         utilities::{
             commitments::HashCommitment,
@@ -183,14 +182,7 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut tag_offset_counter = TagOffsetCounter::new();
-
-        let yao_setup = setup_yao_functionality(
-            &setup,
-            &mut tag_offset_counter,
-            &mut relay,
-        )
-        .await?;
+        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
         let (mut rng, _, _) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -208,7 +200,6 @@ mod tests {
 
         let outputs = batch_input_yao_functionality(
             &setup,
-            &mut tag_offset_counter,
             &mut relay,
             &garb_input,
             rng.as_mut(),
@@ -219,11 +210,8 @@ mod tests {
         let mut r = relay;
 
         let tag1 = MessageTag::tag(511);
-        r.ask_messages(&setup, tag1, true).await?;
         let tag2 = MessageTag::tag(512);
-        r.ask_messages(&setup, tag2, true).await?;
         let tag3 = MessageTag::tag(513);
-        r.ask_messages(&setup, tag3, true).await?;
 
         let out = if setup.participant_index() == 2 {
             let svcvecs: Vec<Vec<ScalarVal>> =

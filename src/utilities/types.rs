@@ -101,14 +101,14 @@ impl YaoShare {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Debug, Default)]
 pub struct GarblerSetup {
     pub comm_crs: Block,
     pub prf_key: [u8; 32],
     pub delta: Block,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct EvaluatorSetup {
     pub comm_crs: Block,
 }
@@ -144,17 +144,5 @@ impl From<GarblerSetup> for YaoSetup {
 impl From<EvaluatorSetup> for YaoSetup {
     fn from(value: EvaluatorSetup) -> Self {
         YaoSetup::E(value)
-    }
-}
-
-impl From<&GarblerSetup> for YaoSetup {
-    fn from(value: &GarblerSetup) -> Self {
-        YaoSetup::G(value.clone())
-    }
-}
-
-impl From<&EvaluatorSetup> for YaoSetup {
-    fn from(value: &EvaluatorSetup) -> Self {
-        YaoSetup::E(value.clone())
     }
 }

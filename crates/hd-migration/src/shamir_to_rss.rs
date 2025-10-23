@@ -6,9 +6,7 @@ use k256::{NonZeroScalar, ProjectivePoint, Scalar};
 use sl_compute_common::CommonRandomness;
 use sl_messages::relay::Relay;
 
-use garbled_circuit::functionality::{
-    utils::FilteredMsgRelay, utils_dep::TagOffsetCounter,
-};
+use garbled_circuit::functionality::utils::FilteredMsgRelay;
 
 use crate::{
     reconstruct_shamir::run_reconstruct_shamir,
@@ -64,7 +62,6 @@ pub fn scalar_rss_to_shamir(
 pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
-    tag_offset_counter: &mut TagOffsetCounter,
     share: &Scalar,
     evaluation_points: &[NonZeroScalar],
     randomness: &mut CommonRandomness,
@@ -82,7 +79,6 @@ pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
     let padded = run_reconstruct_shamir(
         setup,
         relay,
-        tag_offset_counter,
         &padded_shamir,
         evaluation_points,
     )
@@ -110,9 +106,8 @@ pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
 
 #[cfg(test)]
 mod tests {
-    use garbled_circuit::functionality::{
-        utils::{FilteredMsgRelay, run_common_randomness},
-        utils_dep::TagOffsetCounter,
+    use garbled_circuit::functionality::utils::{
+        FilteredMsgRelay, run_common_randomness,
     };
     use k256::{NonZeroScalar, ProjectivePoint, Scalar};
     use rand::{
@@ -143,8 +138,6 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut cnt = TagOffsetCounter::new();
-
         let mut seed = [0u8; 32];
         let mut r = StdRng::from_entropy();
         r.fill_bytes(&mut seed);
@@ -154,7 +147,6 @@ mod tests {
         let output = run_shamir_to_scalar_rss(
             &setup,
             &mut relay,
-            &mut cnt,
             &share,
             &evaluation_points,
             &mut randomness,

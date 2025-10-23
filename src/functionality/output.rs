@@ -10,7 +10,7 @@ use crate::{
     },
     functionality::{
         utils::{receive_from_parties, send_to_party, FilteredMsgRelay},
-        utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
+        utils_dep::{ProtocolError, ProtocolParticipant},
     },
     utilities::{
         types::{Block, YaoShare, BLOCK_SIZE},
@@ -20,7 +20,6 @@ use crate::{
 
 pub async fn validate_yao_share<T, R>(
     setup: &T,
-    tag_offset_counter: &mut TagOffsetCounter,
     r: &mut FilteredMsgRelay<R>,
     input: &YaoShare,
 ) -> Result<bool, ProtocolError>
@@ -29,9 +28,7 @@ where
     R: Relay,
 {
     let party_id = setup.participant_index();
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(OUTPUT_YAO_FUNC_MSG1, tag_offset);
-    r.ask_messages(setup, tag1, true).await?;
+    let tag1 = r.next_tag(OUTPUT_YAO_FUNC_MSG1);
 
     if party_id == 2 {
         let share = input.as_evaluator();
@@ -51,7 +48,6 @@ where
 
 pub async fn output_yao_functionality<T, R>(
     setup: &T,
-    tag_offset_counter: &mut TagOffsetCounter,
     r: &mut FilteredMsgRelay<R>,
     input: &YaoShare,
 ) -> Result<bool, ProtocolError>
@@ -59,13 +55,8 @@ where
     T: ProtocolParticipant,
     R: Relay,
 {
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(OUTPUT_YAO_FUNC_MSG1, tag_offset);
-    r.ask_messages(setup, tag1, true).await?;
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag2 = MessageTag::tag1(OUTPUT_YAO_FUNC_MSG2, tag_offset);
-    r.ask_messages(setup, tag2, true).await?;
+    let tag1 = r.next_tag(OUTPUT_YAO_FUNC_MSG1);
+    let tag2 = r.next_tag(OUTPUT_YAO_FUNC_MSG2);
 
     let output =
         output_yao_functionality_inner(setup, r, input, tag1, tag2).await?;
@@ -120,7 +111,6 @@ where
 
 pub async fn batch_output_yao_functionality<T, R>(
     setup: &T,
-    tag_offset_counter: &mut TagOffsetCounter,
     r: &mut FilteredMsgRelay<R>,
     input: &[YaoShare],
 ) -> Result<Vec<bool>, ProtocolError>
@@ -128,13 +118,8 @@ where
     T: ProtocolParticipant,
     R: Relay,
 {
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(OUTPUT_YAO_FUNC_MSG1, tag_offset);
-    r.ask_messages(setup, tag1, true).await?;
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag2 = MessageTag::tag1(OUTPUT_YAO_FUNC_MSG2, tag_offset);
-    r.ask_messages(setup, tag2, true).await?;
+    let tag1 = r.next_tag(OUTPUT_YAO_FUNC_MSG1);
+    let tag2 = r.next_tag(OUTPUT_YAO_FUNC_MSG2);
 
     let output =
         batch_output_yao_functionality_inner(setup, r, input, tag1, tag2)
@@ -209,7 +194,6 @@ where
 
 pub async fn output_yao_to_functionality<T, R>(
     setup: &T,
-    tag_offset_counter: &mut TagOffsetCounter,
     r: &mut FilteredMsgRelay<R>,
     pid: usize,
     input: &YaoShare,
@@ -218,12 +202,7 @@ where
     T: ProtocolParticipant,
     R: Relay,
 {
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(
-        OUTPUT_YAO_TO_FUNC_MSG1.try_into().unwrap(),
-        tag_offset,
-    );
-    r.ask_messages(setup, tag1, true).await?;
+    let tag1 = r.next_tag(OUTPUT_YAO_TO_FUNC_MSG1);
 
     let output =
         output_yao_to_functionality_inner(setup, r, pid, input, tag1).await?;
@@ -353,7 +332,6 @@ where
 
 pub async fn batch_output_yao_to_functionality<T, R>(
     setup: &T,
-    tag_offset_counter: &mut TagOffsetCounter,
     r: &mut FilteredMsgRelay<R>,
     pid: usize,
     input: &[YaoShare],
@@ -362,12 +340,7 @@ where
     T: ProtocolParticipant,
     R: Relay,
 {
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(
-        OUTPUT_YAO_TO_FUNC_MSG1.try_into().unwrap(),
-        tag_offset,
-    );
-    r.ask_messages(setup, tag1, true).await?;
+    let tag1 = r.next_tag(OUTPUT_YAO_TO_FUNC_MSG1);
 
     let output =
         batch_output_yao_to_functionality_inner(setup, r, pid, input, tag1)

@@ -11,7 +11,6 @@ use garbled_circuit::{
         circuit_eval::yao_circuit_eval_functionality,
         input::run_batch_input_from_all_yao,
         output::batch_output_yao_functionality, utils::FilteredMsgRelay,
-        utils_dep::TagOffsetCounter,
     },
     utilities::{
         commitments::Commitment,
@@ -31,7 +30,6 @@ use crate::{
 pub async fn run_scalar_rss_to_yao<S, R, C, G, H>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
-    tag_offset_counter: &mut TagOffsetCounter,
     share: &PrivKeyShare<ProjectivePoint>,
     yao_setup: &YaoSetup,
     mut rng: Option<&mut G>,
@@ -53,7 +51,6 @@ where
 
     let (i1_yao, i2_yao, i3_yao) = run_batch_input_from_all_yao(
         setup,
-        tag_offset_counter,
         relay,
         &all_ip,
         all_ip.len(),
@@ -78,14 +75,7 @@ where
     let circ = build_scalar_rss_to_y_verification_circuit();
 
     let outp = yao_circuit_eval_functionality(
-        setup,
-        tag_offset_counter,
-        relay,
-        &inputs,
-        &circ,
-        rng,
-        hash,
-        yao_setup,
+        setup, relay, &inputs, &circ, rng, hash, yao_setup,
     )
     .await?;
 
@@ -95,13 +85,8 @@ where
         .map(|id| outp.get(id).unwrap().clone())
         .collect();
 
-    let verification = batch_output_yao_functionality(
-        setup,
-        tag_offset_counter,
-        relay,
-        &veradd[..1],
-    )
-    .await?;
+    let verification =
+        batch_output_yao_functionality(setup, relay, &veradd[..1]).await?;
 
     assert!(verification[0]);
 
@@ -116,7 +101,6 @@ mod tests {
         functionality::{
             output::batch_output_yao_functionality,
             setup::setup_yao_functionality, utils::FilteredMsgRelay,
-            utils_dep::TagOffsetCounter,
         },
         utilities::{
             commitments::HashCommitment, hash_function::AesHash,
@@ -148,10 +132,7 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut cnt = TagOffsetCounter::new();
-
-        let yao_setup =
-            setup_yao_functionality(&setup, &mut cnt, &mut relay).await?;
+        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
         let (mut rng, hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -170,7 +151,6 @@ mod tests {
         let output = run_scalar_rss_to_yao(
             &setup,
             &mut relay,
-            &mut cnt,
             &share,
             &yao_setup,
             rng.as_mut(),
@@ -179,10 +159,8 @@ mod tests {
         )
         .await?;
 
-        let op = batch_output_yao_functionality(
-            &setup, &mut cnt, &mut relay, &output,
-        )
-        .await?;
+        let op = batch_output_yao_functionality(&setup, &mut relay, &output)
+            .await?;
 
         let mut sum = Scalar::ZERO;
         let two = Scalar::ONE + Scalar::ONE;
