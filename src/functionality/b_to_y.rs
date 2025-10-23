@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use rand::{CryptoRng, RngCore};
 use sl_compute_common::BinaryShare;
 use sl_messages::{message::MessageTag, relay::Relay};

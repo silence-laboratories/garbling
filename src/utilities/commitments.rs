@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use crate::utilities::{hash_function::HashFunction, types::BLOCK_SIZE};
 
 use super::types::Block;

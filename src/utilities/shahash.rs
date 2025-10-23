@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use sha2::{Digest, Sha512};
 
 use crate::utilities::types::BLOCK_SIZE;

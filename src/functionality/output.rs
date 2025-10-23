@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use sl_compute_common::BinaryString;
 use sl_messages::{message::MessageTag, relay::Relay};
 

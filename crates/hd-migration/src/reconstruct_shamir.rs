@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use garbled_circuit::functionality::{
     utils::{FilteredMsgRelay, receive_from_parties, send_to_party},
     utils_dep::TagOffsetCounter,

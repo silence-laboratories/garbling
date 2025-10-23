@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use crate::circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder};
 
 pub fn build_comparison_circuit() -> BinaryCircuit {

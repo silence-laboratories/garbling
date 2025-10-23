@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use garbled_circuit::{
     functionality::{
         circuit_eval::yao_circuit_eval_functionality, input::run_batch_input_from_all_yao,

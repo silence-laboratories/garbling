@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use k256::elliptic_curve::Curve;
 
 pub const SECP256_K1_Q: k256::U256 = k256::Secp256k1::ORDER;

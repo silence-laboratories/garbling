@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use sl_messages::{message::MessageTag, relay::Relay};

@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use garbled_circuit::utilities::{
     types::{YaoEvaluatorShare, YaoGarblerShare},
     utils::{lsb, xor_blocks},

@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 #[cfg(any(test, feature = "test-support"))]
 use garbled_circuit::functionality::utils::SetupMessage;
 use k256::{NonZeroScalar, Scalar, elliptic_curve::subtle::ConstantTimeEq};

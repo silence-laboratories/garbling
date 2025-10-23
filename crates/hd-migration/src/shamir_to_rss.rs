@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use garbled_circuit::functionality::{utils::FilteredMsgRelay, utils_dep::TagOffsetCounter};
 use k256::{NonZeroScalar, ProjectivePoint, Scalar};
 use sl_compute_common::CommonRandomness;
