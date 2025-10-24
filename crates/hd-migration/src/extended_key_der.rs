@@ -16,7 +16,6 @@ use garbled_circuit::{
         output::{batch_output_yao_functionality, output_yao_functionality},
         setup::setup_yao_functionality,
         utils::{FilteredMsgRelay, run_common_randomness},
-        utils_dep::TagOffsetCounter,
     },
     utilities::{
         commitments::{Commitment, HashCommitment},
@@ -39,7 +38,6 @@ use crate::{
 async fn run_extended_key_derivation_round1<S, R, G, H, C>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
-    tag_offset_counter: &mut TagOffsetCounter,
     share: Scalar,
     evaluation_points: Vec<NonZeroScalar>,
     derivation_path: &DerivationPath,
@@ -62,7 +60,6 @@ where
     let scalar_rss_privkey = run_shamir_to_scalar_rss(
         setup,
         relay,
-        tag_offset_counter,
         &share,
         &evaluation_points,
         randomness,
@@ -77,7 +74,6 @@ where
 
     let (i1_yao, i2_yao, i3_yao) = run_batch_input_from_all_yao(
         setup,
-        tag_offset_counter,
         relay,
         &all_ip,
         all_ip.len(),
@@ -109,7 +105,6 @@ where
 
     let output = yao_circuit_eval_functionality(
         setup,
-        tag_offset_counter,
         relay,
         &inputs,
         &circ,
@@ -129,27 +124,16 @@ where
     let mut child_sk_yao = ops[257..513].to_vec();
     let child_chain_yao = ops[513..].to_vec();
 
-    let verification =
-        output_yao_functionality(setup, tag_offset_counter, relay, ver)
-            .await?;
+    let verification = output_yao_functionality(setup, relay, ver).await?;
     assert!(verification);
 
-    let scalar_rss_child = run_yao_to_scalar_rss_keypair(
-        setup,
-        relay,
-        tag_offset_counter,
-        &child_sk_yao,
-        rng,
-    )
-    .await?;
+    let scalar_rss_child =
+        run_yao_to_scalar_rss_keypair(setup, relay, &child_sk_yao, rng)
+            .await?;
 
-    let child_cc_pub = batch_output_yao_functionality(
-        setup,
-        tag_offset_counter,
-        relay,
-        &child_chain_yao,
-    )
-    .await?;
+    let child_cc_pub =
+        batch_output_yao_functionality(setup, relay, &child_chain_yao)
+            .await?;
 
     let child_cc = bool_vec_to_u8_vec(child_cc_pub);
 
@@ -186,8 +170,6 @@ where
     S: ProtocolParticipant,
     R: Relay,
 {
-    let mut tag_offset_counter = TagOffsetCounter::new();
-
     let mut relay = FilteredMsgRelay::new(relay);
 
     let mut rng = StdRng::from_entropy();
@@ -199,9 +181,7 @@ where
         run_common_randomness(&setup, &seed, &mut relay).await?;
 
     // run setup for yao protocols
-    let yao_setup =
-        setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay)
-            .await?;
+    let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
     let (mut rng, hash, comm) = match &yao_setup {
         YaoSetup::E(e) => {
@@ -221,7 +201,6 @@ where
     let (_, ch) = run_extended_key_derivation_round1(
         &setup,
         &mut relay,
-        &mut tag_offset_counter,
         share,
         evaluation_points,
         &derivation_path,
@@ -241,7 +220,6 @@ where
         let child_key = run_derive_child_key(
             &setup,
             &mut relay,
-            &mut tag_offset_counter,
             &output[cnt],
             i,
             &yao_setup,
@@ -271,8 +249,6 @@ where
     S: ProtocolParticipant,
     R: Relay,
 {
-    let mut tag_offset_counter = TagOffsetCounter::new();
-
     let mut relay = FilteredMsgRelay::new(relay);
 
     let mut rng = StdRng::from_entropy();
@@ -284,9 +260,7 @@ where
         run_common_randomness(&setup, &seed, &mut relay).await?;
 
     // run setup for yao protocols
-    let yao_setup =
-        setup_yao_functionality(&setup, &mut tag_offset_counter, &mut relay)
-            .await?;
+    let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
     let (mut rng, hash, comm) = match &yao_setup {
         YaoSetup::E(e) => {
@@ -306,7 +280,6 @@ where
     let (_, ch) = run_extended_key_derivation_round1(
         &setup,
         &mut relay,
-        &mut tag_offset_counter,
         share,
         evaluation_points,
         &derivation_path,
@@ -326,7 +299,6 @@ where
         let child_key = run_derive_child_key(
             &setup,
             &mut relay,
-            &mut tag_offset_counter,
             &temp[cnt],
             i,
             &yao_setup,
@@ -343,7 +315,6 @@ where
     let children = run_batch_derive_child_key(
         &setup,
         &mut relay,
-        &mut tag_offset_counter,
         &par,
         &children,
         &yao_setup,

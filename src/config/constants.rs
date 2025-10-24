@@ -37,7 +37,7 @@ pub const INPUT_YAO_FROM_ALL_MSG3: u32 = 218;
 pub const OUTPUT_YAO_FUNC_MSG1: u32 = 204;
 pub const OUTPUT_YAO_FUNC_MSG2: u32 = 205;
 
-pub const OUTPUT_YAO_TO_FUNC_MSG1: i32 = 206;
+pub const OUTPUT_YAO_TO_FUNC_MSG1: u32 = 206;
 
 pub const SETUP_YAO_FUNC_MSG1: u32 = 207;
 pub const SETUP_YAO_FUNC_MSG2: u32 = 208;

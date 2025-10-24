@@ -10,26 +10,21 @@ use crate::{
     config::constants::{SETUP_YAO_FUNC_MSG1, SETUP_YAO_FUNC_MSG2},
     functionality::{
         utils::{receive_from_parties, send_to_party, FilteredMsgRelay},
-        utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
+        utils_dep::{ProtocolError, ProtocolParticipant},
     },
     utilities::types::{Block, EvaluatorSetup, GarblerSetup, YaoSetup},
 };
 
 pub async fn setup_yao_functionality<T, R>(
     setup: &T,
-    tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut FilteredMsgRelay<R>,
 ) -> Result<YaoSetup, ProtocolError>
 where
     T: ProtocolParticipant,
     R: Relay,
 {
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(SETUP_YAO_FUNC_MSG1, tag_offset);
-    relay.ask_messages(setup, tag1, true).await?;
-    let tag_offset = tag_offset_counter.next_value();
-    let tag2 = MessageTag::tag1(SETUP_YAO_FUNC_MSG2, tag_offset);
-    relay.ask_messages(setup, tag2, true).await?;
+    let tag1 = relay.next_tag(SETUP_YAO_FUNC_MSG1);
+    let tag2 = relay.next_tag(SETUP_YAO_FUNC_MSG2);
 
     let output =
         setup_yao_functionality_inner(setup, relay, tag1, tag2).await?;

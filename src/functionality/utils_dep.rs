@@ -10,23 +10,6 @@ use sl_messages::{
     relay::MessageSendError,
 };
 
-/// Counter for tag offset.
-#[derive(Default)]
-pub struct TagOffsetCounter(u32);
-
-impl TagOffsetCounter {
-    /// New counter initialized by 0.
-    pub fn new() -> Self {
-        Self(0)
-    }
-
-    /// Increment counter and return next value
-    pub fn next_value(&mut self) -> u32 {
-        self.0 = self.0.wrapping_add(1);
-        self.0
-    }
-}
-
 /// An iterator for parties in range 0..total except me.
 pub struct AllOtherParties {
     total: usize,

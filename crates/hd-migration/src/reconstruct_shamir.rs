@@ -5,9 +5,8 @@ use k256::{NonZeroScalar, Scalar};
 
 use sl_messages::{message::MessageTag, relay::Relay};
 
-use garbled_circuit::functionality::{
-    utils::{FilteredMsgRelay, receive_from_parties, send_to_party},
-    utils_dep::TagOffsetCounter,
+use garbled_circuit::functionality::utils::{
+    FilteredMsgRelay, receive_from_parties, send_to_party,
 };
 
 use crate::{
@@ -41,20 +40,11 @@ pub fn reconstruct_shamir_process_msg1(
 pub async fn run_reconstruct_shamir<R: Relay, S: ProtocolParticipant>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
-    tag_offset_counter: &mut TagOffsetCounter,
     share: &Scalar,
     evaluation_points: &[NonZeroScalar],
 ) -> Result<Scalar, HardDerivationError> {
-    let tag1 = MessageTag::tag1(
-        RECONSTRUCT_SHAMIR_MSG1,
-        tag_offset_counter.next_value(),
-    );
-    let tag2 = MessageTag::tag1(
-        RECONSTRUCT_SHAMIR_MSG1,
-        tag_offset_counter.next_value(),
-    );
-    relay.ask_messages(setup, tag1, true).await?;
-    relay.ask_messages(setup, tag2, true).await?;
+    let tag1 = relay.next_tag(RECONSTRUCT_SHAMIR_MSG1);
+    let tag2 = relay.next_tag(RECONSTRUCT_SHAMIR_MSG1);
 
     let out = run_reconstruct_shamir_inner(
         setup,
@@ -106,9 +96,7 @@ async fn run_reconstruct_shamir_inner<R: Relay, S: ProtocolParticipant>(
 #[cfg(test)]
 mod tests {
 
-    use garbled_circuit::functionality::{
-        utils::FilteredMsgRelay, utils_dep::TagOffsetCounter,
-    };
+    use garbled_circuit::functionality::utils::FilteredMsgRelay;
     use k256::{NonZeroScalar, Scalar};
     use rand::{CryptoRng, RngCore, SeedableRng, rngs};
 
@@ -138,12 +126,9 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut cnt = TagOffsetCounter::new();
-
         let output = run_reconstruct_shamir(
             &setup,
             &mut relay,
-            &mut cnt,
             &share,
             &evaluation_points,
         )

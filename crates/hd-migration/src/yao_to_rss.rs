@@ -15,12 +15,9 @@ use rand_chacha::ChaCha8Rng;
 use sl_messages::{message::MessageTag, relay::Relay};
 
 use garbled_circuit::{
-    functionality::{
-        utils::{
-            FilteredMsgRelay, FixedExternalSize, Wrap, receive_from_parties,
-            send_to_party,
-        },
-        utils_dep::TagOffsetCounter,
+    functionality::utils::{
+        FilteredMsgRelay, FixedExternalSize, Wrap, receive_from_parties,
+        send_to_party,
     },
     utilities::types::{YaoEvaluatorShare, YaoGarblerShare, YaoShare},
 };
@@ -591,7 +588,6 @@ pub fn get_private_key_shares_dkg_genout_p3(
 pub async fn run_yao_to_scalar_rss_keypair<S, G, R>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
-    tag_offset_counter: &mut TagOffsetCounter,
     share: &[YaoShare],
     rng: Option<&mut G>,
 ) -> Result<PrivKeyShareDkg<k256::ProjectivePoint>, HardDerivationError>
@@ -600,19 +596,10 @@ where
     R: Relay,
     G: RngCore + CryptoRng,
 {
-    let tag1 =
-        MessageTag::tag1(YAO_TO_RSS_MSG1, tag_offset_counter.next_value());
-    let tag2 =
-        MessageTag::tag1(YAO_TO_RSS_MSG2, tag_offset_counter.next_value());
-    let tag3 =
-        MessageTag::tag1(YAO_TO_RSS_MSG3, tag_offset_counter.next_value());
-    let tag4 =
-        MessageTag::tag1(YAO_TO_RSS_MSG4, tag_offset_counter.next_value());
-
-    relay.ask_messages(setup, tag1, true).await?;
-    relay.ask_messages(setup, tag2, true).await?;
-    relay.ask_messages(setup, tag3, true).await?;
-    relay.ask_messages(setup, tag4, true).await?;
+    let tag1 = relay.next_tag(YAO_TO_RSS_MSG1);
+    let tag2 = relay.next_tag(YAO_TO_RSS_MSG2);
+    let tag3 = relay.next_tag(YAO_TO_RSS_MSG3);
+    let tag4 = relay.next_tag(YAO_TO_RSS_MSG4);
 
     let output = run_yao_to_scalar_rss_keypair_inner(
         setup, relay, share, rng, tag1, tag2, tag3, tag4,
@@ -755,7 +742,6 @@ where
 pub async fn run_batch_yao_to_scalar_rss_keypair<S, G, R>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
-    tag_offset_counter: &mut TagOffsetCounter,
     share: &[&[YaoShare]],
     rng: Option<&mut G>,
 ) -> Result<Vec<PrivKeyShareDkg<k256::ProjectivePoint>>, HardDerivationError>
@@ -764,19 +750,10 @@ where
     R: Relay,
     G: RngCore + CryptoRng,
 {
-    let tag1 =
-        MessageTag::tag1(YAO_TO_RSS_MSG1, tag_offset_counter.next_value());
-    let tag2 =
-        MessageTag::tag1(YAO_TO_RSS_MSG2, tag_offset_counter.next_value());
-    let tag3 =
-        MessageTag::tag1(YAO_TO_RSS_MSG3, tag_offset_counter.next_value());
-    let tag4 =
-        MessageTag::tag1(YAO_TO_RSS_MSG4, tag_offset_counter.next_value());
-
-    relay.ask_messages(setup, tag1, true).await?;
-    relay.ask_messages(setup, tag2, true).await?;
-    relay.ask_messages(setup, tag3, true).await?;
-    relay.ask_messages(setup, tag4, true).await?;
+    let tag1 = relay.next_tag(YAO_TO_RSS_MSG1);
+    let tag2 = relay.next_tag(YAO_TO_RSS_MSG2);
+    let tag3 = relay.next_tag(YAO_TO_RSS_MSG3);
+    let tag4 = relay.next_tag(YAO_TO_RSS_MSG4);
 
     let output = run_batch_yao_to_scalar_rss_keypair_inner(
         setup, relay, share, rng, tag1, tag2, tag3, tag4,
@@ -1016,7 +993,6 @@ mod tests {
         functionality::{
             input::batch_input_yao_functionality,
             setup::setup_yao_functionality, utils::FilteredMsgRelay,
-            utils_dep::TagOffsetCounter,
         },
         utilities::{
             commitments::HashCommitment,
@@ -1049,14 +1025,7 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut tag_offset_counter = TagOffsetCounter::new();
-
-        let yao_setup = setup_yao_functionality(
-            &setup,
-            &mut tag_offset_counter,
-            &mut relay,
-        )
-        .await?;
+        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
         let (mut rng, _, _) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -1074,7 +1043,6 @@ mod tests {
 
         let in_yao = batch_input_yao_functionality(
             &setup,
-            &mut tag_offset_counter,
             &mut relay,
             &input,
             rng.as_mut(),
@@ -1085,7 +1053,6 @@ mod tests {
         let out = run_yao_to_scalar_rss_keypair(
             &setup,
             &mut relay,
-            &mut tag_offset_counter,
             &in_yao,
             rng.as_mut(),
         )
@@ -1108,14 +1075,7 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut tag_offset_counter = TagOffsetCounter::new();
-
-        let yao_setup = setup_yao_functionality(
-            &setup,
-            &mut tag_offset_counter,
-            &mut relay,
-        )
-        .await?;
+        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
         let (mut rng, _, _) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -1135,7 +1095,6 @@ mod tests {
         for i in input {
             let in_yaot = batch_input_yao_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 &i,
                 rng.as_mut(),
@@ -1151,7 +1110,6 @@ mod tests {
         let out = run_batch_yao_to_scalar_rss_keypair(
             &setup,
             &mut relay,
-            &mut tag_offset_counter,
             &inyao_slices,
             rng.as_mut(),
         )

@@ -173,7 +173,7 @@ impl CircuitBuilder {
         other_circuit: &BinaryCircuit,
         input_ids: &[&[ID]],
     ) -> Vec<ID> {
-        assert_eq!(input_ids.len(), other_circuit.num_inputs() as _);
+        assert_eq!(input_ids.len(), other_circuit.num_inputs() as usize);
         (0..input_ids.len()).for_each(|i| {
             assert_eq!(
                 input_ids[i].len(),

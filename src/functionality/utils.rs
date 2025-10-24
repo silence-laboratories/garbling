@@ -31,7 +31,7 @@ pub struct FilteredMsgRelay<R> {
     in_buf: Vec<(BytesMut, usize, MessageTag)>,
     expected: HashMap<MsgId, (usize, MessageTag)>,
     unexpected: HashMap<MsgId, BytesMut>,
-    party_index: usize,
+    tag_counter: u32,
 }
 
 impl<R: Relay> FilteredMsgRelay<R> {
@@ -42,8 +42,18 @@ impl<R: Relay> FilteredMsgRelay<R> {
             expected: HashMap::new(),
             unexpected: HashMap::new(),
             in_buf: vec![],
-            party_index: usize::MAX,
+            tag_counter: 0,
         }
+    }
+
+    pub fn tag_counter(&self) -> u32 {
+        self.tag_counter
+    }
+
+    pub fn next_tag(&mut self, tag: u32) -> MessageTag {
+        let next_counter = self.tag_counter.wrapping_add(1);
+        self.tag_counter = next_counter;
+        MessageTag::tag1(tag, next_counter)
     }
 
     /// Mark message with ID as expected and associate pair (party-id,
@@ -58,8 +68,9 @@ impl<R: Relay> FilteredMsgRelay<R> {
         self.relay.ask(&id, ttl).await?;
         if let Some(msg) = self.unexpected.remove(&id) {
             self.in_buf.push((msg, party_id, tag));
+        } else {
+            self.expected.insert(id, (party_id, tag));
         }
-        self.expected.insert(id, (party_id, tag));
 
         Ok(())
     }
@@ -92,8 +103,7 @@ impl<R: Relay> FilteredMsgRelay<R> {
             let msg = self.relay.next().await.ok_or(Error::Recv)?;
 
             if let Ok(id) = <&MsgId>::try_from(msg.as_ref()) {
-                if let Some(&(p, t)) = self.expected.get(id) {
-                    self.expected.remove(id);
+                if let Some((p, t)) = self.expected.remove(id) {
                     match t {
                         ABORT_MESSAGE_TAG => {
                             return Ok((msg, p, true));
@@ -114,23 +124,6 @@ impl<R: Relay> FilteredMsgRelay<R> {
                 }
             }
         }
-    }
-
-    /// Add expected messages and Ask underlying message relay to
-    /// receive them.
-    pub async fn ask_messages<P: ProtocolParticipant>(
-        &mut self,
-        setup: &P,
-        tag: MessageTag,
-        p2p: bool,
-    ) -> Result<usize, MessageSendError> {
-        self.ask_messages_from_iter(
-            setup,
-            tag,
-            setup.all_other_parties(),
-            p2p,
-        )
-        .await
     }
 
     /// Ask set of messages with a given `tag` from a set of `parties`.
@@ -165,8 +158,6 @@ impl<R: Relay> FilteredMsgRelay<R> {
                 .await?;
         }
 
-        self.party_index = my_party_index;
-
         Ok(count)
     }
 }
@@ -175,7 +166,7 @@ impl<R: Relay> FilteredMsgRelay<R> {
 pub struct Round<'a, R> {
     tag: MessageTag,
     count: usize,
-    pub(crate) relay: &'a mut FilteredMsgRelay<R>,
+    relay: &'a mut FilteredMsgRelay<R>,
 }
 
 impl<'a, R: Relay> Round<'a, R> {
@@ -305,6 +296,15 @@ where
     R: Relay,
     T: Wrap,
 {
+    relay
+        .ask_messages_from_iter(
+            setup,
+            tag,
+            from_parties.iter().cloned(),
+            true,
+        )
+        .await?;
+
     let mut p0 = Pairs::new();
 
     let mut round = Round::new(from_parties.len(), tag, relay);
@@ -360,6 +360,10 @@ where
         message.encode(t);
         msg.sign(setup.signer())
     };
+
+    relay
+        .ask_messages_from_iter(setup, tag, [prev_party_id], true)
+        .await?;
 
     relay.send(buffer).await?;
 
@@ -602,7 +606,6 @@ where
     R: Relay,
 {
     const COMMON_RAND_MSG: MessageTag = MessageTag::tag(2);
-    relay.ask_messages(setup, COMMON_RAND_MSG, true).await?;
 
     let mut rng = ChaCha20Rng::from_seed(*seed);
     let key_next: [u8; 32] = rng.gen();

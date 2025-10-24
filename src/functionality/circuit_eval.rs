@@ -14,7 +14,7 @@ use crate::{
     functionality::{
         evaluate::evaluate_functionality,
         utils::{receive_from_parties, send_to_party, FilteredMsgRelay},
-        utils_dep::{ProtocolError, ProtocolParticipant, TagOffsetCounter},
+        utils_dep::{ProtocolError, ProtocolParticipant},
     },
     utilities::{
         hash_function::HashFunction,
@@ -55,7 +55,6 @@ where
 #[allow(clippy::too_many_arguments)]
 pub async fn yao_circuit_eval_functionality<T, R, G, H>(
     setup: &T,
-    tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut FilteredMsgRelay<R>,
     input: &[Vec<YaoShare>],
     circuit: &BinaryCircuit,
@@ -69,13 +68,8 @@ where
     G: RngCore + CryptoRng,
     H: HashFunction,
 {
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(YAO_CIRC_EVAL_FUNC_MSG1, tag_offset);
-    relay.ask_messages(setup, tag1, true).await?;
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag2 = MessageTag::tag1(YAO_CIRC_EVAL_FUNC_MSG2, tag_offset);
-    relay.ask_messages(setup, tag2, true).await?;
+    let tag1 = relay.next_tag(YAO_CIRC_EVAL_FUNC_MSG1);
+    let tag2 = relay.next_tag(YAO_CIRC_EVAL_FUNC_MSG2);
 
     let output = yao_circuit_eval_functionality_inner(
         setup, relay, input, circuit, rng, hash, yao_setup, tag1, tag2,
@@ -105,7 +99,7 @@ where
 {
     let party_id = setup.participant_index();
 
-    assert_eq!(input.len(), circuit.num_inputs() as _);
+    assert_eq!(input.len(), circuit.num_inputs() as usize);
     (0..input.len()).for_each(|i| {
         assert_eq!(input[i].len(), circuit.input_gate_ids[i].len())
     });
@@ -163,7 +157,6 @@ where
 #[allow(clippy::too_many_arguments)]
 pub async fn yao_map_circuit_eval_functionality<'a, T, R, G, H>(
     setup: &T,
-    tag_offset_counter: &mut TagOffsetCounter,
     relay: &mut FilteredMsgRelay<R>,
     inputs: &MapArg<'a, &[Vec<YaoShare>]>,
     circuits: &MapArg<'a, &'a BinaryCircuit>,
@@ -177,13 +170,8 @@ where
     G: RngCore + CryptoRng,
     H: HashFunction,
 {
-    let tag_offset = tag_offset_counter.next_value();
-    let tag1 = MessageTag::tag1(YAO_CIRC_EVAL_FUNC_MSG1, tag_offset);
-    relay.ask_messages(setup, tag1, true).await?;
-
-    let tag_offset = tag_offset_counter.next_value();
-    let tag2 = MessageTag::tag1(YAO_CIRC_EVAL_FUNC_MSG2, tag_offset);
-    relay.ask_messages(setup, tag2, true).await?;
+    let tag1 = relay.next_tag(YAO_CIRC_EVAL_FUNC_MSG1);
+    let tag2 = relay.next_tag(YAO_CIRC_EVAL_FUNC_MSG2);
 
     let output = yao_map_circuit_eval_functionality_inner(
         setup, relay, inputs, circuits, rng, hash, yao_setup, tag1, tag2,
@@ -567,9 +555,7 @@ mod tests {
             },
             setup::setup_yao_functionality,
             utils::{FilteredMsgRelay, SetupMessage},
-            utils_dep::{
-                ProtocolError, ProtocolParticipant, TagOffsetCounter,
-            },
+            utils_dep::{ProtocolError, ProtocolParticipant},
         },
         utilities::{
             commitments::HashCommitment,
@@ -604,13 +590,7 @@ mod tests {
             &mut common_randomness_seed,
         );
 
-        let mut tag_offset_counter = TagOffsetCounter::new();
-        let yao_setup = setup_yao_functionality(
-            &setup,
-            &mut tag_offset_counter,
-            &mut relay,
-        )
-        .await?;
+        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
         let (mut rng, hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -636,7 +616,6 @@ mod tests {
             count += 1;
             let out = input_yao_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 inp,
                 rng.as_mut(),
@@ -644,13 +623,7 @@ mod tests {
             )
             .await?;
 
-            let cor = validate_yao_share(
-                &setup,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut relay, &out).await?;
             assert!(cor);
 
             inputs[0].push(out);
@@ -662,7 +635,6 @@ mod tests {
             let out = if setup.participant_index() == 0 {
                 input_yao_from_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     inp,
                     0,
@@ -674,7 +646,6 @@ mod tests {
             } else {
                 input_yao_from_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     false,
                     0,
@@ -685,13 +656,7 @@ mod tests {
                 .await?
             };
 
-            let cor = validate_yao_share(
-                &setup,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut relay, &out).await?;
             assert!(cor);
 
             inputs[0].push(out);
@@ -703,7 +668,6 @@ mod tests {
             let out = if setup.participant_index() == 1 {
                 input_yao_from_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     inp,
                     1,
@@ -715,7 +679,6 @@ mod tests {
             } else {
                 input_yao_from_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     false,
                     1,
@@ -726,13 +689,7 @@ mod tests {
                 .await?
             };
 
-            let cor = validate_yao_share(
-                &setup,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut relay, &out).await?;
             assert!(cor);
 
             inputs[0].push(out);
@@ -744,7 +701,6 @@ mod tests {
             let out = if setup.participant_index() == 2 {
                 input_yao_from_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     inp,
                     2,
@@ -756,7 +712,6 @@ mod tests {
             } else {
                 input_yao_from_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     false,
                     2,
@@ -767,13 +722,7 @@ mod tests {
                 .await?
             };
 
-            let cor = validate_yao_share(
-                &setup,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut relay, &out).await?;
             assert!(cor);
 
             inputs[0].push(out);
@@ -782,38 +731,24 @@ mod tests {
         for (_, &inp) in circuit.input_gate_ids[1].iter().zip(&eval_input) {
             let out = input_yao_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 inp,
                 rng.as_mut(),
                 &yao_setup,
             )
             .await?;
-            let cor = validate_yao_share(
-                &setup,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut relay, &out).await?;
             assert!(cor);
             inputs[1].push(out);
             let out = input_yao_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 !inp,
                 rng.as_mut(),
                 &yao_setup,
             )
             .await?;
-            let cor = validate_yao_share(
-                &setup,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut relay, &out).await?;
             assert!(cor);
             notinputs[1].push(out);
         }
@@ -821,27 +756,19 @@ mod tests {
         for (_, inp) in circuit.input_gate_ids[0].iter().zip(&garb_input) {
             let out = input_yao_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 !inp,
                 rng.as_mut(),
                 &yao_setup,
             )
             .await?;
-            let cor = validate_yao_share(
-                &setup,
-                &mut tag_offset_counter,
-                &mut relay,
-                &out,
-            )
-            .await?;
+            let cor = validate_yao_share(&setup, &mut relay, &out).await?;
             assert!(cor);
             notinputs[0].push(out);
         }
 
         let out_sh = yao_circuit_eval_functionality(
             &setup,
-            &mut tag_offset_counter,
             &mut relay,
             &inputs,
             &circuit,
@@ -853,7 +780,6 @@ mod tests {
 
         let outs_case1_sh = yao_map_circuit_eval_functionality(
             &setup,
-            &mut tag_offset_counter,
             &mut relay,
             &MapArg::Vector(&[&inputs, &notinputs]),
             &MapArg::Scalar(&circuit),
@@ -865,7 +791,6 @@ mod tests {
 
         let outs_case2_sh = yao_map_circuit_eval_functionality(
             &setup,
-            &mut tag_offset_counter,
             &mut relay,
             &MapArg::Scalar(&inputs),
             &MapArg::Vector(&[&circuit, &circuit]),
@@ -877,7 +802,6 @@ mod tests {
 
         let outs_case3_sh = yao_map_circuit_eval_functionality(
             &setup,
-            &mut tag_offset_counter,
             &mut relay,
             &MapArg::Vector(&[&inputs, &notinputs]),
             &MapArg::Vector(&[&circuit, &circuit]),
@@ -892,7 +816,6 @@ mod tests {
         for i in &circuit.output_gate_ids {
             let cor: bool = validate_yao_share(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 out_sh.get(i).unwrap(),
             )
@@ -900,7 +823,6 @@ mod tests {
             assert!(cor);
             let output = output_yao_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 out_sh.get(i).unwrap(),
             )
@@ -909,7 +831,6 @@ mod tests {
 
             let op1 = output_yao_to_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 0,
                 out_sh.get(i).unwrap(),
@@ -921,7 +842,6 @@ mod tests {
 
             let op2 = output_yao_to_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 1,
                 out_sh.get(i).unwrap(),
@@ -933,7 +853,6 @@ mod tests {
 
             let op3 = output_yao_to_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 2,
                 out_sh.get(i).unwrap(),
@@ -951,7 +870,6 @@ mod tests {
             for i in &circuit.output_gate_ids {
                 let cor: bool = validate_yao_share(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
                 )
@@ -959,7 +877,6 @@ mod tests {
                 assert!(cor);
                 let output = output_yao_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
                 )
@@ -979,7 +896,6 @@ mod tests {
             for i in &circuit.output_gate_ids {
                 let cor: bool = validate_yao_share(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
                 )
@@ -987,7 +903,6 @@ mod tests {
                 assert!(cor);
                 let output = output_yao_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
                 )
@@ -1007,7 +922,6 @@ mod tests {
             for i in &circuit.output_gate_ids {
                 let cor: bool = validate_yao_share(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
                 )
@@ -1015,7 +929,6 @@ mod tests {
                 assert!(cor);
                 let output = output_yao_functionality(
                     &setup,
-                    &mut tag_offset_counter,
                     &mut relay,
                     out_sh.get(i).unwrap(),
                 )
@@ -1053,13 +966,7 @@ mod tests {
             &mut common_randomness_seed,
         );
 
-        let mut tag_offset_counter = TagOffsetCounter::new();
-        let yao_setup = setup_yao_functionality(
-            &setup,
-            &mut tag_offset_counter,
-            &mut relay,
-        )
-        .await?;
+        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
         let (mut rng, hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
@@ -1088,7 +995,6 @@ mod tests {
         }
         let outs = batch_input_yao_functionality(
             &setup,
-            &mut tag_offset_counter,
             &mut relay,
             &inps,
             rng.as_mut(),
@@ -1109,7 +1015,6 @@ mod tests {
         let outs = if setup.participant_index() == 0 {
             batch_input_yao_from_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 &inps,
                 0,
@@ -1121,7 +1026,6 @@ mod tests {
         } else {
             batch_input_yao_from_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 &vec![None; inps.len()],
                 0,
@@ -1145,7 +1049,6 @@ mod tests {
         let outs = if setup.participant_index() == 1 {
             batch_input_yao_from_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 &inps,
                 1,
@@ -1157,7 +1060,6 @@ mod tests {
         } else {
             batch_input_yao_from_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 &vec![None; inps.len()],
                 1,
@@ -1181,7 +1083,6 @@ mod tests {
         let outs = if setup.participant_index() == 2 {
             batch_input_yao_from_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 &inps,
                 2,
@@ -1193,7 +1094,6 @@ mod tests {
         } else {
             batch_input_yao_from_functionality(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 &vec![None; inps.len()],
                 2,
@@ -1215,7 +1115,6 @@ mod tests {
         }
         let outs = batch_input_yao_functionality(
             &setup,
-            &mut tag_offset_counter,
             &mut relay,
             &inps,
             rng.as_mut(),
@@ -1228,7 +1127,6 @@ mod tests {
 
         let out_sh = yao_circuit_eval_functionality(
             &setup,
-            &mut tag_offset_counter,
             &mut relay,
             &inputs,
             &circuit,
@@ -1243,7 +1141,6 @@ mod tests {
         for i in &circuit.output_gate_ids {
             let cor: bool = validate_yao_share(
                 &setup,
-                &mut tag_offset_counter,
                 &mut relay,
                 out_sh.get(i).unwrap(),
             )
@@ -1253,40 +1150,20 @@ mod tests {
             shares.push(out_sh.get(i).unwrap().clone());
         }
 
-        let op = batch_output_yao_functionality(
-            &setup,
-            &mut tag_offset_counter,
-            &mut relay,
-            &shares,
-        )
-        .await?;
+        let op = batch_output_yao_functionality(&setup, &mut relay, &shares)
+            .await?;
 
-        let op1 = batch_output_yao_to_functionality(
-            &setup,
-            &mut tag_offset_counter,
-            &mut relay,
-            0,
-            &shares,
-        )
-        .await?;
+        let op1 =
+            batch_output_yao_to_functionality(&setup, &mut relay, 0, &shares)
+                .await?;
 
-        let op2 = batch_output_yao_to_functionality(
-            &setup,
-            &mut tag_offset_counter,
-            &mut relay,
-            1,
-            &shares,
-        )
-        .await?;
+        let op2 =
+            batch_output_yao_to_functionality(&setup, &mut relay, 1, &shares)
+                .await?;
 
-        let op3 = batch_output_yao_to_functionality(
-            &setup,
-            &mut tag_offset_counter,
-            &mut relay,
-            2,
-            &shares,
-        )
-        .await?;
+        let op3 =
+            batch_output_yao_to_functionality(&setup, &mut relay, 2, &shares)
+                .await?;
 
         for i in 0..op.len() {
             if setup.participant_index() == 0 {
