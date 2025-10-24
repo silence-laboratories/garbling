@@ -1,11 +1,10 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
+use crypto_bigint::{Encoding, NonZero, U256};
 use group::{Group, GroupEncoding, ff::PrimeField};
-use k256::{
-    FieldBytes, ProjectivePoint, Scalar, elliptic_curve::ops::Reduce,
-};
 
+use k256::elliptic_curve::ops::Reduce;
 use sl_compute_common::CommonRandomness;
 use sl_messages::relay::MessageSendError;
 
@@ -26,26 +25,26 @@ pub trait ScalarFromBytes: Sized {
     fn from_bytes(bytes: [u8; 32]) -> Self;
 }
 
-impl ScalarFromBytes for Scalar {
+impl ScalarFromBytes for k256::Scalar {
     fn from_bytes(bytes: [u8; 32]) -> Self {
         let hval = k256::U256::from_be_slice(&bytes);
         k256::Scalar::reduce(hval)
     }
 }
 
-// use crate::constants::X25519_Q;
-// impl ScalarFromBytes for curve25519_dalek::Scalar {
-//     fn from_bytes(bytes: [u8; 32]) -> Self {
-//         let mut hval = U256::from_be_bytes(bytes);
-//         hval = hval.rem(&NonZero::new(X25519_Q).unwrap());
-//         curve25519_dalek::Scalar::from_bytes_mod_order(hval.to_le_bytes())
-//     }
-// }
+use crate::constants::X25519_Q;
+impl ScalarFromBytes for curve25519_dalek::Scalar {
+    fn from_bytes(bytes: [u8; 32]) -> Self {
+        let mut hval = U256::from_be_bytes(bytes);
+        hval = hval.rem(&NonZero::new(X25519_Q).unwrap());
+        curve25519_dalek::Scalar::from_bytes_mod_order(hval.to_le_bytes())
+    }
+}
 
 /// Scalar wrapper for implementing Wrap
-pub struct ScalarVal(pub Scalar);
+pub struct ScalarVal<G: Group + GroupEncoding>(pub G::Scalar);
 
-impl Wrap for ScalarVal {
+impl Wrap for ScalarVal<k256::ProjectivePoint> {
     fn external_size(&self) -> usize {
         32
     }
@@ -57,18 +56,42 @@ impl Wrap for ScalarVal {
     fn read(buffer: &[u8]) -> Option<Self> {
         Some(buffer)
             .filter(|b| b.len() == 32)
-            .map(FieldBytes::from_slice)
-            .and_then(|&b| Scalar::from_repr(b).into_option())
+            .map(k256::FieldBytes::from_slice)
+            .and_then(|&b| k256::Scalar::from_repr(b).into_option())
             .map(ScalarVal)
     }
 }
 
-impl FixedExternalSize for ScalarVal {
+impl FixedExternalSize for ScalarVal<k256::ProjectivePoint> {
+    const SIZE: usize = 32;
+}
+
+impl Wrap for ScalarVal<curve25519_dalek::EdwardsPoint> {
+    fn external_size(&self) -> usize {
+        32
+    }
+
+    fn write(&self, buffer: &mut [u8]) {
+        buffer.copy_from_slice(self.0.as_bytes())
+    }
+
+    fn read(buffer: &[u8]) -> Option<Self> {
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(&buffer[..32]);
+        Some(ScalarVal(curve25519_dalek::Scalar::from_bytes_mod_order(
+            bytes,
+        )))
+    }
+}
+
+impl FixedExternalSize for ScalarVal<curve25519_dalek::EdwardsPoint> {
     const SIZE: usize = 32;
 }
 
 /// Converts a vector of `ScalarVal`s to a vector of `Scalar`s
-pub fn vec_scalarval_2_scalars(input: &[ScalarVal]) -> Vec<Scalar> {
+pub fn vec_scalarval_2_scalars<G: Group + GroupEncoding>(
+    input: &[ScalarVal<G>],
+) -> Vec<G::Scalar> {
     let mut outs = vec![];
     for i in input {
         outs.push(i.0);
@@ -78,7 +101,9 @@ pub fn vec_scalarval_2_scalars(input: &[ScalarVal]) -> Vec<Scalar> {
 }
 
 /// Converts a vector of `Scalar`s to a vector of `ScalarVal`s
-pub fn vec_scalar_2_scalarvals(input: &[Scalar]) -> Vec<ScalarVal> {
+pub fn vec_scalar_2_scalarvals<G: Group + GroupEncoding>(
+    input: &[G::Scalar],
+) -> Vec<ScalarVal<G>> {
     let mut outs = vec![];
     for &i in input {
         outs.push(ScalarVal(i));
@@ -150,17 +175,17 @@ pub struct PrivKeyShare<T: Group + GroupEncoding> {
     pub next_share: T::Scalar,
 }
 
-impl PrivKeyShare<ProjectivePoint> {
+impl PrivKeyShare<k256::ProjectivePoint> {
     pub fn get_random_share(
         common_randomness: &mut CommonRandomness,
-    ) -> PrivKeyShare<ProjectivePoint> {
+    ) -> PrivKeyShare<k256::ProjectivePoint> {
         let (prev_bytes, next_bytes) = common_randomness.random_32_bytes();
         let hval = k256::U256::from_be_slice(&prev_bytes);
         let prev = k256::Scalar::reduce(hval);
         let hval = k256::U256::from_be_slice(&next_bytes);
         let next = k256::Scalar::reduce(hval);
 
-        PrivKeyShare::<ProjectivePoint> {
+        PrivKeyShare::<k256::ProjectivePoint> {
             prev_share: prev,
             next_share: next,
         }
@@ -176,7 +201,7 @@ pub struct PrivKeyShareDkg<T: Group + GroupEncoding> {
 /// Represents a share for secure hard derivation of child key shares
 /// as per BIP32
 #[derive(Debug, PartialEq)]
-pub struct PrivKeyShareBip {
+pub struct PrivKeyShareBip<G: Group + GroupEncoding> {
     /// Yao shares of binary representation of the Private key
     pub yao_share: [YaoShare; 256],
 
@@ -184,8 +209,8 @@ pub struct PrivKeyShareBip {
     pub chain_code: [u8; 32],
 
     /// RSS shares of the private key
-    pub keyshare: PrivKeyShare<ProjectivePoint>,
+    pub keyshare: PrivKeyShare<G>,
 
     /// The public key corresponding to the private key
-    pub pubkey: ProjectivePoint,
+    pub pubkey: G,
 }

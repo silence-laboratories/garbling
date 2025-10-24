@@ -1,12 +1,14 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use k256::elliptic_curve::Curve;
+use crypto_bigint::U256;
+use group::ff::PrimeField;
 
-pub const SECP256_K1_Q: k256::U256 = k256::Secp256k1::ORDER;
+pub const SECP256_K1_Q: U256 = U256::from_be_hex(k256::Scalar::MODULUS);
 
-// pub const X25519_Q: U256 =
-//     U256::from_be_hex("1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed");
+pub const X25519_Q: U256 = U256::from_be_hex(
+    "1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed",
+);
 
 /// msg1 tag for setup protocol
 pub const RECONSTRUCT_SHAMIR_MSG1: u32 = 201;

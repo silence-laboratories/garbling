@@ -1,28 +1,37 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use k256::{NonZeroScalar, Scalar};
+use group::{
+    Group, GroupEncoding,
+    ff::{Field, PrimeField},
+};
 
 use sl_messages::{message::MessageTag, relay::Relay};
 
 use garbled_circuit::functionality::{
-    utils::{FilteredMsgRelay, receive_from_parties, send_to_party},
+    utils::{FilteredMsgRelay, Wrap, receive_from_parties, send_to_party},
     utils_dep::TagOffsetCounter,
 };
 
 use crate::{
     constants::RECONSTRUCT_SHAMIR_MSG1,
-    types::{HardDerivationError, ProtocolParticipant, ScalarVal},
+    types::{
+        HardDerivationError, ProtocolParticipant, ScalarFromBytes, ScalarVal,
+    },
     utils::get_evaluation,
 };
 
-pub fn reconstruct_shamir_process_msg1(
-    share: &Scalar,
-    share_next: &Scalar,
-    share_prev: &Scalar,
-    party_points: &[NonZeroScalar],
+pub fn reconstruct_shamir_process_msg1<G>(
+    share: &G::Scalar,
+    share_next: &G::Scalar,
+    share_prev: &G::Scalar,
+    party_points: &[G::Scalar],
     party_id: usize,
-) -> Scalar {
+) -> G::Scalar
+where
+    G: Group + GroupEncoding,
+    G::Scalar: PrimeField + ScalarFromBytes,
+{
     let evals = [*share, *share_prev];
     let (ppts, next_eval) = match party_id {
         0 => ([party_points[0], party_points[2]], &party_points[1]),
@@ -31,20 +40,25 @@ pub fn reconstruct_shamir_process_msg1(
         _ => unreachable!(),
     };
 
-    let next_val = get_evaluation(&ppts, &evals, next_eval);
+    let next_val = get_evaluation::<G>(&ppts, &evals, next_eval);
     assert_eq!(*share_next, next_val);
 
-    get_evaluation(&ppts, &evals, &Scalar::ZERO)
+    get_evaluation::<G>(&ppts, &evals, &G::Scalar::ZERO)
 }
 
 /// Function to reconstruct a shamir shared Scalar value to all parties
-pub async fn run_reconstruct_shamir<R: Relay, S: ProtocolParticipant>(
+pub async fn run_reconstruct_shamir<R: Relay, S: ProtocolParticipant, G>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
     tag_offset_counter: &mut TagOffsetCounter,
-    share: &Scalar,
-    evaluation_points: &[NonZeroScalar],
-) -> Result<Scalar, HardDerivationError> {
+    share: &G::Scalar,
+    evaluation_points: &[G::Scalar],
+) -> Result<G::Scalar, HardDerivationError>
+where
+    G: Group + GroupEncoding,
+    G::Scalar: PrimeField + ScalarFromBytes,
+    ScalarVal<G>: Wrap,
+{
     let tag1 = MessageTag::tag1(
         RECONSTRUCT_SHAMIR_MSG1,
         tag_offset_counter.next_value(),
@@ -56,7 +70,7 @@ pub async fn run_reconstruct_shamir<R: Relay, S: ProtocolParticipant>(
     relay.ask_messages(setup, tag1, true).await?;
     relay.ask_messages(setup, tag2, true).await?;
 
-    let out = run_reconstruct_shamir_inner(
+    let out = run_reconstruct_shamir_inner::<_, _, G>(
         setup,
         relay,
         share,
@@ -70,14 +84,19 @@ pub async fn run_reconstruct_shamir<R: Relay, S: ProtocolParticipant>(
 }
 
 /// Function to reconstruct a shamir shared Scalar value to all parties
-async fn run_reconstruct_shamir_inner<R: Relay, S: ProtocolParticipant>(
+async fn run_reconstruct_shamir_inner<R: Relay, S: ProtocolParticipant, G>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
-    share: &Scalar,
-    evaluation_points: &[NonZeroScalar],
+    share: &G::Scalar,
+    evaluation_points: &[G::Scalar],
     tag1: MessageTag,
     tag2: MessageTag,
-) -> Result<Scalar, HardDerivationError> {
+) -> Result<G::Scalar, HardDerivationError>
+where
+    G: Group + GroupEncoding,
+    G::Scalar: PrimeField + ScalarFromBytes,
+    ScalarVal<G>: Wrap,
+{
     let my_party_id = setup.participant_index();
     let prev_party = (3 + my_party_id - 1) % 3;
     let next_party = (3 + my_party_id + 1) % 3;
@@ -85,14 +104,14 @@ async fn run_reconstruct_shamir_inner<R: Relay, S: ProtocolParticipant>(
     send_to_party(setup, tag1, ScalarVal(*share), prev_party, relay).await?;
     send_to_party(setup, tag2, ScalarVal(*share), next_party, relay).await?;
 
-    let shares_recv_n: Vec<ScalarVal> =
+    let shares_recv_n: Vec<ScalarVal<G>> =
         receive_from_parties(setup, tag1, &[next_party], relay).await?;
-    let shares_recv_p: Vec<ScalarVal> =
+    let shares_recv_p: Vec<ScalarVal<G>> =
         receive_from_parties(setup, tag2, &[prev_party], relay).await?;
 
     let share_prev = &shares_recv_p[0].0;
     let share_next = &shares_recv_n[0].0;
-    let out = reconstruct_shamir_process_msg1(
+    let out = reconstruct_shamir_process_msg1::<G>(
         share,
         share_next,
         share_prev,
@@ -109,7 +128,7 @@ mod tests {
     use garbled_circuit::functionality::{
         utils::FilteredMsgRelay, utils_dep::TagOffsetCounter,
     };
-    use k256::{NonZeroScalar, Scalar};
+    use k256::{ProjectivePoint, Scalar};
     use rand::{CryptoRng, RngCore, SeedableRng, rngs};
 
     use sl_messages::relay::{Relay, SimpleMessageRelay};
@@ -126,10 +145,10 @@ mod tests {
         Scalar::from_bytes(bytes)
     }
 
-    async fn test_run_reconstruct_shamir<S, R>(
+    async fn test_run_reconstruct_shamir<S, R, G>(
         setup: S,
         share: Scalar,
-        evaluation_points: Vec<NonZeroScalar>,
+        evaluation_points: Vec<Scalar>,
         relay: R,
     ) -> Result<(usize, Scalar), HardDerivationError>
     where
@@ -140,7 +159,7 @@ mod tests {
 
         let mut cnt = TagOffsetCounter::new();
 
-        let output = run_reconstruct_shamir(
+        let output = run_reconstruct_shamir::<_, _, ProjectivePoint>(
             &setup,
             &mut relay,
             &mut cnt,
@@ -156,17 +175,21 @@ mod tests {
     async fn test_reconstruct_shamir() {
         let mut rng = rngs::StdRng::from_entropy();
 
-        let x1 = NonZeroScalar::new(random_scalar(&mut rng)).unwrap();
-        let x2 = NonZeroScalar::new(random_scalar(&mut rng)).unwrap();
-        let x3 = NonZeroScalar::new(random_scalar(&mut rng)).unwrap();
+        let x1 = random_scalar(&mut rng);
+        let x2 = random_scalar(&mut rng);
+        let x3 = random_scalar(&mut rng);
 
         let evaluationpoints = [x1, x2, x3];
 
         let s1 = random_scalar(&mut rng);
         let s2 = random_scalar(&mut rng);
-        let s3 = get_evaluation(&[x1, x2], &[s1, s2], &x3);
+        let s3 = get_evaluation::<ProjectivePoint>(&[x1, x2], &[s1, s2], &x3);
 
-        let s = get_evaluation(&[x1, x2], &[s1, s2], &Scalar::ZERO);
+        let s = get_evaluation::<ProjectivePoint>(
+            &[x1, x2],
+            &[s1, s2],
+            &Scalar::ZERO,
+        );
 
         let shares = [s1, s2, s3];
 
@@ -176,12 +199,14 @@ mod tests {
         #[allow(clippy::explicit_counter_loop)]
         for (setup, _) in run_init(None) {
             let relay = coord.connect();
-            parties.spawn(test_run_reconstruct_shamir(
-                setup,
-                shares[cnt],
-                evaluationpoints.to_vec(),
-                relay,
-            ));
+            parties.spawn(
+                test_run_reconstruct_shamir::<_, _, ProjectivePoint>(
+                    setup,
+                    shares[cnt],
+                    evaluationpoints.to_vec(),
+                    relay,
+                ),
+            );
             cnt += 1;
         }
 

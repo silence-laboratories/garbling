@@ -1,9 +1,17 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
+use std::ops::Sub;
+
+use crypto_bigint::subtle::ConstantTimeEq;
 #[cfg(any(test, feature = "test-support"))]
 use garbled_circuit::functionality::utils::SetupMessage;
-use k256::{NonZeroScalar, Scalar, elliptic_curve::subtle::ConstantTimeEq};
+use group::{
+    Group, GroupEncoding,
+    ff::{Field, PrimeField},
+};
+
+use crate::types::ScalarFromBytes;
 
 /// Converts a vector of `u8` values to a vector of `bool` values
 pub fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
@@ -49,41 +57,52 @@ pub fn bytes_to_bits_le(bytes: &[u8]) -> Vec<bool> {
     bits
 }
 
-pub(crate) fn get_lagrange_coeff_list<'a, K, T>(
+pub(crate) fn get_lagrange_coeff_list<'a, K, T, G>(
     party_points: &'a [T],
-    eval_point: &'a Scalar,
+    eval_point: &'a G::Scalar,
     k: K,
-) -> impl Iterator<Item = Scalar> + 'a
+) -> impl Iterator<Item = G::Scalar> + 'a
 where
-    K: Fn(&T) -> &NonZeroScalar + 'a,
+    K: Fn(&T) -> &G::Scalar + 'a,
+    G: Group + GroupEncoding,
+    G::Scalar: PrimeField + ScalarFromBytes,
 {
     party_points.iter().map(move |x_i| {
         let x_i = k(x_i);
-        let mut coeff = Scalar::ONE;
+        let mut coeff = G::Scalar::ONE;
         for x_j in party_points {
             let x_j = k(x_j);
             if x_i.ct_ne(x_j).into() {
                 let num = x_j.sub(eval_point);
                 let sub = x_j.sub(x_i);
                 // SAFETY: Invert is safe because we check x_j != x_i, so sub is not zero.
-                coeff *= num.as_ref() * &sub.invert().unwrap();
+                coeff *= num * &sub.invert().unwrap();
             }
         }
         coeff
     })
 }
 
-pub fn get_evaluation(
-    party_points: &[NonZeroScalar],
-    evals: &[Scalar],
-    eval_point: &Scalar,
-) -> Scalar {
-    let lcoeff = get_lagrange_coeff_list(party_points, eval_point, |x| x);
+pub fn get_evaluation<G>(
+    party_points: &[G::Scalar],
+    evals: &[G::Scalar],
+    eval_point: &G::Scalar,
+) -> G::Scalar
+where
+    G: Group + GroupEncoding,
+    G::Scalar: PrimeField + ScalarFromBytes,
+{
+    for i in party_points {
+        assert_ne!(*i, G::Scalar::ZERO)
+    }
+
+    let lcoeff =
+        get_lagrange_coeff_list::<_, _, G>(party_points, eval_point, |x| x);
 
     evals
         .iter()
         .zip(lcoeff)
-        .fold(Scalar::ZERO, |acc, (ev, lc)| acc + *ev * lc)
+        .fold(G::Scalar::ZERO, |acc, (ev, lc)| acc + *ev * lc)
 }
 
 #[cfg(any(test, feature = "test-support"))]

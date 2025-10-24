@@ -1,13 +1,11 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
+use crypto_bigint::U256;
 use derivation_path::ChildIndex;
 use hmac::{Hmac, Mac};
-use k256::{
-    ProjectivePoint, U256,
-    elliptic_curve::{bigint::Encoding, sec1::ToEncodedPoint},
-};
 
+use group::{Group, GroupEncoding, ff::PrimeField};
 use sl_compute_common::BinaryString;
 
 use garbled_circuit::{
@@ -15,13 +13,20 @@ use garbled_circuit::{
     config::constants::SHA512_CIRCUIT,
 };
 
-use crate::{constants::SECP256_K1_Q, utils::u8_vec_to_bool_vec};
+use crate::{
+    constants::SECP256_K1_Q, types::ScalarFromBytes,
+    utils::u8_vec_to_bool_vec,
+};
 
-pub fn build_child_key_der_hmac_round1_circuit(
-    public_key_par: &ProjectivePoint,
+pub fn build_child_key_der_hmac_round1_circuit<G>(
+    public_key_par: &G,
     index_child: &ChildIndex,
     chain_code: [u8; 32],
-) -> garbled_circuit::circuitop::circuit::BinaryCircuit {
+) -> garbled_circuit::circuitop::circuit::BinaryCircuit
+where
+    G: Group + GroupEncoding,
+    G::Scalar: PrimeField + ScalarFromBytes,
+{
     let mut builder = CircuitBuilder::new();
 
     let p1_next = builder.new_inputs(256);
@@ -88,7 +93,7 @@ pub fn build_child_key_der_hmac_round1_circuit(
         let mut hmac_hasher =
             Hmac::<sha2::Sha512>::new_from_slice(&chain_code).unwrap();
 
-        hmac_hasher.update(public_key_par.to_encoded_point(true).as_bytes());
+        hmac_hasher.update(public_key_par.to_bytes().as_ref());
 
         hmac_hasher.update(&index_child.to_bits().to_be_bytes());
         let hashout = hmac_hasher.finalize().into_bytes();
@@ -132,11 +137,15 @@ pub fn build_child_key_der_hmac_round1_circuit(
 /// `Child_Chaincode = IR`
 ///
 /// `Return Child_key || Child_Chaincode`
-pub fn build_child_key_der_hmac_circuit(
-    public_key_par: &ProjectivePoint,
+pub fn build_child_key_der_hmac_circuit<G>(
+    public_key_par: &G,
     index_child: &ChildIndex,
     chain_code: [u8; 32],
-) -> garbled_circuit::circuitop::circuit::BinaryCircuit {
+) -> garbled_circuit::circuitop::circuit::BinaryCircuit
+where
+    G: Group + GroupEncoding,
+    G::Scalar: PrimeField + ScalarFromBytes,
+{
     let mut builder = CircuitBuilder::new();
     let key_par_ids = builder.new_inputs(256);
 
@@ -176,7 +185,7 @@ pub fn build_child_key_der_hmac_circuit(
         let mut hmac_hasher =
             Hmac::<sha2::Sha512>::new_from_slice(&chain_code).unwrap();
 
-        hmac_hasher.update(public_key_par.to_encoded_point(true).as_bytes());
+        hmac_hasher.update(public_key_par.to_bytes().as_ref());
 
         hmac_hasher.update(&index_child.to_bits().to_be_bytes());
         let hashout = hmac_hasher.finalize().into_bytes();

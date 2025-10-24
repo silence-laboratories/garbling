@@ -5,7 +5,6 @@ use group::{
     Group, GroupEncoding,
     ff::{Field, PrimeField},
 };
-use k256::{ProjectivePoint, Scalar};
 use rand::{CryptoRng, RngCore};
 use sha2::Digest;
 
@@ -47,40 +46,43 @@ where
 }
 
 /// Implementation of the garble algorithm of garbling gadget from the paper (2.1)
-pub fn garble_gadget<R>(
+pub fn garble_gadget<G, R>(
     garbled_inputs: &[YaoGarblerShare],
     rng: &mut R,
-) -> (Vec<Scalar>, (Scalar, Scalar))
+) -> (Vec<G::Scalar>, (G::Scalar, G::Scalar))
 where
     R: CryptoRng + RngCore,
+    G: Group + GroupEncoding,
+    G::Scalar: Field + ScalarFromBytes,
 {
     assert_eq!(garbled_inputs.len(), 256);
     let eta = garbled_inputs.len();
 
     let mut bytes = [0u8; 32];
     rng.fill_bytes(&mut bytes);
-    let a = Scalar::from_bytes(bytes);
+    let a = G::Scalar::from_bytes(bytes);
 
-    let mut b = Scalar::ZERO;
+    let mut b = G::Scalar::ZERO;
     let mut cvec = Vec::with_capacity(eta);
 
-    let pub_times_a = get_pub_vec_times_a::<ProjectivePoint>(&a);
+    let pub_times_a = get_pub_vec_times_a::<G>(&a);
 
     for i in 0..eta {
         let pi = lsb(&garbled_inputs[i].f_label) != 0;
 
-        let hk0 = kdf::<ProjectivePoint>(
-            &i.to_be_bytes(),
-            &garbled_inputs[i].f_label,
-        );
-        let hk1 = kdf::<ProjectivePoint>(
+        let hk0 = kdf::<G>(&i.to_be_bytes(), &garbled_inputs[i].f_label);
+        let hk1 = kdf::<G>(
             &i.to_be_bytes(),
             &xor_blocks(&garbled_inputs[i].f_label, &garbled_inputs[i].delta),
         );
         let a_ui = &pub_times_a[i];
 
-        let bi_p1 = Scalar::ZERO - hk0;
-        let bi_p2 = if pi { (hk0 - hk1) - a_ui } else { Scalar::ZERO };
+        let bi_p1 = G::Scalar::ZERO - hk0;
+        let bi_p2 = if pi {
+            (hk0 - hk1) - a_ui
+        } else {
+            G::Scalar::ZERO
+        };
         let bi = bi_p1 + bi_p2;
         b += bi;
 
@@ -226,7 +228,7 @@ mod tests {
         r.ask_messages(&setup, tag3, true).await?;
 
         let out = if setup.participant_index() == 2 {
-            let svcvecs: Vec<Vec<ScalarVal>> =
+            let svcvecs: Vec<Vec<ScalarVal<ProjectivePoint>>> =
                 receive_from_parties(&setup, tag1, &[0, 1], &mut r).await?;
 
             let cvecs = [
@@ -245,10 +247,24 @@ mod tests {
 
             let z = evaluate_gadget::<ProjectivePoint>(&cvec, &eins);
 
-            send_to_party(&setup, tag2, ScalarVal(z), 0, &mut r).await?;
-            send_to_party(&setup, tag2, ScalarVal(z), 1, &mut r).await?;
+            send_to_party::<S, R, ScalarVal<ProjectivePoint>>(
+                &setup,
+                tag2,
+                ScalarVal(z),
+                0,
+                &mut r,
+            )
+            .await?;
+            send_to_party::<S, R, ScalarVal<ProjectivePoint>>(
+                &setup,
+                tag2,
+                ScalarVal(z),
+                1,
+                &mut r,
+            )
+            .await?;
 
-            let outs: Vec<ScalarVal> =
+            let outs: Vec<ScalarVal<ProjectivePoint>> =
                 receive_from_parties(&setup, tag3, &[0, 1], &mut r).await?;
 
             assert_eq!(outs[0].0, outs[1].0);
@@ -260,18 +276,26 @@ mod tests {
                 .cloned()
                 .collect();
             let mut rn = rng.as_mut().unwrap();
-            let (cvec, de) = garble_gadget(&gins, &mut rn);
+            let (cvec, de) =
+                garble_gadget::<ProjectivePoint, _>(&gins, &mut rn);
 
-            let svcvec = vec_scalar_2_scalarvals(&cvec);
+            let svcvec = vec_scalar_2_scalarvals::<ProjectivePoint>(&cvec);
 
             send_to_party(&setup, tag1, svcvec, 2, &mut r).await?;
 
-            let zs: Vec<ScalarVal> =
+            let zs: Vec<ScalarVal<ProjectivePoint>> =
                 receive_from_parties(&setup, tag2, &[2], &mut r).await?;
 
             let out = decode_gadget::<ProjectivePoint>(&de, zs[0].0);
 
-            send_to_party(&setup, tag3, ScalarVal(out), 2, &mut r).await?;
+            send_to_party::<S, R, ScalarVal<ProjectivePoint>>(
+                &setup,
+                tag3,
+                ScalarVal(out),
+                2,
+                &mut r,
+            )
+            .await?;
 
             out
         };
