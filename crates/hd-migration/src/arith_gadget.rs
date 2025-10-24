@@ -48,7 +48,7 @@ where
 
 /// Implementation of the garble algorithm of garbling gadget from the paper (2.1)
 pub fn garble_gadget<R>(
-    garbled_inputs: &[YaoGarblerShare],
+    garbled_inputs: &[&YaoGarblerShare],
     rng: &mut R,
 ) -> (Vec<Scalar>, (Scalar, Scalar))
 where
@@ -73,6 +73,7 @@ where
             &i.to_be_bytes(),
             &garbled_inputs[i].f_label,
         );
+
         let hk1 = kdf::<ProjectivePoint>(
             &i.to_be_bytes(),
             &xor_blocks(&garbled_inputs[i].f_label, &garbled_inputs[i].delta),
@@ -82,10 +83,12 @@ where
         let bi_p1 = Scalar::ZERO - hk0;
         let bi_p2 = if pi { (hk0 - hk1) - a_ui } else { Scalar::ZERO };
         let bi = bi_p1 + bi_p2;
+
         b += bi;
 
         let ci_p1 = if pi { hk0 } else { hk1 + a_ui };
         let ci = ci_p1 + bi;
+
         cvec.push(ci);
     }
 
@@ -104,6 +107,7 @@ where
     G::Scalar: PrimeField + ScalarFromBytes,
 {
     assert_eq!(cvec.len(), garbled_inputs.len());
+
     let eta = cvec.len();
 
     let mut z = G::Scalar::ZERO;
@@ -120,6 +124,7 @@ where
 
         z += zi;
     }
+
     z
 }
 
@@ -144,17 +149,14 @@ mod tests {
         functionality::{
             input::batch_input_yao_functionality,
             setup::setup_yao_functionality,
-            utils::{FilteredMsgRelay, receive_from_parties, send_to_party},
+            utils::{
+                FilteredMsgRelay, receive_from_one_party,
+                receive_from_parties, send_to_party,
+            },
         },
-        utilities::{
-            commitments::HashCommitment,
-            hash_function::AesHash,
-            types::{YaoEvaluatorShare, YaoGarblerShare, YaoSetup},
-        },
+        utilities::types::{YaoEvaluatorShare, YaoGarblerShare, YaoSetup},
     };
     use k256::{ProjectivePoint, Scalar};
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
     use sha2::{Digest, Sha512};
     use sl_compute_common::{BinaryString, binary_string_to_u8_vec};
     use sl_messages::{
@@ -182,28 +184,14 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
-
-        let (mut rng, _, _) = match &yao_setup {
-            YaoSetup::E(e) => {
-                let hash = AesHash::new(e.comm_crs);
-                let comm = HashCommitment::new(hash);
-                (None, hash, comm)
-            }
-            YaoSetup::G(g) => {
-                let hash = AesHash::new(g.comm_crs);
-                let comm = HashCommitment::new(hash);
-                let r = ChaCha8Rng::from_seed(g.prf_key);
-                (Some(r), hash, comm)
-            }
-        };
+        let mut yao_setup =
+            setup_yao_functionality(&setup, &mut relay).await?;
 
         let outputs = batch_input_yao_functionality(
             &setup,
             &mut relay,
             &garb_input,
-            rng.as_mut(),
-            &yao_setup,
+            &mut yao_setup,
         )
         .await?;
 
@@ -213,55 +201,59 @@ mod tests {
         let tag2 = MessageTag::tag(512);
         let tag3 = MessageTag::tag(513);
 
-        let out = if setup.participant_index() == 2 {
-            let svcvecs: Vec<Vec<ScalarVal>> =
-                receive_from_parties(&setup, tag1, &[0, 1], &mut r).await?;
+        let out = match &mut yao_setup {
+            YaoSetup::E(_) => {
+                let svcvecs: Vec<Vec<ScalarVal>> =
+                    receive_from_parties(&setup, tag1, &[0, 1], &mut r)
+                        .await?;
 
-            let cvecs = [
-                vec_scalarval_2_scalars(&svcvecs[0]),
-                vec_scalarval_2_scalars(&svcvecs[1]),
-            ];
+                let cvecs = [
+                    vec_scalarval_2_scalars(&svcvecs[0]),
+                    vec_scalarval_2_scalars(&svcvecs[1]),
+                ];
 
-            assert_eq!(cvecs[0], cvecs[1]);
-            let cvec = cvecs[0].clone();
+                assert_eq!(cvecs[0], cvecs[1]);
+                let cvec = cvecs[0].clone();
 
-            let eins: Vec<YaoEvaluatorShare> = outputs
-                .iter()
-                .map(|ins| ins.as_evaluator())
-                .cloned()
-                .collect();
+                let eins: Vec<YaoEvaluatorShare> = outputs
+                    .iter()
+                    .map(|ins| ins.as_evaluator())
+                    .cloned()
+                    .collect();
 
-            let z = evaluate_gadget::<ProjectivePoint>(&cvec, &eins);
+                let z = evaluate_gadget::<ProjectivePoint>(&cvec, &eins);
 
-            send_to_party(&setup, tag2, ScalarVal(z), 0, &mut r).await?;
-            send_to_party(&setup, tag2, ScalarVal(z), 1, &mut r).await?;
+                send_to_party(&setup, tag2, &ScalarVal(z), 0, &mut r).await?;
+                send_to_party(&setup, tag2, &ScalarVal(z), 1, &mut r).await?;
 
-            let outs: Vec<ScalarVal> =
-                receive_from_parties(&setup, tag3, &[0, 1], &mut r).await?;
+                let outs: Vec<ScalarVal> =
+                    receive_from_parties(&setup, tag3, &[0, 1], &mut r)
+                        .await?;
 
-            assert_eq!(outs[0].0, outs[1].0);
-            outs[0].0
-        } else {
-            let gins: Vec<YaoGarblerShare> = outputs
-                .iter()
-                .map(|ins| ins.as_garbler())
-                .cloned()
-                .collect();
-            let mut rn = rng.as_mut().unwrap();
-            let (cvec, de) = garble_gadget(&gins, &mut rn);
+                assert_eq!(outs[0].0, outs[1].0);
+                outs[0].0
+            }
 
-            let svcvec = vec_scalar_2_scalarvals(&cvec);
+            YaoSetup::G(g) => {
+                let gins: Vec<&YaoGarblerShare> =
+                    outputs.iter().map(|ins| ins.as_garbler()).collect();
 
-            send_to_party(&setup, tag1, svcvec, 2, &mut r).await?;
+                let (cvec, de) = garble_gadget(&gins, &mut g.prf);
 
-            let zs: Vec<ScalarVal> =
-                receive_from_parties(&setup, tag2, &[2], &mut r).await?;
+                let svcvec = vec_scalar_2_scalarvals(&cvec);
 
-            let out = decode_gadget::<ProjectivePoint>(&de, zs[0].0);
+                send_to_party(&setup, tag1, &svcvec, 2, &mut r).await?;
 
-            send_to_party(&setup, tag3, ScalarVal(out), 2, &mut r).await?;
+                let zs: ScalarVal =
+                    receive_from_one_party(&setup, tag2, 2, &mut r).await?;
 
-            out
+                let out = decode_gadget::<ProjectivePoint>(&de, zs.0);
+
+                send_to_party(&setup, tag3, &ScalarVal(out), 2, &mut r)
+                    .await?;
+
+                out
+            }
         };
 
         Ok((setup.participant_index(), out))
@@ -269,11 +261,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_arith_gadget() {
-        let gin = vec![false; 256];
-        let mut binstr = BinaryString::new();
-        for i in &gin {
-            binstr.push(*i);
-        }
+        let binstr = BinaryString::new_with_zeros(256);
+
         let mut hasher = Sha512::new();
         let ginu8 = binary_string_to_u8_vec(binstr);
         hasher.update(ginu8);

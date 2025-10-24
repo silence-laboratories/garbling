@@ -3,8 +3,7 @@
 
 use derivation_path::{ChildIndex, DerivationPath};
 use k256::{NonZeroScalar, ProjectivePoint, Scalar};
-use rand::{CryptoRng, RngCore, SeedableRng, rngs::StdRng};
-use rand_chacha::ChaCha8Rng;
+use rand::{RngCore, SeedableRng, rngs::StdRng};
 
 use sl_compute_common::CommonRandomness;
 use sl_messages::relay::Relay;
@@ -35,7 +34,7 @@ use crate::{
 
 /// Implements the child key derivation protocol for BIP-32 on secret-shared inputs.
 #[allow(clippy::too_many_arguments)]
-async fn run_extended_key_derivation_round1<S, R, G, H, C>(
+async fn run_extended_key_derivation_round1<S, R, H, C>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
     share: Scalar,
@@ -44,15 +43,13 @@ async fn run_extended_key_derivation_round1<S, R, G, H, C>(
     chain_code: [u8; 32],
     public_key: ProjectivePoint,
     randomness: &mut CommonRandomness,
-    yao_setup: &YaoSetup,
-    mut rng: Option<&mut G>,
+    yao_setup: &mut YaoSetup,
     comm: &C,
     hash: &H,
 ) -> Result<(PrivKeyShareBip, PrivKeyShareBip), HardDerivationError>
 where
     S: ProtocolParticipant,
     R: Relay,
-    G: RngCore + CryptoRng,
     H: HashFunction,
     C: Commitment,
 {
@@ -69,21 +66,12 @@ where
     let prev = bytes_to_bits_le(&scalar_rss_privkey.prev_share.to_bytes());
     let next = bytes_to_bits_le(&scalar_rss_privkey.next_share.to_bytes());
 
-    let mut all_ip = prev.clone();
+    let mut all_ip = prev;
     all_ip.extend_from_slice(&next);
 
-    let (i1_yao, i2_yao, i3_yao) = run_batch_input_from_all_yao(
-        setup,
-        relay,
-        &all_ip,
-        all_ip.len(),
-        all_ip.len(),
-        all_ip.len(),
-        rng.as_mut(),
-        yao_setup,
-        comm,
-    )
-    .await?;
+    let (i1_yao, i2_yao, i3_yao) =
+        run_batch_input_from_all_yao(setup, relay, &all_ip, yao_setup, comm)
+            .await?;
 
     let mut inputs = [vec![], vec![], vec![], vec![], vec![], vec![]];
 
@@ -104,13 +92,7 @@ where
     );
 
     let output = yao_circuit_eval_functionality(
-        setup,
-        relay,
-        &inputs,
-        &circ,
-        rng.as_mut(),
-        hash,
-        yao_setup,
+        setup, relay, &inputs, &circ, hash, yao_setup,
     )
     .await?;
 
@@ -125,17 +107,23 @@ where
     let child_chain_yao = ops[513..].to_vec();
 
     let verification = output_yao_functionality(setup, relay, ver).await?;
-    assert!(verification);
+    if !verification {
+        return Err(HardDerivationError::InvalidMessage);
+    }
 
-    let scalar_rss_child =
-        run_yao_to_scalar_rss_keypair(setup, relay, &child_sk_yao, rng)
-            .await?;
+    let scalar_rss_child = run_yao_to_scalar_rss_keypair(
+        setup,
+        relay,
+        &child_sk_yao,
+        yao_setup.rng(),
+    )
+    .await?;
 
     let child_cc_pub =
         batch_output_yao_functionality(setup, relay, &child_chain_yao)
             .await?;
 
-    let child_cc = bool_vec_to_u8_vec(child_cc_pub);
+    let child_cc = bool_vec_to_u8_vec(child_cc_pub)?;
 
     child_sk_yao.reverse();
 
@@ -181,20 +169,19 @@ where
         run_common_randomness(&setup, &seed, &mut relay).await?;
 
     // run setup for yao protocols
-    let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
+    let mut yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
-    let (mut rng, hash, comm) = match &yao_setup {
+    let (hash, comm) = match &yao_setup {
         YaoSetup::E(e) => {
             let hash = AesHash::new(e.comm_crs);
             let comm = HashCommitment::new(hash);
-            (None, hash, comm)
+            (hash, comm)
         }
 
         YaoSetup::G(g) => {
             let hash = AesHash::new(g.comm_crs);
             let comm = HashCommitment::new(hash);
-            let r = ChaCha8Rng::from_seed(g.prf_key);
-            (Some(r), hash, comm)
+            (hash, comm)
         }
     };
 
@@ -207,8 +194,7 @@ where
         chain_code,
         public_key,
         &mut randomness,
-        &yao_setup,
-        rng.as_mut(),
+        &mut yao_setup,
         &comm,
         &hash,
     )
@@ -222,8 +208,7 @@ where
             &mut relay,
             &output[cnt],
             i,
-            &yao_setup,
-            rng.as_mut(),
+            &mut yao_setup,
             &hash,
         )
         .await?;
@@ -260,20 +245,19 @@ where
         run_common_randomness(&setup, &seed, &mut relay).await?;
 
     // run setup for yao protocols
-    let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
+    let mut yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
-    let (mut rng, hash, comm) = match &yao_setup {
+    let (hash, comm) = match &yao_setup {
         YaoSetup::E(e) => {
             let hash = AesHash::new(e.comm_crs);
             let comm = HashCommitment::new(hash);
-            (None, hash, comm)
+            (hash, comm)
         }
 
         YaoSetup::G(g) => {
             let hash = AesHash::new(g.comm_crs);
             let comm = HashCommitment::new(hash);
-            let r = ChaCha8Rng::from_seed(g.prf_key);
-            (Some(r), hash, comm)
+            (hash, comm)
         }
     };
 
@@ -286,8 +270,7 @@ where
         chain_code,
         public_key,
         &mut randomness,
-        &yao_setup,
-        rng.as_mut(),
+        &mut yao_setup,
         &comm,
         &hash,
     )
@@ -301,8 +284,7 @@ where
             &mut relay,
             &temp[cnt],
             i,
-            &yao_setup,
-            rng.as_mut(),
+            &mut yao_setup,
             &hash,
         )
         .await?;
@@ -317,8 +299,7 @@ where
         &mut relay,
         &par,
         &children,
-        &yao_setup,
-        rng.as_mut(),
+        &mut yao_setup,
         &hash,
     )
     .await?;
@@ -352,7 +333,6 @@ mod tests {
     use crate::types::{HardDerivationError, PrivKeyShareBip};
     use crate::utils::{get_evaluation, run_init};
 
-    #[allow(clippy::too_many_arguments)]
     fn generate_random_input() -> (
         Scalar,
         Scalar,
@@ -563,7 +543,7 @@ mod tests {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub async fn test_hard_derivation_import_multiple_children_protocol<
+    async fn test_hard_derivation_import_multiple_children_protocol<
         S: ProtocolParticipant,
         R: Relay,
     >(

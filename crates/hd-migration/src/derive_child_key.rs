@@ -2,7 +2,6 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use derivation_path::ChildIndex;
-use rand::{CryptoRng, RngCore};
 
 use sl_messages::relay::Relay;
 
@@ -31,20 +30,17 @@ use crate::{
 };
 
 /// Implements the child key derivation protocol for BIP-32 on secret-shared inputs.
-#[allow(clippy::too_many_arguments)]
-pub async fn run_derive_child_key<S, R, G, H>(
+pub async fn run_derive_child_key<S, R, H>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
     parent_key: &PrivKeyShareBip,
     index_child: &ChildIndex,
-    yao_setup: &YaoSetup,
-    mut rng: Option<&mut G>,
+    yao_setup: &mut YaoSetup,
     hash: &H,
 ) -> Result<PrivKeyShareBip, HardDerivationError>
 where
     S: ProtocolParticipant,
     R: Relay,
-    G: RngCore + CryptoRng,
     H: HashFunction,
 {
     let circuit = build_child_key_der_hmac_circuit(
@@ -56,13 +52,7 @@ where
     let inputs = [parent_key.yao_share.to_vec()];
 
     let hashed_vals = yao_circuit_eval_functionality(
-        setup,
-        relay,
-        &inputs,
-        &circuit,
-        rng.as_mut(),
-        hash,
-        yao_setup,
+        setup, relay, &inputs, &circuit, hash, yao_setup,
     )
     .await?;
 
@@ -75,7 +65,8 @@ where
     let (il_int, child_chain_code) = hash_out.split_at(32 * 8);
 
     let scalar_rss_out =
-        run_yao_to_scalar_rss_keypair(setup, relay, il_int, rng).await?;
+        run_yao_to_scalar_rss_keypair(setup, relay, il_int, yao_setup.rng())
+            .await?;
 
     let mut child_yao_share = il_int.to_vec();
     child_yao_share.reverse();
@@ -84,7 +75,7 @@ where
         batch_output_yao_functionality(setup, relay, child_chain_code)
             .await?;
 
-    let child_cc = bool_vec_to_u8_vec(child_cc_pub);
+    let child_cc = bool_vec_to_u8_vec(child_cc_pub)?;
 
     let out = PrivKeyShareBip {
         yao_share: child_yao_share.try_into().expect("Conversion failed"),
@@ -97,20 +88,17 @@ where
 }
 
 /// Implements the child key derivation protocol for BIP-32 on secret-shared inputs.
-#[allow(clippy::too_many_arguments)]
-pub async fn run_batch_derive_child_key<S, R, G, H>(
+pub async fn run_batch_derive_child_key<S, R, H>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
     parent_key: &[&PrivKeyShareBip],
     index_child: &[ChildIndex],
-    yao_setup: &YaoSetup,
-    mut rng: Option<&mut G>,
+    yao_setup: &mut YaoSetup,
     hash: &H,
 ) -> Result<Vec<PrivKeyShareBip>, HardDerivationError>
 where
     S: ProtocolParticipant,
     R: Relay,
-    G: RngCore + CryptoRng,
     H: HashFunction,
 {
     assert_eq!(parent_key.len(), index_child.len());
@@ -126,6 +114,7 @@ where
             parent_key[i].chain_code,
         ));
     }
+
     for circuit in &circuit_store {
         circuits.push(circuit);
     }
@@ -143,7 +132,6 @@ where
         relay,
         &MapArg::Vector(&inputs),
         &MapArg::Vector(&circuits),
-        rng.as_mut(),
         hash,
         yao_setup,
     )
@@ -177,7 +165,7 @@ where
         setup,
         relay,
         &il_int_slices,
-        rng,
+        yao_setup.rng(),
     )
     .await?;
 
@@ -194,7 +182,7 @@ where
     for i in 0..batch_size {
         let child_cc_pub =
             child_cc_pub_vals[i * ccsize..(i + 1) * ccsize].to_vec();
-        let child_cc = bool_vec_to_u8_vec(child_cc_pub);
+        let child_cc = bool_vec_to_u8_vec(child_cc_pub)?;
 
         child_ccs.push(child_cc);
     }
@@ -240,7 +228,6 @@ mod tests {
         elliptic_curve::{Curve, ops::Reduce, sec1::ToEncodedPoint},
     };
     use rand::{Rng, SeedableRng, rngs::StdRng};
-    use rand_chacha::ChaCha8Rng;
     use sha2::{Digest, Sha256};
     use sl_messages::relay::{Relay, SimpleMessageRelay};
 
@@ -269,19 +256,19 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
+        let mut yao_setup =
+            setup_yao_functionality(&setup, &mut relay).await?;
 
-        let (mut rng, hash, _) = match &yao_setup {
+        let (hash, _) = match &yao_setup {
             YaoSetup::E(e) => {
                 let hash = AesHash::new(e.comm_crs);
                 let comm = HashCommitment::new(hash);
-                (None, hash, comm)
+                (hash, comm)
             }
             YaoSetup::G(g) => {
                 let hash = AesHash::new(g.comm_crs);
                 let comm = HashCommitment::new(hash);
-                let r = ChaCha8Rng::from_seed(g.prf_key);
-                (Some(r), hash, comm)
+                (hash, comm)
             }
         };
 
@@ -289,8 +276,7 @@ mod tests {
             &setup,
             &mut relay,
             &rpk_bool,
-            rng.as_mut(),
-            &yao_setup,
+            &mut yao_setup,
         )
         .await?;
 
@@ -306,8 +292,7 @@ mod tests {
             &mut relay,
             &share,
             &child_index,
-            &yao_setup,
-            rng.as_mut(),
+            &mut yao_setup,
             &hash,
         )
         .await?;
@@ -329,19 +314,19 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
+        let mut yao_setup =
+            setup_yao_functionality(&setup, &mut relay).await?;
 
-        let (mut rng, hash, _) = match &yao_setup {
+        let (hash, _) = match &yao_setup {
             YaoSetup::E(e) => {
                 let hash = AesHash::new(e.comm_crs);
                 let comm = HashCommitment::new(hash);
-                (None, hash, comm)
+                (hash, comm)
             }
             YaoSetup::G(g) => {
                 let hash = AesHash::new(g.comm_crs);
                 let comm = HashCommitment::new(hash);
-                let r = ChaCha8Rng::from_seed(g.prf_key);
-                (Some(r), hash, comm)
+                (hash, comm)
             }
         };
 
@@ -349,8 +334,7 @@ mod tests {
             &setup,
             &mut relay,
             &rpk_bool,
-            rng.as_mut(),
-            &yao_setup,
+            &mut yao_setup,
         )
         .await?;
 
@@ -375,8 +359,7 @@ mod tests {
             &mut relay,
             &input_slices,
             &child_index,
-            &yao_setup,
-            rng.as_mut(),
+            &mut yao_setup,
             &hash,
         )
         .await?;

@@ -199,6 +199,22 @@ pub enum ProtocolError {
     )]
     InvalidMessage,
 
+    /// Parties produced inconsistent messages
+    #[error("Inconsistent messages from participants")]
+    InconsistentMessage,
+
+    /// Commitment verification failed
+    #[error("Commitment verification failed")]
+    CommitmentVerificationFailed,
+
+    /// Invalid share or label data received
+    #[error("Invalid share data")]
+    InvalidShare,
+
+    /// Invalid input length encountered
+    #[error("Invalid input length")]
+    InvalidLength,
+
     /// Missing message
     #[error("Missing message")]
     MissingMessage,
