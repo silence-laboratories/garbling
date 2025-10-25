@@ -2,6 +2,7 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use derivation_path::ChildIndex;
+use group::{Group, GroupEncoding};
 use rand::{CryptoRng, RngCore};
 
 use sl_messages::relay::Relay;
@@ -13,7 +14,7 @@ use garbled_circuit::{
             yao_map_circuit_eval_functionality,
         },
         output::batch_output_yao_functionality,
-        utils::FilteredMsgRelay,
+        utils::{FilteredMsgRelay, FixedExternalSize, Wrap},
         utils_dep::TagOffsetCounter,
     },
     utilities::{
@@ -24,30 +25,43 @@ use garbled_circuit::{
 
 use crate::{
     circuits::build_child_key_der_hmac_circuit,
-    types::{HardDerivationError, PrivKeyShareBip, ProtocolParticipant},
+    types::{
+        HardDerivationError, PrivKeyShareBip, ProtocolParticipant,
+        ScalarFromBytes,
+    },
     utils::bool_vec_to_u8_vec,
     yao_to_rss::{
-        run_batch_yao_to_scalar_rss_keypair, run_yao_to_scalar_rss_keypair,
+        YaoToScalarRssKeypairMsg1, YaoToScalarRssKeypairMsg2,
+        YaoToScalarRssKeypairMsg3p3, YaoToScalarRssKeypairMsg3p12,
+        YaoToScalarRssKeypairMsg4, run_batch_yao_to_scalar_rss_keypair,
+        run_yao_to_scalar_rss_keypair,
     },
 };
 
 /// Implements the child key derivation protocol for BIP-32 on secret-shared inputs.
 #[allow(clippy::too_many_arguments)]
-pub async fn run_derive_child_key<S, R, G, H>(
+pub async fn run_derive_child_key<S, R, G, H, T>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
     tag_offset_counter: &mut TagOffsetCounter,
-    parent_key: &PrivKeyShareBip,
+    parent_key: &PrivKeyShareBip<T>,
     index_child: &ChildIndex,
     yao_setup: &YaoSetup,
     mut rng: Option<&mut G>,
     hash: &H,
-) -> Result<PrivKeyShareBip, HardDerivationError>
+) -> Result<PrivKeyShareBip<T>, HardDerivationError>
 where
     S: ProtocolParticipant,
     R: Relay,
     G: RngCore + CryptoRng,
     H: HashFunction,
+    T: Group + GroupEncoding,
+    T::Scalar: ScalarFromBytes,
+    YaoToScalarRssKeypairMsg1<T>: Wrap,
+    YaoToScalarRssKeypairMsg2<T>: Wrap,
+    YaoToScalarRssKeypairMsg3p12<T>: Wrap,
+    YaoToScalarRssKeypairMsg3p3<T>: Wrap,
+    YaoToScalarRssKeypairMsg4<T>: Wrap,
 {
     let circuit = build_child_key_der_hmac_circuit(
         &parent_key.pubkey,
@@ -111,21 +125,28 @@ where
 
 /// Implements the child key derivation protocol for BIP-32 on secret-shared inputs.
 #[allow(clippy::too_many_arguments)]
-pub async fn run_batch_derive_child_key<S, R, G, H>(
+pub async fn run_batch_derive_child_key<S, R, G, H, T>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
     tag_offset_counter: &mut TagOffsetCounter,
-    parent_key: &[&PrivKeyShareBip],
+    parent_key: &[&PrivKeyShareBip<T>],
     index_child: &[ChildIndex],
     yao_setup: &YaoSetup,
     mut rng: Option<&mut G>,
     hash: &H,
-) -> Result<Vec<PrivKeyShareBip>, HardDerivationError>
+) -> Result<Vec<PrivKeyShareBip<T>>, HardDerivationError>
 where
     S: ProtocolParticipant,
     R: Relay,
     G: RngCore + CryptoRng,
     H: HashFunction,
+    T: Group + GroupEncoding,
+    T::Scalar: ScalarFromBytes,
+    YaoToScalarRssKeypairMsg1<T>: Wrap + FixedExternalSize,
+    YaoToScalarRssKeypairMsg2<T>: Wrap + FixedExternalSize,
+    YaoToScalarRssKeypairMsg3p12<T>: Wrap + FixedExternalSize,
+    YaoToScalarRssKeypairMsg3p3<T>: Wrap + FixedExternalSize,
+    YaoToScalarRssKeypairMsg4<T>: Wrap + FixedExternalSize,
 {
     assert_eq!(parent_key.len(), index_child.len());
 
@@ -220,7 +241,7 @@ where
         child_ccs.push(child_cc);
     }
 
-    let mut out: Vec<PrivKeyShareBip> = Vec::with_capacity(batch_size);
+    let mut out: Vec<PrivKeyShareBip<T>> = Vec::with_capacity(batch_size);
 
     for i in 0..batch_size {
         let val = PrivKeyShareBip {
@@ -284,7 +305,7 @@ mod tests {
         public_key: ProjectivePoint,
         child_index: ChildIndex,
         relay: R,
-    ) -> Result<(usize, PrivKeyShareBip), HardDerivationError>
+    ) -> Result<(usize, PrivKeyShareBip<ProjectivePoint>), HardDerivationError>
     where
         S: ProtocolParticipant,
         R: Relay,
@@ -349,7 +370,10 @@ mod tests {
         public_key: ProjectivePoint,
         child_index: Vec<ChildIndex>,
         relay: R,
-    ) -> Result<(usize, Vec<PrivKeyShareBip>), HardDerivationError>
+    ) -> Result<
+        (usize, Vec<PrivKeyShareBip<ProjectivePoint>>),
+        HardDerivationError,
+    >
     where
         S: ProtocolParticipant,
         R: Relay,
@@ -399,7 +423,8 @@ mod tests {
             inputs.push(share);
         }
 
-        let input_slices: Vec<&PrivKeyShareBip> = inputs.iter().collect();
+        let input_slices: Vec<&PrivKeyShareBip<ProjectivePoint>> =
+            inputs.iter().collect();
 
         let output = run_batch_derive_child_key(
             &setup,

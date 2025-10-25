@@ -2,7 +2,10 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use crypto_bigint::{Encoding, NonZero, U256};
-use group::{Group, GroupEncoding, ff::PrimeField};
+use group::{
+    Group, GroupEncoding,
+    ff::{Field, PrimeField},
+};
 
 use k256::elliptic_curve::ops::Reduce;
 use sl_compute_common::CommonRandomness;
@@ -76,11 +79,14 @@ impl Wrap for ScalarVal<curve25519_dalek::EdwardsPoint> {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&buffer[..32]);
-        Some(ScalarVal(curve25519_dalek::Scalar::from_bytes_mod_order(
-            bytes,
-        )))
+        Some(buffer)
+            .filter(|b| b.len() == 32)
+            .map(|b| {
+                curve25519_dalek::Scalar::from_bytes_mod_order(
+                    b.try_into().unwrap(),
+                )
+            })
+            .map(ScalarVal)
     }
 }
 
@@ -175,17 +181,19 @@ pub struct PrivKeyShare<T: Group + GroupEncoding> {
     pub next_share: T::Scalar,
 }
 
-impl PrivKeyShare<k256::ProjectivePoint> {
+impl<G> PrivKeyShare<G>
+where
+    G: Group + GroupEncoding,
+    G::Scalar: Field + ScalarFromBytes,
+{
     pub fn get_random_share(
         common_randomness: &mut CommonRandomness,
-    ) -> PrivKeyShare<k256::ProjectivePoint> {
+    ) -> PrivKeyShare<G> {
         let (prev_bytes, next_bytes) = common_randomness.random_32_bytes();
-        let hval = k256::U256::from_be_slice(&prev_bytes);
-        let prev = k256::Scalar::reduce(hval);
-        let hval = k256::U256::from_be_slice(&next_bytes);
-        let next = k256::Scalar::reduce(hval);
+        let prev = G::Scalar::from_bytes(prev_bytes);
+        let next = G::Scalar::from_bytes(next_bytes);
 
-        PrivKeyShare::<k256::ProjectivePoint> {
+        PrivKeyShare::<G> {
             prev_share: prev,
             next_share: next,
         }

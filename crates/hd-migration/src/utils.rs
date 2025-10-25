@@ -76,7 +76,7 @@ where
                 let num = x_j.sub(eval_point);
                 let sub = x_j.sub(x_i);
                 // SAFETY: Invert is safe because we check x_j != x_i, so sub is not zero.
-                coeff *= num * &sub.invert().unwrap();
+                coeff *= num * sub.invert().unwrap();
             }
         }
         coeff

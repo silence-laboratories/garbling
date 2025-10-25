@@ -2,7 +2,7 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use derivation_path::{ChildIndex, DerivationPath};
-use k256::{NonZeroScalar, ProjectivePoint, Scalar};
+use group::{Group, GroupEncoding};
 use rand::{CryptoRng, RngCore, SeedableRng, rngs::StdRng};
 use rand_chacha::ChaCha8Rng;
 
@@ -15,7 +15,9 @@ use garbled_circuit::{
         input::run_batch_input_from_all_yao,
         output::{batch_output_yao_functionality, output_yao_functionality},
         setup::setup_yao_functionality,
-        utils::{FilteredMsgRelay, run_common_randomness},
+        utils::{
+            FilteredMsgRelay, FixedExternalSize, Wrap, run_common_randomness,
+        },
         utils_dep::TagOffsetCounter,
     },
     utilities::{
@@ -29,34 +31,49 @@ use crate::{
     circuits::build_child_key_der_hmac_round1_circuit,
     derive_child_key::{run_batch_derive_child_key, run_derive_child_key},
     shamir_to_rss::run_shamir_to_scalar_rss,
-    types::{HardDerivationError, PrivKeyShareBip, ProtocolParticipant},
+    types::{
+        HardDerivationError, PrivKeyShareBip, ProtocolParticipant,
+        ScalarFromBytes, ScalarVal,
+    },
     utils::{bool_vec_to_u8_vec, bytes_to_bits_le},
-    yao_to_rss::run_yao_to_scalar_rss_keypair,
+    yao_to_rss::{
+        YaoToScalarRssKeypairMsg1, YaoToScalarRssKeypairMsg2,
+        YaoToScalarRssKeypairMsg3p3, YaoToScalarRssKeypairMsg3p12,
+        YaoToScalarRssKeypairMsg4, run_yao_to_scalar_rss_keypair,
+    },
 };
 
 /// Implements the child key derivation protocol for BIP-32 on secret-shared inputs.
 #[allow(clippy::too_many_arguments)]
-async fn run_extended_key_derivation_round1<S, R, G, H, C>(
+async fn run_extended_key_derivation_round1<S, R, G, H, C, T>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
     tag_offset_counter: &mut TagOffsetCounter,
-    share: Scalar,
-    evaluation_points: Vec<NonZeroScalar>,
+    share: T::Scalar,
+    evaluation_points: Vec<T::Scalar>,
     derivation_path: &DerivationPath,
     chain_code: [u8; 32],
-    public_key: ProjectivePoint,
+    public_key: T,
     randomness: &mut CommonRandomness,
     yao_setup: &YaoSetup,
     mut rng: Option<&mut G>,
     comm: &C,
     hash: &H,
-) -> Result<(PrivKeyShareBip, PrivKeyShareBip), HardDerivationError>
+) -> Result<(PrivKeyShareBip<T>, PrivKeyShareBip<T>), HardDerivationError>
 where
     S: ProtocolParticipant,
     R: Relay,
     G: RngCore + CryptoRng,
     H: HashFunction,
     C: Commitment,
+    T: Group + GroupEncoding,
+    T::Scalar: ScalarFromBytes,
+    ScalarVal<T>: Wrap,
+    YaoToScalarRssKeypairMsg1<T>: Wrap,
+    YaoToScalarRssKeypairMsg2<T>: Wrap,
+    YaoToScalarRssKeypairMsg3p12<T>: Wrap,
+    YaoToScalarRssKeypairMsg3p3<T>: Wrap,
+    YaoToScalarRssKeypairMsg4<T>: Wrap,
 {
     // convert privkey in shamir to rss
     let scalar_rss_privkey = run_shamir_to_scalar_rss(
@@ -69,8 +86,14 @@ where
     )
     .await?;
 
-    let prev = bytes_to_bits_le(&scalar_rss_privkey.prev_share.to_bytes());
-    let next = bytes_to_bits_le(&scalar_rss_privkey.next_share.to_bytes());
+    let mut prev_buf =
+        vec![0u8; ScalarVal(T::Scalar::default()).external_size()];
+    ScalarVal(scalar_rss_privkey.prev_share).encode(&mut prev_buf);
+    let prev = bytes_to_bits_le(&prev_buf);
+    let mut next_buf =
+        vec![0u8; ScalarVal(T::Scalar::default()).external_size()];
+    ScalarVal(scalar_rss_privkey.next_share).encode(&mut next_buf);
+    let next = bytes_to_bits_le(&next_buf);
 
     let mut all_ip = prev.clone();
     all_ip.extend_from_slice(&next);
@@ -173,18 +196,26 @@ where
     Ok((parent, child))
 }
 
-pub async fn run_extended_key_derivation<S, R>(
+pub async fn run_extended_key_derivation<S, R, T>(
     setup: S,
-    share: Scalar,
-    evaluation_points: Vec<NonZeroScalar>,
+    share: T::Scalar,
+    evaluation_points: Vec<T::Scalar>,
     derivation_path: DerivationPath,
     chain_code: [u8; 32],
-    public_key: ProjectivePoint,
+    public_key: T,
     relay: R,
-) -> Result<Vec<PrivKeyShareBip>, HardDerivationError>
+) -> Result<Vec<PrivKeyShareBip<T>>, HardDerivationError>
 where
     S: ProtocolParticipant,
     R: Relay,
+    T: Group + GroupEncoding,
+    T::Scalar: ScalarFromBytes,
+    ScalarVal<T>: Wrap,
+    YaoToScalarRssKeypairMsg1<T>: Wrap,
+    YaoToScalarRssKeypairMsg2<T>: Wrap,
+    YaoToScalarRssKeypairMsg3p12<T>: Wrap,
+    YaoToScalarRssKeypairMsg3p3<T>: Wrap,
+    YaoToScalarRssKeypairMsg4<T>: Wrap,
 {
     let mut tag_offset_counter = TagOffsetCounter::new();
 
@@ -257,19 +288,27 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn run_extended_key_derivation_multiple_children<S, R>(
+pub async fn run_extended_key_derivation_multiple_children<S, R, T>(
     setup: S,
-    share: Scalar,
-    evaluation_points: Vec<NonZeroScalar>,
+    share: T::Scalar,
+    evaluation_points: Vec<T::Scalar>,
     derivation_path: DerivationPath,
     children: Vec<ChildIndex>,
     chain_code: [u8; 32],
-    public_key: ProjectivePoint,
+    public_key: T,
     relay: R,
-) -> Result<Vec<PrivKeyShareBip>, HardDerivationError>
+) -> Result<Vec<PrivKeyShareBip<T>>, HardDerivationError>
 where
     S: ProtocolParticipant,
     R: Relay,
+    T: Group + GroupEncoding,
+    T::Scalar: ScalarFromBytes,
+    ScalarVal<T>: Wrap,
+    YaoToScalarRssKeypairMsg1<T>: Wrap + FixedExternalSize,
+    YaoToScalarRssKeypairMsg2<T>: Wrap + FixedExternalSize,
+    YaoToScalarRssKeypairMsg3p12<T>: Wrap + FixedExternalSize,
+    YaoToScalarRssKeypairMsg3p3<T>: Wrap + FixedExternalSize,
+    YaoToScalarRssKeypairMsg4<T>: Wrap + FixedExternalSize,
 {
     let mut tag_offset_counter = TagOffsetCounter::new();
 
@@ -361,10 +400,11 @@ mod tests {
 
     use derivation_path::{ChildIndex, DerivationPath};
     use garbled_circuit::functionality::utils_dep::ProtocolParticipant;
+    use group::ff::PrimeField;
     use hmac::{Hmac, Mac};
+    use k256::FieldBytes;
     use k256::elliptic_curve::bigint::Encoding;
     use k256::elliptic_curve::{Curve, ops::Reduce};
-    use k256::{FieldBytes, NonZeroScalar};
     use k256::{
         ProjectivePoint, Scalar, Secp256k1, U256,
         elliptic_curve::sec1::ToEncodedPoint,
@@ -389,22 +429,22 @@ mod tests {
         Scalar,
         [u8; 32],
         ProjectivePoint,
-        [NonZeroScalar; 3],
+        [Scalar; 3],
     ) {
         // test input evaluation points
-        let x_1 = NonZeroScalar::from_repr(*FieldBytes::from_slice(&[
+        let x_1 = Scalar::from_repr(*FieldBytes::from_slice(&[
             100, 48, 244, 185, 61, 88, 116, 164, 93, 235, 5, 61, 37, 167, 19,
             87, 244, 186, 51, 41, 28, 223, 10, 96, 117, 115, 12, 238, 100,
             70, 71, 48,
         ]))
         .expect("Conversion Failed");
-        let x_2 = NonZeroScalar::from_repr(*FieldBytes::from_slice(&[
+        let x_2 = Scalar::from_repr(*FieldBytes::from_slice(&[
             119, 139, 180, 247, 206, 8, 172, 176, 83, 173, 134, 148, 56, 72,
             245, 140, 242, 169, 145, 48, 227, 164, 1, 193, 59, 173, 50, 139,
             100, 219, 68, 4,
         ]))
         .expect("Conversion Failed");
-        let x_3 = NonZeroScalar::from_repr(*FieldBytes::from_slice(&[
+        let x_3 = Scalar::from_repr(*FieldBytes::from_slice(&[
             197, 148, 247, 13, 223, 180, 119, 249, 87, 162, 0, 13, 123, 239,
             115, 202, 165, 205, 215, 176, 2, 81, 199, 180, 122, 80, 197, 187,
             176, 1, 90, 229,
@@ -419,9 +459,14 @@ mod tests {
 
         let s1 = Scalar::reduce(U256::from_be_bytes(s1_byt));
         let s2 = Scalar::reduce(U256::from_be_bytes(s2_byt));
-        let s3 = get_evaluation(&[x_1, x_2], &[s1, s2], &x_3);
+        let s3 =
+            get_evaluation::<ProjectivePoint>(&[x_1, x_2], &[s1, s2], &x_3);
 
-        let s = get_evaluation(&[x_1, x_2], &[s1, s2], &Scalar::ZERO);
+        let s = get_evaluation::<ProjectivePoint>(
+            &[x_1, x_2],
+            &[s1, s2],
+            &Scalar::ZERO,
+        );
         let pubkey = ProjectivePoint::GENERATOR * s;
 
         let mut chaincode = [0u8; 32];
@@ -469,12 +514,15 @@ mod tests {
     pub async fn test_hard_derivation_import_protocol<S, R>(
         setup: S,
         share: Scalar,
-        evaluation_points: Vec<NonZeroScalar>,
+        evaluation_points: Vec<Scalar>,
         derivation_path: DerivationPath,
         chain_code: [u8; 32],
         public_key: ProjectivePoint,
         relay: R,
-    ) -> Result<(usize, Vec<PrivKeyShareBip>), HardDerivationError>
+    ) -> Result<
+        (usize, Vec<PrivKeyShareBip<ProjectivePoint>>),
+        HardDerivationError,
+    >
     where
         S: ProtocolParticipant,
         R: Relay,
@@ -566,7 +614,7 @@ mod tests {
                 &evaluation_points,
             );
 
-            let s3 = get_evaluation(
+            let s3 = get_evaluation::<ProjectivePoint>(
                 &[evaluation_points[0], evaluation_points[1]],
                 &[shamir_p1, shamir_p2],
                 &evaluation_points[2],
@@ -574,7 +622,7 @@ mod tests {
 
             assert_eq!(s3, shamir_p3);
 
-            let s = get_evaluation(
+            let s = get_evaluation::<ProjectivePoint>(
                 &[evaluation_points[0], evaluation_points[1]],
                 &[shamir_p1, shamir_p2],
                 &Scalar::ZERO,
@@ -598,13 +646,16 @@ mod tests {
     >(
         setup: S,
         share: Scalar,
-        evaluation_points: Vec<NonZeroScalar>,
+        evaluation_points: Vec<Scalar>,
         derivation_path: DerivationPath,
         children: Vec<ChildIndex>,
         chain_code: [u8; 32],
         public_key: ProjectivePoint,
         relay: R,
-    ) -> Result<(usize, Vec<PrivKeyShareBip>), HardDerivationError> {
+    ) -> Result<
+        (usize, Vec<PrivKeyShareBip<ProjectivePoint>>),
+        HardDerivationError,
+    > {
         let i = &setup.participant_index();
         let a = run_extended_key_derivation_multiple_children(
             setup,
@@ -710,7 +761,7 @@ mod tests {
                 &evaluation_points,
             );
 
-            let s3 = get_evaluation(
+            let s3 = get_evaluation::<ProjectivePoint>(
                 &[evaluation_points[0], evaluation_points[1]],
                 &[shamir_p1, shamir_p2],
                 &evaluation_points[2],
@@ -718,7 +769,7 @@ mod tests {
 
             assert_eq!(s3, shamir_p3);
 
-            let s = get_evaluation(
+            let s = get_evaluation::<ProjectivePoint>(
                 &[evaluation_points[0], evaluation_points[1]],
                 &[shamir_p1, shamir_p2],
                 &Scalar::ZERO,

@@ -1,31 +1,40 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use k256::{NonZeroScalar, ProjectivePoint, Scalar};
+use std::ops::{Add, Sub};
+
+use group::{Group, GroupEncoding, ff::Field};
 
 use sl_compute_common::CommonRandomness;
 use sl_messages::relay::Relay;
 
 use garbled_circuit::functionality::{
-    utils::FilteredMsgRelay, utils_dep::TagOffsetCounter,
+    utils::{FilteredMsgRelay, Wrap},
+    utils_dep::TagOffsetCounter,
 };
 
 use crate::{
     reconstruct_shamir::run_reconstruct_shamir,
-    types::{HardDerivationError, PrivKeyShare, ProtocolParticipant},
+    types::{
+        HardDerivationError, PrivKeyShare, ProtocolParticipant,
+        ScalarFromBytes, ScalarVal,
+    },
 };
 
 /// Converts an RSS-shared Scalar value (`PrivKeyShare`) to a shamir shared value
 /// for party with id `party_id` for a set of evaluation points.
-pub fn scalar_rss_to_shamir(
-    inp: &PrivKeyShare<ProjectivePoint>,
+pub fn scalar_rss_to_shamir<G>(
+    inp: &PrivKeyShare<G>,
     party_id: usize,
-    evaluation_points: &[NonZeroScalar],
-) -> Scalar {
+    evaluation_points: &[G::Scalar],
+) -> G::Scalar
+where
+    G: Group + GroupEncoding,
+{
     assert!((0..3).contains(&party_id));
 
     // helper closure f_A(j) = (j - m)/(-m)
-    let f = |j: NonZeroScalar, m: NonZeroScalar| -> Scalar {
+    let f = |j: G::Scalar, m: G::Scalar| -> G::Scalar {
         let num = j.sub(&m);
         let denom = -m;
         num * denom.invert().unwrap()
@@ -61,23 +70,27 @@ pub fn scalar_rss_to_shamir(
 }
 
 /// Converts a Shamir-shared Scalar valueto an RSS-shared Scalar value (`PrivKeyShare`)
-pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
+pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant, G>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
     tag_offset_counter: &mut TagOffsetCounter,
-    share: &Scalar,
-    evaluation_points: &[NonZeroScalar],
+    share: &G::Scalar,
+    evaluation_points: &[G::Scalar],
     randomness: &mut CommonRandomness,
-) -> Result<PrivKeyShare<ProjectivePoint>, HardDerivationError> {
+) -> Result<PrivKeyShare<G>, HardDerivationError>
+where
+    G: Group + GroupEncoding,
+    G::Scalar: ScalarFromBytes,
+    ScalarVal<G>: Wrap,
+{
     let my_party_id = setup.participant_index();
 
-    let r_scalar_rss =
-        PrivKeyShare::<ProjectivePoint>::get_random_share(randomness);
+    let r_scalar_rss = PrivKeyShare::<G>::get_random_share(randomness);
 
     let r_shamir =
         scalar_rss_to_shamir(&r_scalar_rss, my_party_id, evaluation_points);
 
-    let padded_shamir = share + r_shamir;
+    let padded_shamir = share.add(r_shamir);
 
     let padded = run_reconstruct_shamir(
         setup,
@@ -89,17 +102,17 @@ pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
     .await?;
 
     let out_rss = if my_party_id == 0 {
-        PrivKeyShare::<ProjectivePoint> {
+        PrivKeyShare::<G> {
             prev_share: padded - r_scalar_rss.prev_share,
             next_share: -r_scalar_rss.next_share,
         }
     } else if my_party_id == 1 {
-        PrivKeyShare::<ProjectivePoint> {
+        PrivKeyShare::<G> {
             prev_share: -r_scalar_rss.prev_share,
             next_share: -r_scalar_rss.next_share,
         }
     } else {
-        PrivKeyShare::<ProjectivePoint> {
+        PrivKeyShare::<G> {
             prev_share: -r_scalar_rss.prev_share,
             next_share: padded - r_scalar_rss.next_share,
         }
@@ -114,7 +127,7 @@ mod tests {
         utils::{FilteredMsgRelay, run_common_randomness},
         utils_dep::TagOffsetCounter,
     };
-    use k256::{NonZeroScalar, ProjectivePoint, Scalar};
+    use k256::{ProjectivePoint, Scalar};
     use rand::{
         CryptoRng, RngCore, SeedableRng,
         rngs::{self, StdRng},
@@ -134,7 +147,7 @@ mod tests {
     async fn test_run_shamir_to_scalar_rss<S, R>(
         setup: S,
         share: Scalar,
-        evaluation_points: Vec<NonZeroScalar>,
+        evaluation_points: Vec<Scalar>,
         relay: R,
     ) -> Result<(usize, PrivKeyShare<ProjectivePoint>), HardDerivationError>
     where
@@ -174,15 +187,15 @@ mod tests {
     async fn test_shamir_to_scalar_rss() {
         let mut rng = rngs::StdRng::from_entropy();
 
-        let x1 = NonZeroScalar::new(random_scalar(&mut rng)).unwrap();
-        let x2 = NonZeroScalar::new(random_scalar(&mut rng)).unwrap();
-        let x3 = NonZeroScalar::new(random_scalar(&mut rng)).unwrap();
+        let x1 = random_scalar(&mut rng);
+        let x2 = random_scalar(&mut rng);
+        let x3 = random_scalar(&mut rng);
 
         let evaluationpoints = [x1, x2, x3];
 
         let s1 = random_scalar(&mut rng);
         let s2 = random_scalar(&mut rng);
-        let s3 = get_evaluation(&[x1, x2], &[s1, s2], &x3);
+        let s3 = get_evaluation::<ProjectivePoint>(&[x1, x2], &[s1, s2], &x3);
 
         let shares = [s1, s2, s3];
 
@@ -220,7 +233,11 @@ mod tests {
         let output2 = shares[0].1.prev_share
             + shares[1].1.prev_share
             + shares[2].1.prev_share;
-        let s = get_evaluation(&[x1, x2], &[s1, s2], &Scalar::ZERO);
+        let s = get_evaluation::<ProjectivePoint>(
+            &[x1, x2],
+            &[s1, s2],
+            &Scalar::ZERO,
+        );
 
         assert_eq!(output, s);
         assert_eq!(output2, s);

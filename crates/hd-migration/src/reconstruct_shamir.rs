@@ -145,7 +145,7 @@ mod tests {
         Scalar::from_bytes(bytes)
     }
 
-    async fn test_run_reconstruct_shamir<S, R, G>(
+    async fn test_run_reconstruct_shamir<S, R>(
         setup: S,
         share: Scalar,
         evaluation_points: Vec<Scalar>,
@@ -199,14 +199,12 @@ mod tests {
         #[allow(clippy::explicit_counter_loop)]
         for (setup, _) in run_init(None) {
             let relay = coord.connect();
-            parties.spawn(
-                test_run_reconstruct_shamir::<_, _, ProjectivePoint>(
-                    setup,
-                    shares[cnt],
-                    evaluationpoints.to_vec(),
-                    relay,
-                ),
-            );
+            parties.spawn(test_run_reconstruct_shamir(
+                setup,
+                shares[cnt],
+                evaluationpoints.to_vec(),
+                relay,
+            ));
             cnt += 1;
         }
 
