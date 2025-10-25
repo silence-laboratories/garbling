@@ -365,7 +365,7 @@ pub fn build_sha512_circuit(len: u128) -> BinaryCircuit {
     builder.finish()
 }
 
-pub fn build_scalar_rss_to_y_verification_circuit() -> BinaryCircuit {
+pub fn build_scalar_rss_to_y_verification_circuit(prime: U256) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
     let p1_next = builder.new_inputs(256);
@@ -383,7 +383,7 @@ pub fn build_scalar_rss_to_y_verification_circuit() -> BinaryCircuit {
     let temp = builder.and(op1, op2);
     let output = builder.and(temp, op3);
 
-    let circ = build_mod_add_circut(p1_next.len(), SECP256_K1_Q);
+    let circ = build_mod_add_circut(p1_next.len(), prime);
 
     let temp = builder.add_circuit(&circ, &[&p1_next, &p2_next]);
     let res3_ids = builder.add_circuit(&circ, &[&temp, &p3_next]);

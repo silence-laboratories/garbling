@@ -142,6 +142,7 @@ where
 mod tests {
     use std::sync::Arc;
 
+    use curve25519_dalek::EdwardsPoint;
     use garbled_circuit::{
         functionality::{
             input::batch_input_yao_functionality,
@@ -155,7 +156,7 @@ mod tests {
             types::{YaoEvaluatorShare, YaoGarblerShare, YaoSetup},
         },
     };
-    use k256::{ProjectivePoint, Scalar};
+    use k256::ProjectivePoint;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
     use sha2::{Digest, Sha512};
@@ -174,7 +175,7 @@ mod tests {
         utils::{run_init, u8_vec_to_bool_vec},
     };
 
-    async fn test_run_arith_gadget<S, R>(
+    async fn test_sekp256k1_run_arith_gadget<S, R>(
         setup: S,
         garb_input: Vec<bool>,
         relay: R,
@@ -304,7 +305,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_arith_gadget() {
+    async fn test_sekp256k1_arith_gadget() {
         let gin = vec![false; 256];
         let mut binstr = BinaryString::new();
         for i in &gin {
@@ -320,7 +321,11 @@ mod tests {
         let coord = SimpleMessageRelay::new();
         for (setup, _) in run_init(None) {
             let relay = coord.connect();
-            parties.spawn(test_run_arith_gadget(setup, gin.clone(), relay));
+            parties.spawn(test_sekp256k1_run_arith_gadget(
+                setup,
+                gin.clone(),
+                relay,
+            ));
         }
 
         let mut shares = vec![];
@@ -336,9 +341,190 @@ mod tests {
             }
         }
 
-        let mut sum = Scalar::ZERO;
-        let two = Scalar::ONE + Scalar::ONE;
-        let mut twopow = Scalar::ONE;
+        let mut sum = k256::Scalar::ZERO;
+        let two = k256::Scalar::ONE + k256::Scalar::ONE;
+        let mut twopow = k256::Scalar::ONE;
+        for i in gin {
+            if i {
+                sum += twopow;
+            }
+            twopow *= two;
+        }
+
+        assert_eq!(sum, shares[0].1);
+        assert_eq!(sum, shares[1].1);
+        assert_eq!(sum, shares[2].1);
+    }
+
+    async fn test_25519_run_arith_gadget<S, R>(
+        setup: S,
+        garb_input: Vec<bool>,
+        relay: R,
+    ) -> Result<(usize, curve25519_dalek::Scalar), HardDerivationError>
+    where
+        S: ProtocolParticipant,
+        R: Relay,
+    {
+        let mut relay = FilteredMsgRelay::new(relay);
+
+        let mut tag_offset_counter = TagOffsetCounter::new();
+
+        let yao_setup = setup_yao_functionality(
+            &setup,
+            &mut tag_offset_counter,
+            &mut relay,
+        )
+        .await?;
+
+        let (mut rng, _, _) = match &yao_setup {
+            YaoSetup::E(e) => {
+                let hash = AesHash::new(e.comm_crs);
+                let comm = HashCommitment::new(hash);
+                (None, hash, comm)
+            }
+            YaoSetup::G(g) => {
+                let hash = AesHash::new(g.comm_crs);
+                let comm = HashCommitment::new(hash);
+                let r = ChaCha8Rng::from_seed(g.prf_key);
+                (Some(r), hash, comm)
+            }
+        };
+
+        let outputs = batch_input_yao_functionality(
+            &setup,
+            &mut tag_offset_counter,
+            &mut relay,
+            &garb_input,
+            rng.as_mut(),
+            &yao_setup,
+        )
+        .await?;
+
+        let mut r = relay;
+
+        let tag1 = MessageTag::tag(511);
+        r.ask_messages(&setup, tag1, true).await?;
+        let tag2 = MessageTag::tag(512);
+        r.ask_messages(&setup, tag2, true).await?;
+        let tag3 = MessageTag::tag(513);
+        r.ask_messages(&setup, tag3, true).await?;
+
+        let out = if setup.participant_index() == 2 {
+            let svcvecs: Vec<Vec<ScalarVal<EdwardsPoint>>> =
+                receive_from_parties(&setup, tag1, &[0, 1], &mut r).await?;
+
+            let cvecs = [
+                vec_scalarval_2_scalars(&svcvecs[0]),
+                vec_scalarval_2_scalars(&svcvecs[1]),
+            ];
+
+            assert_eq!(cvecs[0], cvecs[1]);
+            let cvec = cvecs[0].clone();
+
+            let eins: Vec<YaoEvaluatorShare> = outputs
+                .iter()
+                .map(|ins| ins.as_evaluator())
+                .cloned()
+                .collect();
+
+            let z = evaluate_gadget::<EdwardsPoint>(&cvec, &eins);
+
+            send_to_party::<S, R, ScalarVal<EdwardsPoint>>(
+                &setup,
+                tag2,
+                ScalarVal(z),
+                0,
+                &mut r,
+            )
+            .await?;
+            send_to_party::<S, R, ScalarVal<EdwardsPoint>>(
+                &setup,
+                tag2,
+                ScalarVal(z),
+                1,
+                &mut r,
+            )
+            .await?;
+
+            let outs: Vec<ScalarVal<EdwardsPoint>> =
+                receive_from_parties(&setup, tag3, &[0, 1], &mut r).await?;
+
+            assert_eq!(outs[0].0, outs[1].0);
+            outs[0].0
+        } else {
+            let gins: Vec<YaoGarblerShare> = outputs
+                .iter()
+                .map(|ins| ins.as_garbler())
+                .cloned()
+                .collect();
+            let mut rn = rng.as_mut().unwrap();
+            let (cvec, de) = garble_gadget::<EdwardsPoint, _>(&gins, &mut rn);
+
+            let svcvec = vec_scalar_2_scalarvals::<EdwardsPoint>(&cvec);
+
+            send_to_party(&setup, tag1, svcvec, 2, &mut r).await?;
+
+            let zs: Vec<ScalarVal<EdwardsPoint>> =
+                receive_from_parties(&setup, tag2, &[2], &mut r).await?;
+
+            let out = decode_gadget::<EdwardsPoint>(&de, zs[0].0);
+
+            send_to_party::<S, R, ScalarVal<EdwardsPoint>>(
+                &setup,
+                tag3,
+                ScalarVal(out),
+                2,
+                &mut r,
+            )
+            .await?;
+
+            out
+        };
+
+        Ok((setup.participant_index(), out))
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_25519_arith_gadget() {
+        let gin = vec![false; 256];
+        let mut binstr = BinaryString::new();
+        for i in &gin {
+            binstr.push(*i);
+        }
+        let mut hasher = Sha512::new();
+        let ginu8 = binary_string_to_u8_vec(binstr);
+        hasher.update(ginu8);
+        let result: [u8; 64] = hasher.finalize().into();
+        let gin = u8_vec_to_bool_vec(result[..32].to_vec());
+
+        let mut parties = tokio::task::JoinSet::new();
+        let coord = SimpleMessageRelay::new();
+        for (setup, _) in run_init(None) {
+            let relay = coord.connect();
+            parties.spawn(test_25519_run_arith_gadget(
+                setup,
+                gin.clone(),
+                relay,
+            ));
+        }
+
+        let mut shares = vec![];
+
+        while let Some(fini) = parties.join_next().await {
+            if let Err(ref err) = fini {
+                println!("error {err:?}");
+            } else {
+                match fini.unwrap() {
+                    Err(err) => panic!("err {:?}", err),
+                    Ok(share) => shares.push(Arc::new(share)),
+                }
+            }
+        }
+
+        let mut sum = curve25519_dalek::Scalar::ZERO;
+        let two =
+            curve25519_dalek::Scalar::ONE + curve25519_dalek::Scalar::ONE;
+        let mut twopow = curve25519_dalek::Scalar::ONE;
         for i in gin {
             if i {
                 sum += twopow;

@@ -75,15 +75,19 @@ impl Wrap for ScalarVal<curve25519_dalek::EdwardsPoint> {
     }
 
     fn write(&self, buffer: &mut [u8]) {
-        buffer.copy_from_slice(self.0.as_bytes())
+        let mut b = *self.0.as_bytes();
+        b.reverse();
+        buffer.copy_from_slice(&b)
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
         Some(buffer)
             .filter(|b| b.len() == 32)
             .map(|b| {
+                let mut bp = b.to_vec();
+                bp.reverse();
                 curve25519_dalek::Scalar::from_bytes_mod_order(
-                    b.try_into().unwrap(),
+                    bp.try_into().unwrap(),
                 )
             })
             .map(ScalarVal)
