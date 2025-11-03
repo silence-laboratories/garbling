@@ -12,12 +12,12 @@ use k256::{
 use rand::{CryptoRng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use sl_messages::{message::MessageTag, relay::Relay};
+use sl_messages::relay::Relay;
 
 use garbled_circuit::{
     functionality::utils::{
-        FilteredMsgRelay, FixedExternalSize, Wrap, receive_from_parties,
-        send_to_party,
+        FilteredMsgRelay, FixedExternalSize, Wrap, receive_from_one_party,
+        receive_from_parties, send_to_party,
     },
     utilities::types::{YaoEvaluatorShare, YaoGarblerShare, YaoShare},
 };
@@ -43,10 +43,12 @@ pub struct YaoToScalarRssKeypairMsg1 {
 }
 
 fn decode_point(bytes: &[u8]) -> Option<ProjectivePoint> {
-    let mut repr = <ProjectivePoint as GroupEncoding>::Repr::default();
-    AsMut::<[u8]>::as_mut(&mut repr).copy_from_slice(bytes);
-
-    ProjectivePoint::from_bytes(&repr).into()
+    Some(<ProjectivePoint as GroupEncoding>::Repr::default())
+        .filter(|repr| repr.len() == bytes.len())
+        .and_then(|mut repr| {
+            AsMut::<[u8]>::as_mut(&mut repr).copy_from_slice(bytes);
+            ProjectivePoint::from_bytes(&repr).into()
+        })
 }
 
 impl Wrap for YaoToScalarRssKeypairMsg1 {
@@ -88,8 +90,14 @@ impl Wrap for YaoToScalarRssKeypairMsg1 {
         let (buffer, cvec) = svec(buffer, cveclen)?;
         let (buffer, cvec_star) = svec(buffer, cveclen)?;
 
-        let delta_2 = ScalarVal::read(&buffer[..32])?.0;
-        let delta_0 = ScalarVal::read(&buffer[32..])?.0;
+        let (delta_2_bytes, buffer) = buffer.split_at_checked(32)?;
+        let (delta_0_bytes, buffer) = buffer.split_at_checked(32)?;
+        let delta_2 = ScalarVal::read(delta_2_bytes)?.0;
+        let delta_0 = ScalarVal::read(delta_0_bytes)?.0;
+
+        if !buffer.is_empty() {
+            return None;
+        }
 
         Some(YaoToScalarRssKeypairMsg1 {
             cvec,
@@ -147,11 +155,19 @@ impl Wrap for YaoToScalarRssKeypairMsg2 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        let pk_tilde = decode_point(&buffer[0..33])?;
-        let pk_tilde_star = decode_point(&buffer[33..66])?;
+        let (pk_tilde_bytes, buffer) = buffer.split_at_checked(33)?;
+        let (pk_tilde_star_bytes, buffer) = buffer.split_at_checked(33)?;
+        let (ski_tilde_bytes, buffer) = buffer.split_at_checked(32)?;
+        let (skip2_tilde_bytes, buffer) = buffer.split_at_checked(32)?;
 
-        let ski_tilde = ScalarVal::read(&buffer[66..98])?.0;
-        let skip2_tilde = ScalarVal::read(&buffer[98..130])?.0;
+        if !buffer.is_empty() {
+            return None;
+        }
+
+        let pk_tilde = decode_point(pk_tilde_bytes)?;
+        let pk_tilde_star = decode_point(pk_tilde_star_bytes)?;
+        let ski_tilde = ScalarVal::read(ski_tilde_bytes)?.0;
+        let skip2_tilde = ScalarVal::read(skip2_tilde_bytes)?.0;
 
         Some(Self {
             pk_tilde,
@@ -196,11 +212,17 @@ impl Wrap for YaoToScalarRssKeypairMsg3p3 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        let pki_tilde = decode_point(&buffer[0..33])?;
+        let (pki_tilde_bytes, buffer) = buffer.split_at_checked(33)?;
+        let (pkip2_tilde_bytes, buffer) = buffer.split_at_checked(33)?;
+        let (alpha_bytes, buffer) = buffer.split_at_checked(32)?;
 
-        let pkip2_tilde = decode_point(&buffer[33..66])?;
+        if !buffer.is_empty() {
+            return None;
+        }
 
-        let alpha = ScalarVal::read(&buffer[66..98])?.0;
+        let pki_tilde = decode_point(pki_tilde_bytes)?;
+        let pkip2_tilde = decode_point(pkip2_tilde_bytes)?;
+        let alpha = ScalarVal::read(alpha_bytes)?.0;
 
         Some(Self {
             pki_tilde,
@@ -236,14 +258,26 @@ impl Wrap for YaoToScalarRssKeypairMsg3p12 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        let encoded = EncodedPoint::from_bytes(&buffer[0..33]).ok()?;
-        let affine = AffinePoint::from_encoded_point(&encoded).unwrap();
-        let pki_tilde = ProjectivePoint::from(affine);
+        let (pki_tilde_bytes, buffer) = buffer.split_at_checked(33)?;
+        let (pkip2_tilde_bytes, buffer) = buffer.split_at_checked(33)?;
 
-        let encoded = EncodedPoint::from_bytes(&buffer[33..66]).ok()?;
-        let affine =
-            AffinePoint::from_encoded_point(&encoded).into_option()?;
-        let pkip2_tilde = ProjectivePoint::from(affine);
+        if !buffer.is_empty() {
+            return None;
+        }
+
+        let pki_tilde = EncodedPoint::from_bytes(pki_tilde_bytes)
+            .ok()
+            .and_then(|encoded| {
+                AffinePoint::from_encoded_point(&encoded).into_option()
+            })
+            .map(ProjectivePoint::from)?;
+
+        let pkip2_tilde = EncodedPoint::from_bytes(pkip2_tilde_bytes)
+            .ok()
+            .and_then(|encoded| {
+                AffinePoint::from_encoded_point(&encoded).into_option()
+            })
+            .map(ProjectivePoint::from)?;
 
         Some(Self {
             pki_tilde,
@@ -275,7 +309,7 @@ pub struct YaoToScalarRssKeypairState3p3 {
 
 /// Create msg1 in the DeriveSKSharesDKG protocol, to be executed by parties p1 and p2
 pub fn get_private_key_shares_dkg_create_msg1_p12<G>(
-    sha_hashed_vals: &[YaoGarblerShare],
+    sha_hashed_vals: &[&YaoGarblerShare],
     rng: &mut G,
 ) -> (YaoToScalarRssKeypairMsg1, YaoToScalarRssKeypairState1)
 where
@@ -475,7 +509,7 @@ pub fn get_private_key_shares_dkg_process_msg3_p12(
 }
 
 /// Process msg3 in the DeriveSKSharesDKG protocol, to be executed by parties p3
-pub fn get_private_key_shares_dkg_process_msg3_p3(
+fn get_private_key_shares_dkg_process_msg3_p3(
     msg3_recv_pim1: &YaoToScalarRssKeypairMsg3p3,
     msg3_recv_pip2: &YaoToScalarRssKeypairMsg3p3,
     state2: &YaoToScalarRssKeypairState2,
@@ -494,7 +528,7 @@ pub fn get_private_key_shares_dkg_process_msg3_p3(
 }
 
 /// Create msg4 in the DeriveSKSharesDKG protocol, to be executed by parties p1 and p2
-pub fn get_private_key_shares_dkg_create_msg4_p12(
+fn get_private_key_shares_dkg_create_msg4_p12(
     state3: &YaoToScalarRssKeypairState3p12,
     state1: &YaoToScalarRssKeypairState1,
 ) -> ProjectivePoint {
@@ -512,7 +546,7 @@ pub fn get_private_key_shares_dkg_create_msg4_p12(
 }
 
 /// Process msg4 in the DeriveSKSharesDKG protocol, to be executed by parties p3
-pub fn get_private_key_shares_dkg_process_msg4_p3(
+fn get_private_key_shares_dkg_process_msg4_p3(
     msg4_p1: &ProjectivePoint,
     msg4_p2: &ProjectivePoint,
 ) -> ProjectivePoint {
@@ -522,7 +556,7 @@ pub fn get_private_key_shares_dkg_process_msg4_p3(
 }
 
 /// Get output of the DeriveSKSharesDKG protocol to be executed by party p1
-pub fn get_private_key_shares_dkg_genout_p1(
+fn get_private_key_shares_dkg_genout_p1(
     pk: &ProjectivePoint,
     state1: &YaoToScalarRssKeypairState1,
     state3: &YaoToScalarRssKeypairState3p12,
@@ -544,7 +578,7 @@ pub fn get_private_key_shares_dkg_genout_p1(
 }
 
 /// Get output of the DeriveSKSharesDKG protocol to be executed by party p3
-pub fn get_private_key_shares_dkg_genout_p2(
+fn get_private_key_shares_dkg_genout_p2(
     pk: &ProjectivePoint,
     state1: &YaoToScalarRssKeypairState1,
     state3: &YaoToScalarRssKeypairState3p12,
@@ -566,7 +600,7 @@ pub fn get_private_key_shares_dkg_genout_p2(
 }
 
 /// Get output of the DeriveSKSharesDKG protocol to be executed by party p3
-pub fn get_private_key_shares_dkg_genout_p3(
+fn get_private_key_shares_dkg_genout_p3(
     pk: &ProjectivePoint,
     alpha: &Scalar,
     state2: &YaoToScalarRssKeypairState2,
@@ -601,32 +635,6 @@ where
     let tag3 = relay.next_tag(YAO_TO_RSS_MSG3);
     let tag4 = relay.next_tag(YAO_TO_RSS_MSG4);
 
-    let output = run_yao_to_scalar_rss_keypair_inner(
-        setup, relay, share, rng, tag1, tag2, tag3, tag4,
-    )
-    .await?;
-
-    Ok(output)
-}
-
-/// Converts a given scalar represented as yao shares to Scalar RSS shares
-/// and returns it along with the correspoding public key along
-#[allow(clippy::too_many_arguments)]
-async fn run_yao_to_scalar_rss_keypair_inner<S, G, R>(
-    setup: &S,
-    relay: &mut FilteredMsgRelay<R>,
-    share: &[YaoShare],
-    rng: Option<&mut G>,
-    tag1: MessageTag,
-    tag2: MessageTag,
-    tag3: MessageTag,
-    tag4: MessageTag,
-) -> Result<PrivKeyShareDkg<k256::ProjectivePoint>, HardDerivationError>
-where
-    S: ProtocolParticipant,
-    R: Relay,
-    G: RngCore + CryptoRng,
-{
     let party_id = setup.participant_index();
 
     if party_id == 2 {
@@ -649,14 +657,14 @@ where
                 msg1_p3_from_p2,
             );
 
-        send_to_party(setup, tag2, msg2_0, 0, relay).await?;
-        send_to_party(setup, tag2, msg2_1, 1, relay).await?;
+        send_to_party(setup, tag2, &msg2_0, 0, relay).await?;
+        send_to_party(setup, tag2, &msg2_1, 1, relay).await?;
 
         let (msg3, state3) =
             get_private_key_shares_dkg_create_msg3_p3(&state2);
 
-        send_to_party(setup, tag3, msg3.clone(), 0, relay).await?;
-        send_to_party(setup, tag3, msg3, 1, relay).await?;
+        send_to_party(setup, tag3, &msg3, 0, relay).await?;
+        send_to_party(setup, tag3, &msg3, 1, relay).await?;
 
         let msg3s: Vec<YaoToScalarRssKeypairMsg3p3> =
             receive_from_parties(setup, tag3, &[0, 1], relay).await?;
@@ -686,38 +694,36 @@ where
         ))
     } else {
         let r = rng.unwrap();
-        let gins: Vec<YaoGarblerShare> =
-            share.iter().map(|ins| ins.as_garbler()).cloned().collect();
+        let gins: Vec<&YaoGarblerShare> =
+            share.iter().map(|ins| ins.as_garbler()).collect();
         let (msg1, state1) =
             get_private_key_shares_dkg_create_msg1_p12(&gins, r);
 
-        send_to_party(setup, tag1, msg1, 2, relay).await?;
+        send_to_party(setup, tag1, &msg1, 2, relay).await?;
 
-        let msg2s: Vec<YaoToScalarRssKeypairMsg2> =
-            receive_from_parties(setup, tag2, &[2], relay).await?;
-
-        let msg2 = &msg2s[0];
+        let msg2: YaoToScalarRssKeypairMsg2 =
+            receive_from_one_party(setup, tag2, 2, relay).await?;
 
         let (msg3_01, msg3_2, state3) =
-            get_private_key_shares_dkg_create_msg3_p12(&state1, msg2);
+            get_private_key_shares_dkg_create_msg3_p12(&state1, &msg2);
 
-        send_to_party(setup, tag3, msg3_01, 1 - party_id, relay).await?;
-        send_to_party(setup, tag3, msg3_2, 2, relay).await?;
+        send_to_party(setup, tag3, &msg3_01, 1 - party_id, relay).await?;
+        send_to_party(setup, tag3, &msg3_2, 2, relay).await?;
 
         let msg3s: Vec<YaoToScalarRssKeypairMsg3p12> =
             receive_from_parties(setup, tag3, &[1 - party_id, 2], relay)
                 .await?;
 
-        let msg3_01 = msg3s[0].clone();
-        let msg3_2 = msg3s[1].clone();
+        let msg3_01 = &msg3s[0];
+        let msg3_2 = &msg3s[1];
 
         if party_id == 0 {
             get_private_key_shares_dkg_process_msg3_p12(
-                &msg3_2, &msg3_01, &state3,
+                msg3_2, msg3_01, &state3,
             );
         } else {
             get_private_key_shares_dkg_process_msg3_p12(
-                &msg3_01, &msg3_2, &state3,
+                msg3_01, msg3_2, &state3,
             );
         }
 
@@ -725,7 +731,7 @@ where
         send_to_party(
             setup,
             tag4,
-            pk.to_encoded_point(true).as_bytes().to_vec(),
+            &pk.to_encoded_point(true).as_bytes().to_vec(),
             2,
             relay,
         )
@@ -742,7 +748,7 @@ where
 pub async fn run_batch_yao_to_scalar_rss_keypair<S, G, R>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
-    share: &[&[YaoShare]],
+    shares: &[&[YaoShare]],
     rng: Option<&mut G>,
 ) -> Result<Vec<PrivKeyShareDkg<k256::ProjectivePoint>>, HardDerivationError>
 where
@@ -755,32 +761,6 @@ where
     let tag3 = relay.next_tag(YAO_TO_RSS_MSG3);
     let tag4 = relay.next_tag(YAO_TO_RSS_MSG4);
 
-    let output = run_batch_yao_to_scalar_rss_keypair_inner(
-        setup, relay, share, rng, tag1, tag2, tag3, tag4,
-    )
-    .await?;
-
-    Ok(output)
-}
-
-/// Converts a given scalar represented as yao shares to Scalar RSS shares
-/// and returns it along with the correspoding public key along
-#[allow(clippy::too_many_arguments)]
-pub async fn run_batch_yao_to_scalar_rss_keypair_inner<S, G, R>(
-    setup: &S,
-    relay: &mut FilteredMsgRelay<R>,
-    shares: &[&[YaoShare]],
-    rng: Option<&mut G>,
-    tag1: MessageTag,
-    tag2: MessageTag,
-    tag3: MessageTag,
-    tag4: MessageTag,
-) -> Result<Vec<PrivKeyShareDkg<k256::ProjectivePoint>>, HardDerivationError>
-where
-    S: ProtocolParticipant,
-    R: Relay,
-    G: RngCore + CryptoRng,
-{
     let party_id = setup.participant_index();
 
     let batch_size = shares.len();
@@ -820,8 +800,8 @@ where
             state2s.push(state2);
         }
 
-        send_to_party(setup, tag2, msg2_0s, 0, relay).await?;
-        send_to_party(setup, tag2, msg2_1s, 1, relay).await?;
+        send_to_party(setup, tag2, &msg2_0s, 0, relay).await?;
+        send_to_party(setup, tag2, &msg2_1s, 1, relay).await?;
 
         let mut msg3s = Vec::with_capacity(batch_size);
         let mut state3s = Vec::with_capacity(batch_size);
@@ -832,8 +812,8 @@ where
             state3s.push(state3);
         }
 
-        send_to_party(setup, tag3, msg3s.clone(), 0, relay).await?;
-        send_to_party(setup, tag3, msg3s, 1, relay).await?;
+        send_to_party(setup, tag3, &msg3s, 0, relay).await?;
+        send_to_party(setup, tag3, &msg3s, 1, relay).await?;
 
         let msg3s: Vec<Vec<YaoToScalarRssKeypairMsg3p3>> =
             receive_from_parties(setup, tag3, &[0, 1], relay).await?;
@@ -879,30 +859,30 @@ where
         Ok(output)
     } else {
         let r = rng.unwrap();
-        let gins: Vec<Vec<YaoGarblerShare>> = shares
-            .iter()
-            .map(|share| {
-                share.iter().map(|ins| ins.as_garbler()).cloned().collect()
-            })
-            .collect();
 
         let mut msg1s = Vec::with_capacity(batch_size);
         let mut state1s = Vec::with_capacity(batch_size);
 
-        for i in gins.iter() {
+        for share in shares {
+            let i = share
+                .iter()
+                .map(|ins| ins.as_garbler())
+                .collect::<Vec<&YaoGarblerShare>>();
+
             let (msg1, state1) =
-                get_private_key_shares_dkg_create_msg1_p12(i, r);
+                get_private_key_shares_dkg_create_msg1_p12(&i, r);
 
             msg1s.push(msg1);
             state1s.push(state1);
         }
 
-        send_to_party(setup, tag1, msg1s, 2, relay).await?;
+        send_to_party(setup, tag1, &msg1s, 2, relay).await?;
 
-        let msg2s: Vec<Vec<YaoToScalarRssKeypairMsg2>> =
-            receive_from_parties(setup, tag2, &[2], relay).await?;
-
-        let msg2s = &msg2s[0];
+        let msg2s: Vec<YaoToScalarRssKeypairMsg2> =
+            receive_from_one_party(setup, tag2, 2, relay).await?;
+        if msg2s.len() != batch_size {
+            return Err(HardDerivationError::InvalidMessage);
+        }
 
         let mut msg3_01s = Vec::with_capacity(batch_size);
         let mut msg3_2s = Vec::with_capacity(batch_size);
@@ -920,8 +900,8 @@ where
             state3s.push(state3);
         }
 
-        send_to_party(setup, tag3, msg3_01s, 1 - party_id, relay).await?;
-        send_to_party(setup, tag3, msg3_2s, 2, relay).await?;
+        send_to_party(setup, tag3, &msg3_01s, 1 - party_id, relay).await?;
+        send_to_party(setup, tag3, &msg3_2s, 2, relay).await?;
 
         let msg3s: Vec<Vec<YaoToScalarRssKeypairMsg3p12>> =
             receive_from_parties(setup, tag3, &[1 - party_id, 2], relay)
@@ -962,7 +942,7 @@ where
             );
         }
 
-        send_to_party(setup, tag4, pks, 2, relay).await?;
+        send_to_party(setup, tag4, &pks, 2, relay).await?;
 
         let mut output = Vec::with_capacity(batch_size);
 
@@ -994,15 +974,11 @@ mod tests {
             input::batch_input_yao_functionality,
             setup::setup_yao_functionality, utils::FilteredMsgRelay,
         },
-        utilities::{
-            commitments::HashCommitment,
-            hash_function::AesHash,
-            types::{YaoSetup, YaoShare},
-        },
+        utilities::types::YaoShare,
     };
     use k256::{ProjectivePoint, Scalar};
     use rand::{Rng, SeedableRng, rngs};
-    use rand_chacha::ChaCha8Rng;
+
     use sl_messages::relay::{Relay, SimpleMessageRelay};
 
     use crate::{
@@ -1025,28 +1001,14 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
-
-        let (mut rng, _, _) = match &yao_setup {
-            YaoSetup::E(e) => {
-                let hash = AesHash::new(e.comm_crs);
-                let comm = HashCommitment::new(hash);
-                (None, hash, comm)
-            }
-            YaoSetup::G(g) => {
-                let hash = AesHash::new(g.comm_crs);
-                let comm = HashCommitment::new(hash);
-                let r = ChaCha8Rng::from_seed(g.prf_key);
-                (Some(r), hash, comm)
-            }
-        };
+        let mut yao_setup =
+            setup_yao_functionality(&setup, &mut relay).await?;
 
         let in_yao = batch_input_yao_functionality(
             &setup,
             &mut relay,
             &input,
-            rng.as_mut(),
-            &yao_setup,
+            &mut yao_setup,
         )
         .await?;
 
@@ -1054,7 +1016,7 @@ mod tests {
             &setup,
             &mut relay,
             &in_yao,
-            rng.as_mut(),
+            yao_setup.rng(),
         )
         .await?;
 
@@ -1075,21 +1037,8 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
-
-        let (mut rng, _, _) = match &yao_setup {
-            YaoSetup::E(e) => {
-                let hash = AesHash::new(e.comm_crs);
-                let comm = HashCommitment::new(hash);
-                (None, hash, comm)
-            }
-            YaoSetup::G(g) => {
-                let hash = AesHash::new(g.comm_crs);
-                let comm = HashCommitment::new(hash);
-                let r = ChaCha8Rng::from_seed(g.prf_key);
-                (Some(r), hash, comm)
-            }
-        };
+        let mut yao_setup =
+            setup_yao_functionality(&setup, &mut relay).await?;
 
         let mut in_yao = Vec::new();
         for i in input {
@@ -1097,8 +1046,7 @@ mod tests {
                 &setup,
                 &mut relay,
                 &i,
-                rng.as_mut(),
-                &yao_setup,
+                &mut yao_setup,
             )
             .await?;
             in_yao.push(in_yaot);
@@ -1111,7 +1059,7 @@ mod tests {
             &setup,
             &mut relay,
             &inyao_slices,
-            rng.as_mut(),
+            yao_setup.rng(),
         )
         .await?;
 

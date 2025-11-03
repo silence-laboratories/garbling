@@ -3,10 +3,10 @@
 
 use k256::{NonZeroScalar, Scalar};
 
-use sl_messages::{message::MessageTag, relay::Relay};
+use sl_messages::relay::Relay;
 
 use garbled_circuit::functionality::utils::{
-    FilteredMsgRelay, receive_from_parties, send_to_party,
+    FilteredMsgRelay, receive_from_one_party, send_to_party,
 };
 
 use crate::{
@@ -15,25 +15,28 @@ use crate::{
     utils::get_evaluation,
 };
 
-pub fn reconstruct_shamir_process_msg1(
+fn reconstruct_shamir_process_msg1(
     share: &Scalar,
     share_next: &Scalar,
     share_prev: &Scalar,
     party_points: &[NonZeroScalar],
     party_id: usize,
-) -> Scalar {
+) -> Result<Scalar, HardDerivationError> {
     let evals = [*share, *share_prev];
     let (ppts, next_eval) = match party_id {
         0 => ([party_points[0], party_points[2]], &party_points[1]),
         1 => ([party_points[1], party_points[0]], &party_points[2]),
         2 => ([party_points[2], party_points[1]], &party_points[0]),
-        _ => unreachable!(),
+        _ => return Err(HardDerivationError::Internal),
     };
 
     let next_val = get_evaluation(&ppts, &evals, next_eval);
-    assert_eq!(*share_next, next_val);
 
-    get_evaluation(&ppts, &evals, &Scalar::ZERO)
+    if *share_next != next_val {
+        return Err(HardDerivationError::Internal);
+    }
+
+    Ok(get_evaluation(&ppts, &evals, &Scalar::ZERO))
 }
 
 /// Function to reconstruct a shamir shared Scalar value to all parties
@@ -46,51 +49,28 @@ pub async fn run_reconstruct_shamir<R: Relay, S: ProtocolParticipant>(
     let tag1 = relay.next_tag(RECONSTRUCT_SHAMIR_MSG1);
     let tag2 = relay.next_tag(RECONSTRUCT_SHAMIR_MSG1);
 
-    let out = run_reconstruct_shamir_inner(
-        setup,
-        relay,
-        share,
-        evaluation_points,
-        tag1,
-        tag2,
-    )
-    .await?;
-
-    Ok(out)
-}
-
-/// Function to reconstruct a shamir shared Scalar value to all parties
-async fn run_reconstruct_shamir_inner<R: Relay, S: ProtocolParticipant>(
-    setup: &S,
-    relay: &mut FilteredMsgRelay<R>,
-    share: &Scalar,
-    evaluation_points: &[NonZeroScalar],
-    tag1: MessageTag,
-    tag2: MessageTag,
-) -> Result<Scalar, HardDerivationError> {
     let my_party_id = setup.participant_index();
     let prev_party = (3 + my_party_id - 1) % 3;
     let next_party = (3 + my_party_id + 1) % 3;
 
-    send_to_party(setup, tag1, ScalarVal(*share), prev_party, relay).await?;
-    send_to_party(setup, tag2, ScalarVal(*share), next_party, relay).await?;
+    send_to_party(setup, tag1, &ScalarVal(*share), prev_party, relay).await?;
+    send_to_party(setup, tag2, &ScalarVal(*share), next_party, relay).await?;
 
-    let shares_recv_n: Vec<ScalarVal> =
-        receive_from_parties(setup, tag1, &[next_party], relay).await?;
-    let shares_recv_p: Vec<ScalarVal> =
-        receive_from_parties(setup, tag2, &[prev_party], relay).await?;
+    let shares_recv_n: ScalarVal =
+        receive_from_one_party(setup, tag1, next_party, relay).await?;
+    let shares_recv_p: ScalarVal =
+        receive_from_one_party(setup, tag2, prev_party, relay).await?;
 
-    let share_prev = &shares_recv_p[0].0;
-    let share_next = &shares_recv_n[0].0;
-    let out = reconstruct_shamir_process_msg1(
+    let share_prev = &shares_recv_p.0;
+    let share_next = &shares_recv_n.0;
+
+    reconstruct_shamir_process_msg1(
         share,
         share_next,
         share_prev,
         evaluation_points,
         my_party_id,
-    );
-
-    Ok(out)
+    )
 }
 
 #[cfg(test)]

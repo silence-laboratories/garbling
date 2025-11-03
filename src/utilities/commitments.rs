@@ -1,7 +1,7 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use crate::utilities::{hash_function::HashFunction, types::BLOCK_SIZE};
+use crate::utilities::hash_function::HashFunction;
 
 use super::types::Block;
 
@@ -40,24 +40,20 @@ impl<H: HashFunction> HashCommitment<H> {
 /// Implements the `BinaryOperations` trait for `BinaryEvaluator`.
 impl<H: HashFunction> Commitment for HashCommitment<H> {
     /// Implementation of the `commit` function for a `HashCommitment`
+    #[inline(always)]
     fn commit(&self, message: &Block, witness: &Block) -> Block {
-        let mut temp = [0u8; BLOCK_SIZE * 2];
-        temp[..BLOCK_SIZE].copy_from_slice(message);
-        temp[BLOCK_SIZE..BLOCK_SIZE * 2].copy_from_slice(witness);
-        self.hash.get_hash(&temp)
+        self.hash.get_hash(&[*message, *witness].concat())
     }
 
     /// Implementation of the `verify` function for a `HashCommitment`
+    #[inline(always)]
     fn verify(
         &self,
         message: &Block,
         witness: &Block,
         commitment: &Block,
     ) -> bool {
-        let mut temp = [0u8; BLOCK_SIZE * 2];
-        temp[..BLOCK_SIZE].copy_from_slice(message);
-        temp[BLOCK_SIZE..BLOCK_SIZE * 2].copy_from_slice(witness);
-        self.hash.get_hash(&temp) == *commitment
+        self.hash.get_hash(&[*message, *witness].concat()) == *commitment
     }
 }
 

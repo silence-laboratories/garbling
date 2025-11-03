@@ -20,8 +20,6 @@ pub fn scalar_rss_to_shamir(
     party_id: usize,
     evaluation_points: &[NonZeroScalar],
 ) -> Scalar {
-    assert!((0..3).contains(&party_id));
-
     // helper closure f_A(j) = (j - m)/(-m)
     let f = |j: NonZeroScalar, m: NonZeroScalar| -> Scalar {
         let num = j.sub(&m);
@@ -38,6 +36,7 @@ pub fn scalar_rss_to_shamir(
                 * f(evaluation_points[0], evaluation_points[1]);
             term12 + term13
         }
+
         1 => {
             // subsets containing 2: {1,2} (prev_share), {2,3} (next_share)
             let term12 = inp.prev_share
@@ -46,6 +45,7 @@ pub fn scalar_rss_to_shamir(
                 * f(evaluation_points[1], evaluation_points[0]);
             term12 + term23
         }
+
         2 => {
             // subsets containing 3: {1,3} (next_share), {2,3} (prev_share)
             let term13 = inp.next_share
@@ -54,6 +54,7 @@ pub fn scalar_rss_to_shamir(
                 * f(evaluation_points[2], evaluation_points[0]);
             term13 + term23
         }
+
         _ => unreachable!(),
     }
 }

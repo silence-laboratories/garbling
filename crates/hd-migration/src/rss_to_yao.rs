@@ -2,7 +2,6 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use k256::ProjectivePoint;
-use rand::{CryptoRng, RngCore};
 
 use sl_messages::relay::Relay;
 
@@ -26,20 +25,17 @@ use crate::{
 };
 
 /// Converts an RSS-shared Scalar value (`PrivKeyShare`) to a `YaoShare` value
-#[allow(clippy::too_many_arguments)]
-pub async fn run_scalar_rss_to_yao<S, R, C, G, H>(
+pub async fn run_scalar_rss_to_yao<S, R, C, H>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
     share: &PrivKeyShare<ProjectivePoint>,
-    yao_setup: &YaoSetup,
-    mut rng: Option<&mut G>,
+    yao_setup: &mut YaoSetup,
     comm: &C,
     hash: &H,
 ) -> Result<Vec<YaoShare>, HardDerivationError>
 where
     S: ProtocolParticipant,
     R: Relay,
-    G: RngCore + CryptoRng,
     C: Commitment,
     H: HashFunction,
 {
@@ -49,20 +45,13 @@ where
     let mut all_ip = prev.clone();
     all_ip.extend_from_slice(&next);
 
-    let (i1_yao, i2_yao, i3_yao) = run_batch_input_from_all_yao(
-        setup,
-        relay,
-        &all_ip,
-        all_ip.len(),
-        all_ip.len(),
-        all_ip.len(),
-        rng.as_mut(),
-        yao_setup,
-        comm,
-    )
-    .await?;
+    let (i1_yao, i2_yao, i3_yao) =
+        run_batch_input_from_all_yao(setup, relay, &all_ip, yao_setup, comm)
+            .await?;
 
-    let mut inputs = vec![vec![], vec![], vec![], vec![], vec![], vec![]];
+    let mut inputs = [vec![], vec![], vec![], vec![], vec![], vec![]];
+
+    // FIXME: here we COPY YaoShares for no reason
 
     inputs[0].extend_from_slice(&i1_yao[256..]);
     inputs[1].extend_from_slice(&i2_yao[256..]);
@@ -74,21 +63,23 @@ where
 
     let circ = build_scalar_rss_to_y_verification_circuit();
 
-    let outp = yao_circuit_eval_functionality(
-        setup, relay, &inputs, &circ, rng, hash, yao_setup,
+    let mut outp = yao_circuit_eval_functionality(
+        setup, relay, &inputs, &circ, hash, yao_setup,
     )
     .await?;
 
     let veradd: Vec<YaoShare> = circ
         .output_gate_ids
         .iter()
-        .map(|id| outp.get(id).unwrap().clone())
-        .collect();
+        .map(|id| outp.remove(id).ok_or(HardDerivationError::Internal))
+        .collect::<Result<_, _>>()?;
 
     let verification =
         batch_output_yao_functionality(setup, relay, &veradd[..1]).await?;
 
-    assert!(verification[0]);
+    if !verification.first().unwrap_or(&false) {
+        return Err(HardDerivationError::InvalidMessage);
+    }
 
     let out = veradd[1..].to_vec();
 
@@ -109,7 +100,7 @@ mod tests {
     };
     use k256::{ProjectivePoint, Scalar};
     use rand::{RngCore, SeedableRng, rngs};
-    use rand_chacha::ChaCha8Rng;
+
     use sl_messages::relay::{Relay, SimpleMessageRelay};
 
     use crate::{
@@ -132,19 +123,19 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
+        let mut yao_setup =
+            setup_yao_functionality(&setup, &mut relay).await?;
 
-        let (mut rng, hash, comm) = match &yao_setup {
+        let (hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
                 let hash = AesHash::new(e.comm_crs);
                 let comm = HashCommitment::new(hash);
-                (None, hash, comm)
+                (hash, comm)
             }
             YaoSetup::G(g) => {
                 let hash = AesHash::new(g.comm_crs);
                 let comm = HashCommitment::new(hash);
-                let r = ChaCha8Rng::from_seed(g.prf_key);
-                (Some(r), hash, comm)
+                (hash, comm)
             }
         };
 
@@ -152,8 +143,7 @@ mod tests {
             &setup,
             &mut relay,
             &share,
-            &yao_setup,
-            rng.as_mut(),
+            &mut yao_setup,
             &comm,
             &hash,
         )

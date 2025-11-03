@@ -1,6 +1,8 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
+use rand_chacha::ChaCha8Rng;
+
 use crate::utilities::utils::xor_blocks;
 
 pub const BLOCK_SIZE: usize = 16;
@@ -10,6 +12,8 @@ pub const BLOCK_SIZE: usize = 16;
 /// This is used for representing the output of hashes for
 /// the garbled circuit.
 pub type Block = [u8; BLOCK_SIZE];
+
+pub const ZBLOCK: Block = [0u8; BLOCK_SIZE];
 
 pub enum MapArg<'a, T> {
     Scalar(T),
@@ -101,11 +105,12 @@ impl YaoShare {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct GarblerSetup {
     pub comm_crs: Block,
-    pub prf_key: [u8; 32],
+    pub prf: ChaCha8Rng,
     pub delta: Block,
+    pub party_id: usize,
 }
 
 #[derive(Debug)]
@@ -114,6 +119,7 @@ pub struct EvaluatorSetup {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum YaoSetup {
     G(GarblerSetup),
     E(EvaluatorSetup),
@@ -127,9 +133,23 @@ impl YaoSetup {
         }
     }
 
+    pub fn as_garbler_mut(&mut self) -> Option<&mut GarblerSetup> {
+        match self {
+            YaoSetup::G(g) => Some(g),
+            _ => None,
+        }
+    }
+
     pub fn as_evaluator(&self) -> Option<&EvaluatorSetup> {
         match self {
             YaoSetup::E(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    pub fn rng(&mut self) -> Option<&mut ChaCha8Rng> {
+        match self {
+            YaoSetup::G(g) => Some(&mut g.prf),
             _ => None,
         }
     }

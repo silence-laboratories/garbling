@@ -24,7 +24,6 @@ use rand_chacha::ChaCha8Rng;
 
 pub fn eval_aes256_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Evaluate");
-    let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
 
     // 8832 AND Gates
     let circuit = BinaryCircuit::parse(AES256_CIRCUIT).unwrap();
@@ -62,12 +61,12 @@ pub fn eval_aes256_benchmark(c: &mut Criterion) {
     let (gc, _): (_, HashMap<u32, YaoShare>) = garble_functionality(
         &circuit,
         &gin,
-        &GarblerSetup {
+        &mut GarblerSetup {
             delta,
             comm_crs: Block::default(),
-            prf_key: [0u8; 32],
+            prf: ChaCha8Rng::from_seed([0; 32]),
+            party_id: 0,
         },
-        &mut rng,
         &hash,
     );
 
@@ -123,12 +122,12 @@ pub fn eval_aes128_benchmark(c: &mut Criterion) {
     let (gc, _): (_, HashMap<u32, YaoShare>) = garble_functionality(
         &circuit,
         &gin,
-        &GarblerSetup {
+        &mut GarblerSetup {
             delta,
+            prf: ChaCha8Rng::from_seed([0; 32]),
             comm_crs: Block::default(),
-            prf_key: [0u8; 32],
+            party_id: 0,
         },
-        &mut rng,
         &hash,
     );
     group.bench_function("aes128_eval", |b| {
@@ -181,12 +180,12 @@ pub fn eval_sha256_benchmark(c: &mut Criterion) {
     let (gc, _): (_, HashMap<u32, YaoShare>) = garble_functionality(
         &circuit,
         &gin,
-        &GarblerSetup {
+        &mut GarblerSetup {
             delta,
             comm_crs: Block::default(),
-            prf_key: [0u8; 32],
+            prf: ChaCha8Rng::from_seed([0; 32]),
+            party_id: 0,
         },
-        &mut rng,
         &hash,
     );
     group.bench_function("sha256_eval", |b| {

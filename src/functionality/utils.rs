@@ -260,7 +260,7 @@ fn check_abort<P: ProtocolParticipant, E>(
 pub async fn send_to_party<P, R, T>(
     setup: &P,
     tag: MessageTag,
-    message: T,
+    message: &T,
     to_party: usize,
     relay: &mut FilteredMsgRelay<R>,
 ) -> Result<(), MessageSendError>
@@ -282,6 +282,46 @@ where
     relay.send(buffer).await?;
 
     Ok(())
+}
+
+pub async fn receive_from_one_party<T, P, R>(
+    setup: &P,
+    tag: MessageTag,
+    from_party: usize,
+    relay: &mut FilteredMsgRelay<R>,
+) -> Result<T, ProtocolError>
+where
+    P: ProtocolParticipant,
+    R: Relay,
+    T: Wrap,
+{
+    relay
+        .ask_messages_from_iter(setup, tag, [from_party], true)
+        .await?;
+
+    let mut round = Round::new(1, tag, relay);
+    while let Some((msg, party_id, is_abort)) = round.recv().await? {
+        if is_abort {
+            check_abort(setup, &msg, party_id, ProtocolError::AbortProtocol)?;
+            continue;
+        }
+
+        if party_id != from_party {
+            round.put_back(&msg, tag, party_id);
+            continue;
+        }
+
+        let v = SignedMessage::<(), _>::verify_with_trailer(
+            &msg,
+            setup.verifier(party_id),
+        )
+        .and_then(|(_, buf)| Wrap::read(buf))
+        .ok_or(ProtocolError::InvalidMessage)?;
+
+        return Ok(v);
+    }
+
+    Err(ProtocolError::MissingMessage)
 }
 
 /// Party receives a message from other party
@@ -710,6 +750,26 @@ impl<T: Wrap + FixedExternalSize> Wrap for Vec<T> {
     }
 }
 
+pub struct Byte(pub u8);
+
+impl FixedExternalSize for Byte {
+    const SIZE: usize = 1;
+}
+
+impl Wrap for Byte {
+    fn external_size(&self) -> usize {
+        1
+    }
+
+    fn write(&self, buffer: &mut [u8]) {
+        buffer[0] = self.0;
+    }
+
+    fn read(buffer: &[u8]) -> Option<Self> {
+        buffer.first().cloned().map(Byte)
+    }
+}
+
 impl FixedExternalSize for u8 {
     const SIZE: usize = 1;
 }
@@ -738,7 +798,8 @@ impl Wrap for u16 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        Some(u16::from_le_bytes(buffer[..2].try_into().ok()?))
+        let bytes: [u8; 2] = buffer.get(..2)?.try_into().ok()?;
+        Some(u16::from_le_bytes(bytes))
     }
 }
 
@@ -752,7 +813,8 @@ impl Wrap for u32 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        Some(u32::from_le_bytes(buffer[..4].try_into().ok()?))
+        let bytes: [u8; 4] = buffer.get(..4)?.try_into().ok()?;
+        Some(u32::from_le_bytes(bytes))
     }
 }
 
@@ -766,27 +828,122 @@ impl Wrap for u64 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        Some(u64::from_le_bytes(buffer[..4].try_into().ok()?))
+        let bytes: [u8; 8] = buffer.get(..8)?.try_into().ok()?;
+        Some(u64::from_le_bytes(bytes))
     }
 }
 
 impl Wrap for BinaryString {
     fn external_size(&self) -> usize {
-        4 + self.value.len()
+        self.value.len()
     }
 
     fn write(&self, buffer: &mut [u8]) {
-        let buffer = (self.length as u32).encode(buffer);
-        buffer.copy_from_slice(&self.value);
+        self.value.write(buffer)
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        let (buffer, length) = u32::decode(buffer, 4)?;
-        let value = buffer.get(..length as usize)?.to_vec();
-
+        let value = Vec::<u8>::read(buffer)?;
         Some(BinaryString {
-            length: length as _,
+            length: value.len() as u64 * 8,
             value,
         })
+    }
+}
+
+impl<T1, T2> FixedExternalSize for (T1, T2)
+where
+    T1: FixedExternalSize,
+    T2: FixedExternalSize,
+{
+    const SIZE: usize = T1::SIZE + T2::SIZE;
+}
+
+impl<T1, T2> Wrap for (T1, T2)
+where
+    T1: Wrap + FixedExternalSize,
+    T2: Wrap + FixedExternalSize,
+{
+    fn external_size(&self) -> usize {
+        T1::SIZE + T2::SIZE
+    }
+
+    fn write(&self, buffer: &mut [u8]) {
+        self.1.encode(self.0.encode(buffer));
+    }
+
+    fn read(b: &[u8]) -> Option<Self> {
+        let (b, t1) = T1::decode(b, T1::SIZE)?;
+
+        Some((t1, T2::read(b)?))
+    }
+}
+
+impl<T1, T2, T3> FixedExternalSize for (T1, T2, T3)
+where
+    T1: FixedExternalSize,
+    T2: FixedExternalSize,
+    T3: FixedExternalSize,
+{
+    const SIZE: usize = T1::SIZE + T2::SIZE + T3::SIZE;
+}
+
+impl<T1, T2, T3> Wrap for (T1, T2, T3)
+where
+    T1: Wrap + FixedExternalSize,
+    T2: Wrap + FixedExternalSize,
+    T3: Wrap + FixedExternalSize,
+{
+    fn external_size(&self) -> usize {
+        T1::SIZE + T2::SIZE + T3::SIZE
+    }
+
+    fn write(&self, buffer: &mut [u8]) {
+        let buffer = self.0.encode(buffer);
+        let buffer = self.1.encode(buffer);
+        self.2.write(buffer);
+    }
+
+    fn read(b: &[u8]) -> Option<Self> {
+        let (b, t1) = T1::decode(b, T1::SIZE)?;
+        let (b, t2) = T2::decode(b, T2::SIZE)?;
+
+        Some((t1, t2, T3::read(b)?))
+    }
+}
+
+impl<T1, T2, T3, T4> FixedExternalSize for (T1, T2, T3, T4)
+where
+    T1: FixedExternalSize,
+    T2: FixedExternalSize,
+    T3: FixedExternalSize,
+    T4: FixedExternalSize,
+{
+    const SIZE: usize = T1::SIZE + T2::SIZE + T3::SIZE + T4::SIZE;
+}
+
+impl<T1, T2, T3, T4> Wrap for (T1, T2, T3, T4)
+where
+    T1: Wrap + FixedExternalSize,
+    T2: Wrap + FixedExternalSize,
+    T3: Wrap + FixedExternalSize,
+    T4: Wrap + FixedExternalSize,
+{
+    fn external_size(&self) -> usize {
+        T1::SIZE + T2::SIZE + T3::SIZE + T4::SIZE
+    }
+
+    fn write(&self, buffer: &mut [u8]) {
+        let buffer = self.0.encode(buffer);
+        let buffer = self.1.encode(buffer);
+        let buffer = self.2.encode(buffer);
+        self.3.write(buffer);
+    }
+
+    fn read(b: &[u8]) -> Option<Self> {
+        let (b, t1) = T1::decode(b, T1::SIZE)?;
+        let (b, t2) = T2::decode(b, T2::SIZE)?;
+        let (b, t3) = T3::decode(b, T3::SIZE)?;
+        Some((t1, t2, t3, T4::read(b)?))
     }
 }

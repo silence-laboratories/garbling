@@ -7,7 +7,7 @@ use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
     utilities::{
         hash_function::HashFunction,
-        types::{Block, YaoEvaluatorShare, YaoShare, BLOCK_SIZE},
+        types::{Block, YaoEvaluatorShare, YaoShare, ZBLOCK},
         utils::{lsb, xor_blocks},
     },
 };
@@ -23,7 +23,7 @@ where
     T: From<YaoEvaluatorShare>,
 {
     let mut f_index = 0;
-    let mut w = vec![[0; BLOCK_SIZE]; circuit.gates.len()];
+    let mut w = vec![ZBLOCK; circuit.gates.len()];
 
     for (i, gate) in circuit.gates.iter().enumerate() {
         let (out_gate, f_label) = match *gate {
@@ -94,11 +94,12 @@ where
         w[out_gate as usize] = f_label;
     }
 
-    let mut outputs = HashMap::new();
-    for &r in circuit.get_output_gate_ids() {
-        let label = w[r as usize];
-        outputs.insert(r, T::from(YaoEvaluatorShare { label }));
-    }
-
-    outputs
+    circuit
+        .get_output_gate_ids()
+        .iter()
+        .map(|&r| {
+            let label = w[r as usize];
+            (r, T::from(YaoEvaluatorShare { label }))
+        })
+        .collect()
 }

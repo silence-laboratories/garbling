@@ -105,6 +105,9 @@ pub enum HardDerivationError {
     /// Some party decided to not participate in the protocol.
     #[error("Abort protocol by party {0}")]
     AbortProtocol(usize),
+
+    #[error("Internal Error")]
+    Internal,
 }
 
 impl From<MessageSendError> for HardDerivationError {
@@ -127,7 +130,11 @@ impl From<Error> for HardDerivationError {
 impl From<ProtocolError> for HardDerivationError {
     fn from(err: ProtocolError) -> Self {
         match err {
-            ProtocolError::InvalidMessage => {
+            ProtocolError::InvalidMessage
+            | ProtocolError::InconsistentMessage
+            | ProtocolError::CommitmentVerificationFailed
+            | ProtocolError::InvalidShare
+            | ProtocolError::InvalidLength => {
                 HardDerivationError::InvalidMessage
             }
             ProtocolError::MissingMessage => {

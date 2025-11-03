@@ -49,12 +49,12 @@ pub fn garble_aes256_benchmark(c: &mut Criterion) {
             let _: (_, HashMap<u32, YaoShare>) = garble_functionality(
                 &circuit,
                 &gin,
-                &GarblerSetup {
+                &mut GarblerSetup {
                     delta,
                     comm_crs: Block::default(),
-                    prf_key: [0u8; 32],
+                    prf: ChaCha8Rng::from_seed([0; 32]),
+                    party_id: 0,
                 },
-                &mut rng,
                 &hash,
             );
         })
@@ -94,12 +94,12 @@ pub fn garble_aes128_benchmark(c: &mut Criterion) {
             let _: (_, HashMap<u32, YaoShare>) = garble_functionality(
                 &circuit,
                 &gin,
-                &GarblerSetup {
+                &mut GarblerSetup {
                     delta,
                     comm_crs: Block::default(),
-                    prf_key: [0u8; 32],
+                    prf: ChaCha8Rng::from_seed([0; 32]),
+                    party_id: 0,
                 },
-                &mut rng,
                 &hash,
             );
         })
@@ -138,12 +138,12 @@ pub fn garble_sha256_benchmark(c: &mut Criterion) {
             let _: (_, HashMap<u32, YaoShare>) = garble_functionality(
                 &circuit,
                 &gin,
-                &GarblerSetup {
+                &mut GarblerSetup {
                     delta,
                     comm_crs: Block::default(),
-                    prf_key: [0u8; 32],
+                    prf: ChaCha8Rng::from_seed([0; 32]),
+                    party_id: 0,
                 },
-                &mut rng,
                 &hash,
             );
         })

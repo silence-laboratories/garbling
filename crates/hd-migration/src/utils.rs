@@ -5,6 +5,8 @@
 use garbled_circuit::functionality::utils::SetupMessage;
 use k256::{NonZeroScalar, Scalar, elliptic_curve::subtle::ConstantTimeEq};
 
+use crate::types::HardDerivationError;
+
 /// Converts a vector of `u8` values to a vector of `bool` values
 pub fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
     let mut output = Vec::with_capacity(vec_u8.len() * 8);
@@ -18,11 +20,12 @@ pub fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
 }
 
 /// Converts a vector of `bool` values to a vector of `u8` values
-pub fn bool_vec_to_u8_vec(vec_bool: Vec<bool>) -> Vec<u8> {
-    assert!(
-        vec_bool.len() % 8 == 0,
-        "Length of bool vec must be multiple of 8"
-    );
+pub fn bool_vec_to_u8_vec(
+    vec_bool: Vec<bool>,
+) -> Result<Vec<u8>, HardDerivationError> {
+    if vec_bool.len() % 8 != 0 {
+        return Err(HardDerivationError::InvalidMessage);
+    }
 
     let mut output = Vec::with_capacity(vec_bool.len() / 8);
     for chunk in vec_bool.chunks(8) {
@@ -34,7 +37,7 @@ pub fn bool_vec_to_u8_vec(vec_bool: Vec<bool>) -> Vec<u8> {
         }
         output.push(byte);
     }
-    output
+    Ok(output)
 }
 
 /// Converts a vector of bytes to a vector of bool values in little endian

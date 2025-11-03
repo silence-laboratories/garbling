@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use rand::{CryptoRng, RngCore};
+use rand::RngCore;
 
 use crate::{
     circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
@@ -14,15 +14,13 @@ use crate::{
     },
 };
 
-pub fn garble_functionality<T, R, H>(
+pub fn garble_functionality<T, H>(
     circuit: &BinaryCircuit,
     input_shares: &[Vec<YaoShare>],
-    setup: &GarblerSetup,
-    rng: &mut R,
+    setup: &mut GarblerSetup,
     hash: &H,
 ) -> (Vec<Block>, HashMap<u32, T>)
 where
-    R: RngCore + CryptoRng,
     H: HashFunction,
     T: From<YaoGarblerShare>,
 {
@@ -40,7 +38,7 @@ where
 
             BinaryGate::Constant { val, wire } => {
                 let mut zerowire = Block::default();
-                rng.fill_bytes(&mut zerowire);
+                setup.prf.fill_bytes(&mut zerowire);
                 zerowire[0] |= 1;
                 let mut newwire = zerowire;
                 if val == 1 {
@@ -148,13 +146,13 @@ mod tests {
     fn test_garble_functionality() {
         let circuit = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
 
-        let setup = GarblerSetup {
+        let mut setup = GarblerSetup {
             comm_crs: Block::default(),
-            prf_key: [0u8; 32],
+            prf: ChaCha8Rng::from_seed([0; 32]),
             delta: Block::default(),
+            party_id: 0,
         };
 
-        let mut rng = ChaCha8Rng::from_seed(setup.prf_key);
         let hash = AesGarbleHash::new(Block::default());
 
         let gin: Vec<Vec<_>> = circuit
@@ -172,7 +170,7 @@ mod tests {
             .collect();
 
         let (f, _o): (_, HashMap<u32, YaoShare>) =
-            garble_functionality(&circuit, &gin, &setup, &mut rng, &hash);
+            garble_functionality(&circuit, &gin, &mut setup, &hash);
 
         println!("cir: gates.len() {}", circuit.gates.len());
         let nonfree = circuit.get_num_nonfree_gates();
@@ -187,13 +185,13 @@ mod tests {
 
         let circuit = build_comparison_circuit();
 
-        let setup = GarblerSetup {
+        let mut setup = GarblerSetup {
             comm_crs: Block::default(),
-            prf_key: [0u8; 32],
+            prf: ChaCha8Rng::from_seed([0; 32]),
             delta: Block::default(),
+            party_id: 0,
         };
 
-        let mut rng = ChaCha8Rng::from_seed(setup.prf_key);
         let hash = AesGarbleHash::new(Block::default());
 
         let gin: Vec<Vec<_>> = circuit
@@ -213,7 +211,7 @@ mod tests {
         circuit.print_circuit();
 
         let (f, _o): (_, HashMap<u32, YaoShare>) =
-            garble_functionality(&circuit, &gin, &setup, &mut rng, &hash);
+            garble_functionality(&circuit, &gin, &mut setup, &hash);
 
         println!("cir: gates.len() {}", circuit.gates.len());
         let nonfree = circuit.get_num_nonfree_gates();
