@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use rand::{CryptoRng, RngCore};
+use sha2::{Digest, Sha256};
 use sl_compute::transport::{
     proto::{FilteredMsgRelay, MessageTag, Relay},
     setup::{common::MPCEncryption, CommonSetupMessage},
@@ -10,7 +11,7 @@ use sl_compute::transport::{
 
 use crate::{
     circuitop::circuit::BinaryCircuit,
-    config::constants::YAO_CIRC_EVAL_FUNC_MSG1,
+    config::constants::{YAO_CIRC_EVAL_FUNC_MSG1, YAO_CIRC_EVAL_FUNC_MSG2},
     functionality::evaluate::evaluate_functionality,
     utilities::{
         hash_function::HashFunction,
@@ -144,26 +145,52 @@ where
 
     let tag_offset = tag_offset_counter.next_value();
     let tag1 = MessageTag::tag1(YAO_CIRC_EVAL_FUNC_MSG1.try_into().unwrap(), tag_offset);
-    relay.ask_messages(setup, tag1, true).await?;
+
+    let tag_offset = tag_offset_counter.next_value();
+    let tag2 = MessageTag::tag1(YAO_CIRC_EVAL_FUNC_MSG2.try_into().unwrap(), tag_offset);
 
     if party_id == 2 {
+        relay.ask_messages(setup, tag1, true).await?;
+        relay.ask_messages(setup, tag2, true).await?;
+
         let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len()) * BLOCK_SIZE;
 
+        let hashes: Vec<[u8; 32]> =
+            receive_from_parties(setup, mpc_encryption, tag2, 32, vec![0], relay).await?;
+
+        let hashes = hashes[0];
+
         let tfs: Vec<Vec<TBlock>> =
-            receive_from_parties(setup, mpc_encryption, tag1, len, vec![0, 1], relay).await?;
+            receive_from_parties(setup, mpc_encryption, tag1, len, vec![1], relay).await?;
 
-        let fs: Vec<Vec<Block>> = tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+        let fs: Vec<Block> = tblock_vec2block_vec(&tfs[0]);
 
-        assert_eq!(fs[0], fs[1]);
+        let hashout: [u8; 32] = fs
+            .iter()
+            .fold(Sha256::new(), Digest::chain_update)
+            .finalize()
+            .into();
 
-        output = yao_circuit_eval_process_msg1_p2(g_input, e_input, &fs[0], circuit, hash);
+        if hashout != hashes {
+            return Err(ProtocolError::VerificationError);
+        }
+
+        output = yao_circuit_eval_process_msg1_p2(g_input, e_input, &fs, circuit, hash);
     } else {
         let (f, out) =
             yao_circuit_eval_create_msg1_p01(g_input, e_input, yao_setup, circuit, rng, hash);
-        let tf = block_vec2tblock_vec(&f);
 
-        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
-
+        if party_id == 0 {
+            let hashval: [u8; 32] = f
+                .iter()
+                .fold(Sha256::new(), Digest::chain_update)
+                .finalize()
+                .into();
+            send_to_party(setup, mpc_encryption, tag2, hashval, 2, relay).await?;
+        } else {
+            let tf = block_vec2tblock_vec(&f);
+            send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+        }
         output = out;
     }
     Ok(output)
@@ -192,11 +219,15 @@ where
 
     let tag_offset = tag_offset_counter.next_value();
     let tag1 = MessageTag::tag1(YAO_CIRC_EVAL_FUNC_MSG1.try_into().unwrap(), tag_offset);
-    relay.ask_messages(setup, tag1, true).await?;
+
+    let tag_offset = tag_offset_counter.next_value();
+    let tag2 = MessageTag::tag1(YAO_CIRC_EVAL_FUNC_MSG2.try_into().unwrap(), tag_offset);
 
     let mut output = Vec::new();
 
     if party_id == 2 {
+        relay.ask_messages(setup, tag1, true).await?;
+        relay.ask_messages(setup, tag2, true).await?;
         match circuits {
             MapArg::Scalar(circuit) => match g_inputs {
                 MapArg::Scalar(g_input) => match e_inputs {
@@ -204,24 +235,30 @@ where
                         let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                             * BLOCK_SIZE;
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let hashes: Vec<[u8; 32]> =
+                            receive_from_parties(setup, mpc_encryption, tag2, 32, vec![0], relay)
+                                .await?;
 
-                        let fs: Vec<Vec<Block>> =
-                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+                        let hashes = hashes[0];
 
-                        assert_eq!(fs[0], fs[1]);
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, mpc_encryption, tag1, len, vec![1], relay)
+                                .await?;
 
-                        let temp = yao_circuit_eval_process_msg1_p2(
-                            g_input, e_input, &fs[0], circuit, hash,
-                        );
+                        let fs: Vec<Block> = tblock_vec2block_vec(&tfs[0]);
+
+                        let hashout: [u8; 32] = fs
+                            .iter()
+                            .fold(Sha256::new(), Digest::chain_update)
+                            .finalize()
+                            .into();
+
+                        if hashout != hashes {
+                            return Err(ProtocolError::VerificationError);
+                        }
+
+                        let temp =
+                            yao_circuit_eval_process_msg1_p2(g_input, e_input, &fs, circuit, hash);
 
                         output.push(temp);
                     }
@@ -230,36 +267,37 @@ where
                             * BLOCK_SIZE
                             * e_inputs.len();
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let hashes: Vec<[u8; 32]> =
+                            receive_from_parties(setup, mpc_encryption, tag2, 32, vec![0], relay)
+                                .await?;
 
-                        let fs: Vec<Vec<Block>> =
-                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+                        let hashes = hashes[0];
 
-                        assert_eq!(fs[0], fs[1]);
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, mpc_encryption, tag1, len, vec![1], relay)
+                                .await?;
 
-                        let complen =
-                            2 * circuit.num_nonfree_gates + circuit.constant_map.len();
-                        let mut temp = Vec::new();
-                        (0..e_inputs.len()).for_each(|i| {
-                            let f = fs[0][complen * i..complen * (i + 1)].to_vec();
-                            let out = yao_circuit_eval_process_msg1_p2(
-                                g_input,
-                                &e_inputs[i],
-                                &f,
-                                circuit,
-                                hash,
-                            );
-                            temp.push(out);
-                        });
-                        output = temp;
+                        let fs: Vec<Block> = tblock_vec2block_vec(&tfs[0]);
+
+                        let hashout: [u8; 32] = fs
+                            .iter()
+                            .fold(Sha256::new(), Digest::chain_update)
+                            .finalize()
+                            .into();
+
+                        if hashout != hashes {
+                            return Err(ProtocolError::VerificationError);
+                        }
+
+                        let complen = 2 * circuit.num_nonfree_gates + circuit.constant_map.len();
+
+                        output = e_inputs
+                            .iter()
+                            .zip(fs.chunks_exact(complen))
+                            .map(|(e, f)| {
+                                yao_circuit_eval_process_msg1_p2(g_input, e, f, circuit, hash)
+                            })
+                            .collect();
                     }
                 },
                 MapArg::Vector(g_inputs) => match e_inputs {
@@ -268,36 +306,37 @@ where
                             * BLOCK_SIZE
                             * g_inputs.len();
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let hashes: Vec<[u8; 32]> =
+                            receive_from_parties(setup, mpc_encryption, tag2, 32, vec![0], relay)
+                                .await?;
 
-                        let fs: Vec<Vec<Block>> =
-                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+                        let hashes = hashes[0];
 
-                        assert_eq!(fs[0], fs[1]);
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, mpc_encryption, tag1, len, vec![1], relay)
+                                .await?;
 
-                        let complen =
-                            2 * circuit.num_nonfree_gates + circuit.constant_map.len();
-                        let mut temp = Vec::new();
-                        (0..g_inputs.len()).for_each(|i| {
-                            let f = fs[0][complen * i..complen * (i + 1)].to_vec();
-                            let out = yao_circuit_eval_process_msg1_p2(
-                                &g_inputs[i],
-                                e_input,
-                                &f,
-                                circuit,
-                                hash,
-                            );
-                            temp.push(out);
-                        });
-                        output = temp;
+                        let fs: Vec<Block> = tblock_vec2block_vec(&tfs[0]);
+
+                        let hashout: [u8; 32] = fs
+                            .iter()
+                            .fold(Sha256::new(), Digest::chain_update)
+                            .finalize()
+                            .into();
+
+                        if hashout != hashes {
+                            return Err(ProtocolError::VerificationError);
+                        }
+
+                        let complen = 2 * circuit.num_nonfree_gates + circuit.constant_map.len();
+
+                        output = g_inputs
+                            .iter()
+                            .zip(fs.chunks_exact(complen))
+                            .map(|(g, f)| {
+                                yao_circuit_eval_process_msg1_p2(g, e_input, f, circuit, hash)
+                            })
+                            .collect();
                     }
                     MapArg::Vector(e_inputs) => {
                         assert_eq!(e_inputs.len(), g_inputs.len());
@@ -305,36 +344,38 @@ where
                             * BLOCK_SIZE
                             * g_inputs.len();
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let hashes: Vec<[u8; 32]> =
+                            receive_from_parties(setup, mpc_encryption, tag2, 32, vec![0], relay)
+                                .await?;
 
-                        let fs: Vec<Vec<Block>> =
-                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+                        let hashes = hashes[0];
 
-                        assert_eq!(fs[0], fs[1]);
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, mpc_encryption, tag1, len, vec![1], relay)
+                                .await?;
 
-                        let complen =
-                            2 * circuit.num_nonfree_gates + circuit.constant_map.len();
-                        let mut temp = Vec::new();
-                        (0..g_inputs.len()).for_each(|i| {
-                            let f = fs[0][complen * i..complen * (i + 1)].to_vec();
-                            let out = yao_circuit_eval_process_msg1_p2(
-                                &g_inputs[i],
-                                &e_inputs[i],
-                                &f,
-                                circuit,
-                                hash,
-                            );
-                            temp.push(out);
-                        });
-                        output = temp;
+                        let fs: Vec<Block> = tblock_vec2block_vec(&tfs[0]);
+
+                        let hashout: [u8; 32] = fs
+                            .iter()
+                            .fold(Sha256::new(), Digest::chain_update)
+                            .finalize()
+                            .into();
+
+                        if hashout != hashes {
+                            return Err(ProtocolError::VerificationError);
+                        }
+
+                        let complen = 2 * circuit.num_nonfree_gates + circuit.constant_map.len();
+
+                        output = g_inputs
+                            .iter()
+                            .zip(e_inputs.iter())
+                            .zip(fs.chunks_exact(complen))
+                            .map(|((g, e), f)| {
+                                yao_circuit_eval_process_msg1_p2(g, e, f, circuit, hash)
+                            })
+                            .collect();
                     }
                 },
             },
@@ -343,81 +384,92 @@ where
                     MapArg::Scalar(e_input) => {
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let hashes: Vec<[u8; 32]> =
+                            receive_from_parties(setup, mpc_encryption, tag2, 32, vec![0], relay)
+                                .await?;
 
-                        let fs: Vec<Vec<Block>> =
-                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+                        let hashes = hashes[0];
 
-                        assert_eq!(fs[0], fs[1]);
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, mpc_encryption, tag1, len, vec![1], relay)
+                                .await?;
 
-                        let mut temp = Vec::new();
+                        let fs: Vec<Block> = tblock_vec2block_vec(&tfs[0]);
+
+                        let hashout: [u8; 32] = fs
+                            .iter()
+                            .fold(Sha256::new(), Digest::chain_update)
+                            .finalize()
+                            .into();
+
+                        if hashout != hashes {
+                            return Err(ProtocolError::VerificationError);
+                        }
+
                         let mut len = 0;
-                        circuits.iter().for_each(|circuit| {
-                            let complen =
-                                2 * circuit.num_nonfree_gates + circuit.constant_map.len();
-                            let f = fs[0][len..len + complen].to_vec();
-                            let out = yao_circuit_eval_process_msg1_p2(
-                                g_input, e_input, &f, circuit, hash,
-                            );
-                            len += complen;
-                            temp.push(out);
-                        });
-                        output = temp;
+                        output = circuits
+                            .iter()
+                            .map(|circuit| {
+                                let complen =
+                                    2 * circuit.num_nonfree_gates + circuit.constant_map.len();
+                                let f = fs[len..len + complen].to_vec();
+                                let out = yao_circuit_eval_process_msg1_p2(
+                                    g_input, e_input, &f, circuit, hash,
+                                );
+                                len += complen;
+                                out
+                            })
+                            .collect();
                     }
                     MapArg::Vector(e_inputs) => {
                         assert_eq!(e_inputs.len(), circuits.len());
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let hashes: Vec<[u8; 32]> =
+                            receive_from_parties(setup, mpc_encryption, tag2, 32, vec![0], relay)
+                                .await?;
 
-                        let fs: Vec<Vec<Block>> =
-                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+                        let hashes = hashes[0];
 
-                        assert_eq!(fs[0], fs[1]);
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, mpc_encryption, tag1, len, vec![1], relay)
+                                .await?;
 
-                        let mut temp = Vec::new();
-                        let mut len = 0;
-                        circuits
+                        let fs: Vec<Block> = tblock_vec2block_vec(&tfs[0]);
+
+                        let hashout: [u8; 32] = fs
+                            .iter()
+                            .fold(Sha256::new(), Digest::chain_update)
+                            .finalize()
+                            .into();
+
+                        if hashout != hashes {
+                            return Err(ProtocolError::VerificationError);
+                        }
+
+                        len = 0;
+                        output = circuits
                             .iter()
                             .zip(e_inputs)
-                            .for_each(|(circuit, e_input)| {
+                            .map(|(circuit, e)| {
                                 let complen =
                                     2 * circuit.num_nonfree_gates + circuit.constant_map.len();
-                                let f = fs[0][len..len + complen].to_vec();
-                                let out = yao_circuit_eval_process_msg1_p2(
-                                    g_input, e_input, &f, circuit, hash,
-                                );
+                                let f = fs[len..len + complen].to_vec();
+                                let out =
+                                    yao_circuit_eval_process_msg1_p2(g_input, e, &f, circuit, hash);
                                 len += complen;
-                                temp.push(out);
-                            });
-                        output = temp;
+                                out
+                            })
+                            .collect();
                     }
                 },
                 MapArg::Vector(g_inputs) => match e_inputs {
@@ -426,42 +478,46 @@ where
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let hashes: Vec<[u8; 32]> =
+                            receive_from_parties(setup, mpc_encryption, tag2, 32, vec![0], relay)
+                                .await?;
 
-                        let fs: Vec<Vec<Block>> =
-                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+                        let hashes = hashes[0];
 
-                        assert_eq!(fs[0], fs[1]);
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, mpc_encryption, tag1, len, vec![1], relay)
+                                .await?;
 
-                        let mut temp = Vec::new();
-                        let mut len = 0;
-                        circuits
+                        let fs: Vec<Block> = tblock_vec2block_vec(&tfs[0]);
+
+                        let hashout: [u8; 32] = fs
+                            .iter()
+                            .fold(Sha256::new(), Digest::chain_update)
+                            .finalize()
+                            .into();
+
+                        if hashout != hashes {
+                            return Err(ProtocolError::VerificationError);
+                        }
+
+                        len = 0;
+                        output = circuits
                             .iter()
                             .zip(g_inputs)
-                            .for_each(|(circuit, g_input)| {
+                            .map(|(circuit, g)| {
                                 let complen =
                                     2 * circuit.num_nonfree_gates + circuit.constant_map.len();
-                                let f = fs[0][len..len + complen].to_vec();
-                                let out = yao_circuit_eval_process_msg1_p2(
-                                    g_input, e_input, &f, circuit, hash,
-                                );
+                                let f = fs[len..len + complen].to_vec();
+                                let out =
+                                    yao_circuit_eval_process_msg1_p2(g, e_input, &f, circuit, hash);
                                 len += complen;
-                                temp.push(out);
-                            });
-                        output = temp;
+                                out
+                            })
+                            .collect();
                     }
                     MapArg::Vector(e_inputs) => {
                         assert_eq!(g_inputs.len(), circuits.len());
@@ -469,41 +525,46 @@ where
 
                         let mut len = 0;
                         for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
+                            len += (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
                                 * BLOCK_SIZE;
                         }
 
-                        let tfs: Vec<Vec<TBlock>> = receive_from_parties(
-                            setup,
-                            mpc_encryption,
-                            tag1,
-                            len,
-                            vec![0, 1],
-                            relay,
-                        )
-                        .await?;
+                        let hashes: Vec<[u8; 32]> =
+                            receive_from_parties(setup, mpc_encryption, tag2, 32, vec![0], relay)
+                                .await?;
 
-                        let fs: Vec<Vec<Block>> =
-                            tfs.iter().map(|f| tblock_vec2block_vec(f)).collect();
+                        let hashes = hashes[0];
 
-                        assert_eq!(fs[0], fs[1]);
+                        let tfs: Vec<Vec<TBlock>> =
+                            receive_from_parties(setup, mpc_encryption, tag1, len, vec![1], relay)
+                                .await?;
 
-                        let mut temp = Vec::new();
-                        let mut len = 0;
-                        circuits.iter().zip(g_inputs).zip(e_inputs).for_each(
-                            |((circuit, g_input), e_input)| {
+                        let fs: Vec<Block> = tblock_vec2block_vec(&tfs[0]);
+
+                        let hashout: [u8; 32] = fs
+                            .iter()
+                            .fold(Sha256::new(), Digest::chain_update)
+                            .finalize()
+                            .into();
+
+                        if hashout != hashes {
+                            return Err(ProtocolError::VerificationError);
+                        }
+
+                        len = 0;
+                        output = circuits
+                            .iter()
+                            .zip(g_inputs)
+                            .zip(e_inputs)
+                            .map(|((circuit, g), e)| {
                                 let complen =
                                     2 * circuit.num_nonfree_gates + circuit.constant_map.len();
-                                let f = fs[0][len..len + complen].to_vec();
-                                let out = yao_circuit_eval_process_msg1_p2(
-                                    g_input, e_input, &f, circuit, hash,
-                                );
+                                let f = fs[len..len + complen].to_vec();
+                                let out = yao_circuit_eval_process_msg1_p2(g, e, &f, circuit, hash);
                                 len += complen;
-                                temp.push(out);
-                            },
-                        );
-                        output = temp;
+                                out
+                            })
+                            .collect();
                     }
                 },
             },
@@ -516,9 +577,18 @@ where
                         let (f, out) = yao_circuit_eval_create_msg1_p01(
                             g_input, e_input, yao_setup, circuit, rng, hash,
                         );
-                        let tf = block_vec2tblock_vec(&f);
 
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+                        if party_id == 0 {
+                            let hashval: [u8; 32] = f
+                                .iter()
+                                .fold(Sha256::new(), Digest::chain_update)
+                                .finalize()
+                                .into();
+                            send_to_party(setup, mpc_encryption, tag2, hashval, 2, relay).await?;
+                        } else {
+                            let tf = block_vec2tblock_vec(&f);
+                            send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
+                        }
 
                         let temp = out;
                         output.push(temp);
@@ -533,22 +603,21 @@ where
                             })
                             .collect();
 
-                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
-                            * BLOCK_SIZE
-                            * e_inputs.len();
+                        let fvec = f.iter().flatten().cloned().collect::<Vec<_>>();
 
-                        let mut fvec = Vec::with_capacity(len);
-                        for vec in f {
-                            for b in vec {
-                                fvec.push(b);
-                            }
+                        if party_id == 0 {
+                            let hashval: [u8; 32] = fvec
+                                .iter()
+                                .fold(Sha256::new(), Digest::chain_update)
+                                .finalize()
+                                .into();
+                            send_to_party(setup, mpc_encryption, tag2, hashval, 2, relay).await?;
+                        } else {
+                            let tf = block_vec2tblock_vec(&fvec);
+                            send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
                         }
-                        let tf = block_vec2tblock_vec(&fvec);
 
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
-
-                        let temp = out;
-                        output = temp;
+                        output = out;
                     }
                 },
                 MapArg::Vector(g_inputs) => match e_inputs {
@@ -562,22 +631,21 @@ where
                             })
                             .collect();
 
-                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
-                            * BLOCK_SIZE
-                            * g_inputs.len();
+                        let fvec = f.iter().flatten().cloned().collect::<Vec<_>>();
 
-                        let mut fvec = Vec::with_capacity(len);
-                        for vec in f {
-                            for b in vec {
-                                fvec.push(b);
-                            }
+                        if party_id == 0 {
+                            let hashval: [u8; 32] = fvec
+                                .iter()
+                                .fold(Sha256::new(), Digest::chain_update)
+                                .finalize()
+                                .into();
+                            send_to_party(setup, mpc_encryption, tag2, hashval, 2, relay).await?;
+                        } else {
+                            let tf = block_vec2tblock_vec(&fvec);
+                            send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
                         }
-                        let tf = block_vec2tblock_vec(&fvec);
 
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
-
-                        let temp = out;
-                        output = temp;
+                        output = out;
                     }
                     MapArg::Vector(e_inputs) => {
                         assert_eq!(e_inputs.len(), g_inputs.len());
@@ -591,22 +659,21 @@ where
                             })
                             .collect();
 
-                        let len = (2 * circuit.num_nonfree_gates + circuit.constant_map.len())
-                            * BLOCK_SIZE
-                            * g_inputs.len();
+                        let fvec = f.iter().flatten().cloned().collect::<Vec<_>>();
 
-                        let mut fvec = Vec::with_capacity(len);
-                        for vec in f {
-                            for b in vec {
-                                fvec.push(b);
-                            }
+                        if party_id == 0 {
+                            let hashval: [u8; 32] = fvec
+                                .iter()
+                                .fold(Sha256::new(), Digest::chain_update)
+                                .finalize()
+                                .into();
+                            send_to_party(setup, mpc_encryption, tag2, hashval, 2, relay).await?;
+                        } else {
+                            let tf = block_vec2tblock_vec(&fvec);
+                            send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
                         }
-                        let tf = block_vec2tblock_vec(&fvec);
 
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
-
-                        let temp = out;
-                        output = temp;
+                        output = out;
                     }
                 },
             },
@@ -622,25 +689,21 @@ where
                             })
                             .collect();
 
-                        let mut len = 0;
-                        for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
-                                * BLOCK_SIZE;
+                        let fvec = f.iter().flatten().cloned().collect::<Vec<_>>();
+
+                        if party_id == 0 {
+                            let hashval: [u8; 32] = fvec
+                                .iter()
+                                .fold(Sha256::new(), Digest::chain_update)
+                                .finalize()
+                                .into();
+                            send_to_party(setup, mpc_encryption, tag2, hashval, 2, relay).await?;
+                        } else {
+                            let tf = block_vec2tblock_vec(&fvec);
+                            send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
                         }
 
-                        let mut fvec = Vec::with_capacity(len);
-                        for vec in f {
-                            for b in vec {
-                                fvec.push(b);
-                            }
-                        }
-                        let tf = block_vec2tblock_vec(&fvec);
-
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
-
-                        let temp = out;
-                        output = temp;
+                        output = out;
                     }
                     MapArg::Vector(e_inputs) => {
                         assert_eq!(e_inputs.len(), circuits.len());
@@ -654,25 +717,21 @@ where
                             })
                             .collect();
 
-                        let mut len = 0;
-                        for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
-                                * BLOCK_SIZE;
+                        let fvec = f.iter().flatten().cloned().collect::<Vec<_>>();
+
+                        if party_id == 0 {
+                            let hashval: [u8; 32] = fvec
+                                .iter()
+                                .fold(Sha256::new(), Digest::chain_update)
+                                .finalize()
+                                .into();
+                            send_to_party(setup, mpc_encryption, tag2, hashval, 2, relay).await?;
+                        } else {
+                            let tf = block_vec2tblock_vec(&fvec);
+                            send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
                         }
 
-                        let mut fvec = Vec::with_capacity(len);
-                        for vec in f {
-                            for b in vec {
-                                fvec.push(b);
-                            }
-                        }
-                        let tf = block_vec2tblock_vec(&fvec);
-
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
-
-                        let temp = out;
-                        output = temp;
+                        output = out;
                     }
                 },
                 MapArg::Vector(g_inputs) => match e_inputs {
@@ -688,25 +747,21 @@ where
                             })
                             .collect();
 
-                        let mut len = 0;
-                        for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
-                                * BLOCK_SIZE;
+                        let fvec = f.iter().flatten().cloned().collect::<Vec<_>>();
+
+                        if party_id == 0 {
+                            let hashval: [u8; 32] = fvec
+                                .iter()
+                                .fold(Sha256::new(), Digest::chain_update)
+                                .finalize()
+                                .into();
+                            send_to_party(setup, mpc_encryption, tag2, hashval, 2, relay).await?;
+                        } else {
+                            let tf = block_vec2tblock_vec(&fvec);
+                            send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
                         }
 
-                        let mut fvec = Vec::with_capacity(len);
-                        for vec in f {
-                            for b in vec {
-                                fvec.push(b);
-                            }
-                        }
-                        let tf = block_vec2tblock_vec(&fvec);
-
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
-
-                        let temp = out;
-                        output = temp;
+                        output = out;
                     }
                     MapArg::Vector(e_inputs) => {
                         assert_eq!(e_inputs.len(), circuits.len());
@@ -722,25 +777,21 @@ where
                             })
                             .collect();
 
-                        let mut len = 0;
-                        for circuit in circuits {
-                            len += (2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len())
-                                * BLOCK_SIZE;
+                        let fvec = f.iter().flatten().cloned().collect::<Vec<_>>();
+
+                        if party_id == 0 {
+                            let hashval: [u8; 32] = fvec
+                                .iter()
+                                .fold(Sha256::new(), Digest::chain_update)
+                                .finalize()
+                                .into();
+                            send_to_party(setup, mpc_encryption, tag2, hashval, 2, relay).await?;
+                        } else {
+                            let tf = block_vec2tblock_vec(&fvec);
+                            send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
                         }
 
-                        let mut fvec = Vec::with_capacity(len);
-                        for vec in f {
-                            for b in vec {
-                                fvec.push(b);
-                            }
-                        }
-                        let tf = block_vec2tblock_vec(&fvec);
-
-                        send_to_party(setup, mpc_encryption, tag1, tf, 2, relay).await?;
-
-                        let temp = out;
-                        output = temp;
+                        output = out;
                     }
                 },
             },
