@@ -3,7 +3,7 @@
 
 use derivation_path::{ChildIndex, DerivationPath};
 use k256::{NonZeroScalar, ProjectivePoint, Scalar};
-use rand::{RngCore, SeedableRng, rngs::StdRng};
+use rand::{rngs::StdRng, RngCore, SeedableRng};
 
 use sl_compute_common::CommonRandomness;
 use sl_messages::relay::Relay;
@@ -14,7 +14,7 @@ use garbled_circuit::{
         input::run_batch_input_from_all_yao,
         output::{batch_output_yao_functionality, output_yao_functionality},
         setup::setup_yao_functionality,
-        utils::{FilteredMsgRelay, run_common_randomness},
+        utils::{run_common_randomness, FilteredMsgRelay},
     },
     utilities::{
         commitments::{Commitment, HashCommitment},
@@ -315,12 +315,12 @@ mod tests {
     use garbled_circuit::functionality::utils_dep::ProtocolParticipant;
     use hmac::{Hmac, Mac};
     use k256::elliptic_curve::bigint::Encoding;
-    use k256::elliptic_curve::{Curve, ops::Reduce};
-    use k256::{FieldBytes, NonZeroScalar};
+    use k256::elliptic_curve::{ops::Reduce, Curve};
     use k256::{
-        ProjectivePoint, Scalar, Secp256k1, U256,
-        elliptic_curve::sec1::ToEncodedPoint,
+        elliptic_curve::sec1::ToEncodedPoint, ProjectivePoint, Scalar,
+        Secp256k1, U256,
     };
+    use k256::{FieldBytes, NonZeroScalar};
     use rand::rngs::StdRng;
     use rand::{RngCore, SeedableRng};
     use sl_messages::relay::{Relay, SimpleMessageRelay};
@@ -481,7 +481,7 @@ mod tests {
                 println!("error {err:?}");
             } else {
                 match fini.unwrap() {
-                    Err(err) => panic!("err {:?}", err),
+                    Err(err) => panic!("err {err:?}"),
                     Ok(share) => shares.push(share),
                 }
             }
@@ -618,7 +618,7 @@ mod tests {
                 println!("error {err:?}");
             } else {
                 match fini.unwrap() {
-                    Err(err) => panic!("err {:?}", err),
+                    Err(err) => panic!("err {err:?}"),
                     Ok(share) => shares.push(share),
                 }
             }

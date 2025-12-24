@@ -9,6 +9,9 @@ on:
     branches:
     - main
 
+env:
+  CARGO_REGISTRIES_SL_TOKEN: ${{ secrets.CARGO_REGISTRIES_SL_TOKEN }}
+  CARGO_REGISTRIES_SL_INDEX: https://git.shipyard.rs/silencelaboratories/crate-index.git
 
 jobs:
   lints:
@@ -19,7 +22,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@1.86
+        uses: dtolnay/rust-toolchain@1.88
         with:
           components: rustfmt clippy
 
@@ -32,7 +35,7 @@ jobs:
           cargo fmt --all -- --check
 
       - name: Run cargo clippy
-        run: cargo clippy --all --workspace -- -D warnings
+        run: cargo clippy --all --workspace --locked -- -D warnings
 
   build-and-test:
     name: Rust tests
@@ -43,10 +46,10 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@1.86
+        uses: dtolnay/rust-toolchain@1.88
 
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "build"
 
-      - run: cargo test --tests --all --release
+      - run: cargo test --tests --all --release --locked

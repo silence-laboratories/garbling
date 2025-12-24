@@ -191,7 +191,7 @@ impl<'a, R: Relay> Round<'a, R> {
             if msg.is_err() {
                 for (id, (p, t)) in &self.relay.expected {
                     if t == &self.tag {
-                        eprintln!("waiting for {:X} {} {:?}", id, p, t);
+                        eprintln!("waiting for {id:X} {p} {t:?}");
                     }
                 }
             }

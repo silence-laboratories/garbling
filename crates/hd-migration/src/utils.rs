@@ -3,7 +3,8 @@
 
 #[cfg(any(test, feature = "test-support"))]
 use garbled_circuit::functionality::utils::SetupMessage;
-use k256::{NonZeroScalar, Scalar, elliptic_curve::subtle::ConstantTimeEq};
+
+use k256::{elliptic_curve::subtle::ConstantTimeEq, NonZeroScalar, Scalar};
 
 use crate::types::HardDerivationError;
 

@@ -4,8 +4,8 @@
 use derivation_path::ChildIndex;
 use hmac::{Hmac, Mac};
 use k256::{
-    ProjectivePoint, U256,
     elliptic_curve::{bigint::Encoding, sec1::ToEncodedPoint},
+    ProjectivePoint, U256,
 };
 
 use sl_compute_common::BinaryString;

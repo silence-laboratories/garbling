@@ -505,7 +505,7 @@ where
                 return Err(ProtocolError::InconsistentMessage);
             }
 
-            let (com_1f, com_1t, com_2f, com_2t) = &msg[0][0].0;
+            let (com_1f, com_1t, com_2f, com_2t) = &msg[0][i].0;
 
             let (label_1, witness_1) = &msg[0][i].1;
             let (label_2, witness_2) = &msg[1][i].1;

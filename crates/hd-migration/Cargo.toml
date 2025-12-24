@@ -1,30 +1,27 @@
 [package]
 name = "hd-migration"
-version = "0.1.0"
-edition = "2024"
-
+version = "1.1.0"
+edition = "2021"
+rust-version = "1.88"
+publish = [ "sl" ]
 
 [dependencies]
-garbled-circuit = { path = "../.." }
-
+derivation-path = { workspace = true }
+garbled-circuit = { workspace = true }
+group = { workspace = true }
+hmac = { workspace = true }
+k256 = { workspace = true, features = ["arithmetic"] }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+sha2 = { workspace = true }
+signature = { workspace = true }
 sl-compute-common = { workspace = true }
-sl-mpc-mate = { workspace = true }
 sl-messages = { workspace = true }
-
-derivation-path = "0.2.0"
-group = "0.13.0"
-hmac = { version = "0.12.1" }
-k256 = { version = "0.13", features = ["arithmetic"] }
-rand = "0.8"
-rand_chacha = "0.3"
-sha2 = "0.10.8"
-signature = { version = "2.2.0" }
-thiserror = "1.0"
+thiserror = { workspace = true }
 
 [dev-dependencies]
 hex = "0.4"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
-
 [features]
-test-support = ["sl-mpc-mate/simple-relay"]
+test-support = []
