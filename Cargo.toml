@@ -36,13 +36,17 @@ signature = { version = "2.2.0" }
 thiserror = "1.0"
 generic-array = { workspace = true }
 
-sl-compute-common = { git = "https://github.com/silence-laboratories/sl-crypto.git", branch = "sl-compute-common" }
-sl-messages = { git = "https://github.com/silence-laboratories/sl-crypto.git", rev = "804ae2b" }
-sl-mpc-mate = { git = "https://github.com/silence-laboratories/sl-crypto.git", rev = "804ae2b" }
+sl-compute-common = { workspace = true }
+sl-mpc-mate = { workspace = true }
+sl-messages = { workspace = true }
 
 [workspace.dependencies]
 tokio = "1.43.0"
 generic-array = { version = "=0.14.7" }
+
+sl-compute-common = { git = "https://github.com/silence-laboratories/sl-crypto.git", rev = "29f48e1" }
+sl-mpc-mate = { git = "https://github.com/silence-laboratories/sl-crypto.git", rev = "29f48e1" }
+sl-messages = { git = "https://github.com/silence-laboratories/sl-crypto.git", rev = "29f48e1" }
 
 [workspace]
 members = [
