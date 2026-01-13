@@ -99,7 +99,7 @@ mod tests {
         },
     };
     use k256::{ProjectivePoint, Scalar};
-    use rand::{RngCore, SeedableRng, rngs};
+    use rand::{rngs, RngCore, SeedableRng};
 
     use sl_messages::relay::{Relay, SimpleMessageRelay};
 
@@ -217,7 +217,7 @@ mod tests {
                 println!("error {err:?}");
             } else {
                 match fini.unwrap() {
-                    Err(err) => panic!("err {:?}", err),
+                    Err(err) => panic!("err {err:?}"),
                     Ok(share) => shares.push(share),
                 }
             }

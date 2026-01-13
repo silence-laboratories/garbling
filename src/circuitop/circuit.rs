@@ -306,22 +306,19 @@ impl BinaryCircuit {
         for gate in &self.gates {
             match gate {
                 BinaryGate::Input { no, id, wire } => {
-                    println!("Input: no: {} id: {} wire: {}", no, id, wire)
+                    println!("Input: no: {no} id: {id} wire: {wire}")
                 }
 
                 BinaryGate::Constant { val, wire: _ } => {
-                    println!("Constantinput: val: {}", val)
+                    println!("Constantinput: val: {val}")
                 }
 
                 BinaryGate::Inv { xid, out } => {
-                    println!("InverseGate: inp: {} output: {}", xid, out)
+                    println!("InverseGate: inp: {xid} output: {out}")
                 }
 
                 BinaryGate::Xor { xid, yid, out } => {
-                    println!(
-                        "XorGate: inp1: {} inp2: {} output: {}",
-                        xid, yid, out
-                    )
+                    println!("XorGate: inp1: {xid} inp2: {yid} output: {out}")
                 }
 
                 BinaryGate::And {
@@ -329,10 +326,9 @@ impl BinaryCircuit {
                     yid,
                     id: _,
                     out,
-                } => println!(
-                    "AndGate: inp1: {} inp2: {} output: {}",
-                    xid, yid, out
-                ),
+                } => {
+                    println!("AndGate: inp1: {xid} inp2: {yid} output: {out}")
+                }
             };
         }
 

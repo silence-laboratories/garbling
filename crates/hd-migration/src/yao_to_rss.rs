@@ -2,12 +2,12 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use k256::{
-    AffinePoint, EncodedPoint, FieldBytes, ProjectivePoint, Scalar,
     elliptic_curve::{
-        PrimeField,
         group::GroupEncoding,
         sec1::{FromEncodedPoint, ToEncodedPoint},
+        PrimeField,
     },
+    AffinePoint, EncodedPoint, FieldBytes, ProjectivePoint, Scalar,
 };
 use rand::{CryptoRng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -16,8 +16,8 @@ use sl_messages::relay::Relay;
 
 use garbled_circuit::{
     functionality::utils::{
-        FilteredMsgRelay, FixedExternalSize, Wrap, receive_from_one_party,
-        receive_from_parties, send_to_party,
+        receive_from_one_party, receive_from_parties, send_to_party,
+        FilteredMsgRelay, FixedExternalSize, Wrap,
     },
     utilities::types::{YaoEvaluatorShare, YaoGarblerShare, YaoShare},
 };
@@ -977,7 +977,7 @@ mod tests {
         utilities::types::YaoShare,
     };
     use k256::{ProjectivePoint, Scalar};
-    use rand::{Rng, SeedableRng, rngs};
+    use rand::{rngs, Rng, SeedableRng};
 
     use sl_messages::relay::{Relay, SimpleMessageRelay};
 
@@ -1092,7 +1092,7 @@ mod tests {
                 println!("error {err:?}");
             } else {
                 match fini.unwrap() {
-                    Err(err) => panic!("err {:?}", err),
+                    Err(err) => panic!("err {err:?}"),
                     Ok(share) => shares.push(share),
                 }
             }
@@ -1148,7 +1148,7 @@ mod tests {
                 println!("error {err:?}");
             } else {
                 match fini.unwrap() {
-                    Err(err) => panic!("err {:?}", err),
+                    Err(err) => panic!("err {err:?}"),
                     Ok(share) => shares.push(share),
                 }
             }

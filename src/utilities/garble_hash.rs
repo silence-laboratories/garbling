@@ -2,10 +2,9 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use aes::{
-    cipher::{generic_array::GenericArray, BlockEncrypt},
+    cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit},
     Aes128,
 };
-use aes_gcm::KeyInit;
 
 use crate::utilities::{
     hash_function::HashFunction,

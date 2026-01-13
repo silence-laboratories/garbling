@@ -174,7 +174,7 @@ mod tests {
 
         println!("cir: gates.len() {}", circuit.gates.len());
         let nonfree = circuit.get_num_nonfree_gates();
-        println!("cir: num_nonfree_gates {}", nonfree);
+        println!("cir: num_nonfree_gates {nonfree}");
         println!("cir: constant_map.len() {}", circuit.constant_map.len());
         println!(
             "cir: 2*constant_map.len() + num_nonfree_gates {}",
@@ -215,7 +215,7 @@ mod tests {
 
         println!("cir: gates.len() {}", circuit.gates.len());
         let nonfree = circuit.get_num_nonfree_gates();
-        println!("cir: num_nonfree_gates {}", nonfree);
+        println!("cir: num_nonfree_gates {nonfree}");
         println!("cir: constant_map.len() {}", circuit.constant_map.len());
         println!(
             "cir: 2*constant_map.len() + num_nonfree_gates {}",

@@ -6,7 +6,7 @@ use k256::{NonZeroScalar, Scalar};
 use sl_messages::relay::Relay;
 
 use garbled_circuit::functionality::utils::{
-    FilteredMsgRelay, receive_from_one_party, send_to_party,
+    receive_from_one_party, send_to_party, FilteredMsgRelay,
 };
 
 use crate::{
@@ -78,7 +78,7 @@ mod tests {
 
     use garbled_circuit::functionality::utils::FilteredMsgRelay;
     use k256::{NonZeroScalar, Scalar};
-    use rand::{CryptoRng, RngCore, SeedableRng, rngs};
+    use rand::{rngs, CryptoRng, RngCore, SeedableRng};
 
     use sl_messages::relay::{Relay, SimpleMessageRelay};
 
@@ -157,7 +157,7 @@ mod tests {
                 println!("error {err:?}");
             } else {
                 match fini.unwrap() {
-                    Err(err) => panic!("err {:?}", err),
+                    Err(err) => panic!("err {err:?}"),
                     Ok(share) => shares.push(share),
                 }
             }

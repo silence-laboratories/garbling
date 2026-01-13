@@ -25,7 +25,7 @@ pub fn bool_vec_to_hex(vec: Vec<bool>) -> String {
         }
 
         // Convert the 4-bit value to a hex digit
-        hex_string.push_str(&format!("{:x}", value));
+        hex_string.push_str(&format!("{value:x}"));
     }
 
     hex_string

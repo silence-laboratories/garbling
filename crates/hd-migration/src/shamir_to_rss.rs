@@ -108,12 +108,12 @@ pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
 #[cfg(test)]
 mod tests {
     use garbled_circuit::functionality::utils::{
-        FilteredMsgRelay, run_common_randomness,
+        run_common_randomness, FilteredMsgRelay,
     };
     use k256::{NonZeroScalar, ProjectivePoint, Scalar};
     use rand::{
-        CryptoRng, RngCore, SeedableRng,
         rngs::{self, StdRng},
+        CryptoRng, RngCore, SeedableRng,
     };
 
     use sl_messages::relay::{Relay, SimpleMessageRelay};
@@ -201,7 +201,7 @@ mod tests {
                 println!("error {err:?}");
             } else {
                 match fini.unwrap() {
-                    Err(err) => panic!("err {:?}", err),
+                    Err(err) => panic!("err {err:?}"),
                     Ok(share) => shares.push(share),
                 }
             }

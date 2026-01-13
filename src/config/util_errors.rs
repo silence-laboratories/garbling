@@ -18,8 +18,7 @@ impl std::fmt::Display for HashError {
         match self {
             HashError::InvalidInputLengthError(ideal, real) => write!(
                 f,
-                "InvalidInputLengthError: required=%{} obtained={}",
-                ideal, real
+                "InvalidInputLengthError: required=%{ideal} obtained={real}"
             ),
         }
     }

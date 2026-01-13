@@ -741,7 +741,7 @@ mod tests {
             }
             let hexout = bool_vec_to_hex(opt);
             if setup.participant_index() == 0 {
-                println!("{}", hexout);
+                println!("{hexout}");
             }
         }
 
@@ -767,7 +767,7 @@ mod tests {
             }
             let hexout = bool_vec_to_hex(opt);
             if setup.participant_index() == 0 {
-                println!("{}", hexout);
+                println!("{hexout}");
             }
         }
 
@@ -793,7 +793,7 @@ mod tests {
             }
             let hexout = bool_vec_to_hex(opt);
             if setup.participant_index() == 0 {
-                println!("{}", hexout);
+                println!("{hexout}");
             }
         }
 
@@ -1136,7 +1136,7 @@ mod tests {
             let fini = fini.unwrap();
 
             if let Err(ref err) = fini {
-                println!("error {}", err);
+                println!("error {err}");
             }
 
             let res = fini.unwrap();
@@ -1171,29 +1171,25 @@ mod tests {
                     assert_eq!(
                         hexout,
                         "74d42c539a5f3211dc3451f72bd29766".to_string(),
-                        "outval: {} realval: 74d42c539a5f3211dc3451f72bd29766",
-                        hexout
+                        "outval: {hexout} realval: 74d42c539a5f3211dc3451f72bd29766"
                     );
                 } else if count == 2 {
                     assert_eq!(
                         hexout,
                         "3493fd1ca2122691b3fabee131a46f85".to_string(),
-                        "outval: {} realval: 3493fd1ca2122691b3fabee131a46f85",
-                        hexout
+                        "outval: {hexout} realval: 3493fd1ca2122691b3fabee131a46f85"
                     );
                 } else if count == 1 {
                     assert_eq!(
                         hexout,
                         "7266b17c4be2ce5f505aa1579331dafc".to_string(),
-                        "outval: {} realval: 7266b17c4be2ce5f505aa1579331dafc",
-                        hexout
+                        "outval: {hexout} realval: 7266b17c4be2ce5f505aa1579331dafc"
                     );
                 } else if count == 3 {
                     assert_eq!(
                         hexout,
                         "9e9d5c984a0e8a4d0cf3014d3e84fd3d".to_string(),
-                        "outval: {} realval: 9e9d5c984a0e8a4d0cf3014d3e84fd3d",
-                        hexout
+                        "outval: {hexout} realval: 9e9d5c984a0e8a4d0cf3014d3e84fd3d"
                     );
                 }
             }

@@ -224,10 +224,10 @@ mod tests {
     };
     use hmac::{Hmac, Mac};
     use k256::{
+        elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint, Curve},
         ProjectivePoint, Scalar, Secp256k1, U256,
-        elliptic_curve::{Curve, ops::Reduce, sec1::ToEncodedPoint},
     };
-    use rand::{Rng, SeedableRng, rngs::StdRng};
+    use rand::{rngs::StdRng, Rng, SeedableRng};
     use sha2::{Digest, Sha256};
     use sl_messages::relay::{Relay, SimpleMessageRelay};
 
@@ -439,7 +439,7 @@ mod tests {
                 println!("error {err:?}");
             } else {
                 match fini.unwrap() {
-                    Err(err) => panic!("err {:?}", err),
+                    Err(err) => panic!("err {err:?}"),
                     Ok(share) => shares.push(share),
                 }
             }
@@ -491,7 +491,7 @@ mod tests {
                 println!("error {err:?}");
             } else {
                 match fini.unwrap() {
-                    Err(err) => panic!("err {:?}", err),
+                    Err(err) => panic!("err {err:?}"),
                     Ok(share) => shares.push(share),
                 }
             }

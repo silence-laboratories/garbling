@@ -2,8 +2,8 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use group::{
-    Group, GroupEncoding,
     ff::{Field, PrimeField},
+    Group, GroupEncoding,
 };
 use k256::{ProjectivePoint, Scalar};
 use rand::{CryptoRng, RngCore};
@@ -150,15 +150,15 @@ mod tests {
             input::batch_input_yao_functionality,
             setup::setup_yao_functionality,
             utils::{
-                FilteredMsgRelay, receive_from_one_party,
-                receive_from_parties, send_to_party,
+                receive_from_one_party, receive_from_parties, send_to_party,
+                FilteredMsgRelay,
             },
         },
         utilities::types::{YaoEvaluatorShare, YaoGarblerShare, YaoSetup},
     };
     use k256::{ProjectivePoint, Scalar};
     use sha2::{Digest, Sha512};
-    use sl_compute_common::{BinaryString, binary_string_to_u8_vec};
+    use sl_compute_common::{binary_string_to_u8_vec, BinaryString};
     use sl_messages::{
         message::MessageTag,
         relay::{Relay, SimpleMessageRelay},
@@ -167,8 +167,8 @@ mod tests {
     use crate::{
         arith_gadget::{decode_gadget, evaluate_gadget, garble_gadget},
         types::{
-            HardDerivationError, ProtocolParticipant, ScalarVal,
             vec_scalar_2_scalarvals, vec_scalarval_2_scalars,
+            HardDerivationError, ProtocolParticipant, ScalarVal,
         },
         utils::{run_init, u8_vec_to_bool_vec},
     };
@@ -283,7 +283,7 @@ mod tests {
                 println!("error {err:?}");
             } else {
                 match fini.unwrap() {
-                    Err(err) => panic!("err {:?}", err),
+                    Err(err) => panic!("err {err:?}"),
                     Ok(share) => shares.push(Arc::new(share)),
                 }
             }

@@ -725,7 +725,7 @@ mod tests {
             let fini = fini.unwrap();
 
             if let Err(ref err) = fini {
-                println!("error {}", err);
+                println!("error {err}");
             }
 
             let res = fini.unwrap();

@@ -1,9 +1,9 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use group::{Group, GroupEncoding, ff::PrimeField};
+use group::{ff::PrimeField, Group, GroupEncoding};
 use k256::{
-    FieldBytes, ProjectivePoint, Scalar, elliptic_curve::ops::Reduce,
+    elliptic_curve::ops::Reduce, FieldBytes, ProjectivePoint, Scalar,
 };
 
 use sl_compute_common::CommonRandomness;

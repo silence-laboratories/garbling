@@ -1,9 +1,10 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use aes::cipher::BlockEncrypt;
-use aes::Aes128;
-use aes_gcm::{aead::generic_array::GenericArray, KeyInit};
+use aes::{
+    cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit},
+    Aes128,
+};
 
 use crate::utilities::types::BLOCK_SIZE;
 
@@ -173,7 +174,7 @@ mod tests {
         let output1 = function.get_hash(&input1);
         let output2 = function.get_hash(&input2);
 
-        println!("o1 {:?}\n\no2{:?}", output1, output2);
+        println!("o1 {output1:?}\n\no2{output2:?}");
 
         let required_output1 = [
             54, 218, 6, 139, 23, 154, 34, 92, 216, 91, 41, 177, 156, 76, 101,
