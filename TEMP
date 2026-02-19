@@ -1,0 +1,22 @@
+
+running 1 test
+test get_circuit::tests::test_get_circuit_1 ... FAILED
+
+successes:
+
+successes:
+
+failures:
+
+---- get_circuit::tests::test_get_circuit_1 stdout ----
+
+thread 'get_circuit::tests::test_get_circuit_1' panicked at crates/wots/src/get_circuit.rs:132:44:
+no entry found for key
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    get_circuit::tests::test_get_circuit_1
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+

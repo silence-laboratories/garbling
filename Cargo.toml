@@ -4,7 +4,6 @@ version = "1.1.0"
 edition = "2021"
 rust-version = "1.88"
 readme = "README.md"
-publish = [ "sl" ]
 include = [
   "/benches",
   "/circuits",
@@ -58,12 +57,12 @@ signature = { version = "2.2.0" }
 thiserror = "1.0"
 tokio = "1.43.0"
 
-garbled-circuit = { path = "./", version = "1.1.0", registry = "sl" }
+garbled-circuit = { path = "./", version = "1.1.0"}
 sl-compute-common = { version = "1.1.0" }
 sl-messages = { version = "1.1.0" }
 
 [workspace]
 members = [
     ".",
-    "crates/hd-migration",
+    "crates/hd-migration", "crates/wots",
 ]
