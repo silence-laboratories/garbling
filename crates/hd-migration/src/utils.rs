@@ -118,12 +118,17 @@ pub fn run_init(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
         .into_iter()
         .enumerate()
         .map(|(party_id, sk)| {
-            SetupMessage::new(InstanceId::new(instance), sk, party_id, party_vk.clone())
-                .with_ttl(Duration::from_secs(1000)) // for dkls-metrics benchmarks
+            SetupMessage::new(
+                InstanceId::new(instance),
+                sk,
+                party_id,
+                party_vk.clone(),
+            )
+            .with_ttl(Duration::from_secs(1000))
         })
         .map(|setup| {
-            use garbled_circuit::functionality::utils_dep::ProtocolParticipant;
             use sha2::{Digest, Sha256};
+            use sl_messages::setup::ProtocolParticipant;
 
             let mixin = [setup.participant_index() as u8 + 1];
 

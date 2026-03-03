@@ -17,13 +17,12 @@ use sl_messages::{
     message::{InstanceId, MessageTag, MsgHdr, MsgId},
     pairs::Pairs,
     relay::{MessageSendError, Relay},
+    setup::ProtocolParticipant,
     signed::SignedMessage,
     BytesMut,
 };
 
-use crate::functionality::utils_dep::{
-    Error, ProtocolError, ProtocolParticipant,
-};
+use crate::functionality::utils_dep::{Error, ProtocolError};
 
 /// custom message relay
 pub struct FilteredMsgRelay<R> {
@@ -615,7 +614,7 @@ pub fn run_init(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
                 party_id,
                 party_vk.clone(),
             )
-            .with_ttl(Duration::from_secs(1000)) // for dkls-metrics benchmarks
+            .with_ttl(Duration::from_secs(1000))
         })
         .map(|setup| {
             use sha2::{Digest, Sha256};

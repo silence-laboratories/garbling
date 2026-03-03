@@ -17,7 +17,7 @@ use garbled_circuit::{
     utilities::types::YaoShare,
 };
 
-pub use garbled_circuit::functionality::utils_dep::ProtocolParticipant;
+pub use sl_messages::setup::ProtocolParticipant;
 
 /// Trait to convert any random byte array into a Group scalar.
 /// The input bytes need not necessarily be the byte representation of the scalar.

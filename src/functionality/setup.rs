@@ -5,13 +5,13 @@ use rand::prelude::*;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use sl_messages::relay::Relay;
+use sl_messages::{relay::Relay, setup::ProtocolParticipant};
 
 use crate::{
     config::constants::{SETUP_YAO_FUNC_MSG1, SETUP_YAO_FUNC_MSG2},
     functionality::{
         utils::{receive_from_one_party, send_to_party, FilteredMsgRelay},
-        utils_dep::{ProtocolError, ProtocolParticipant},
+        utils_dep::ProtocolError,
     },
     utilities::types::{Block, EvaluatorSetup, GarblerSetup, YaoSetup},
 };

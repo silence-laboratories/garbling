@@ -4,7 +4,7 @@
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 
 use sl_compute_common::BinaryShare;
-use sl_messages::relay::Relay;
+use sl_messages::{relay::Relay, setup::ProtocolParticipant};
 
 use crate::{
     config::constants::{
@@ -15,7 +15,7 @@ use crate::{
             receive_from_one_party, receive_from_parties, send_to_party,
             Byte, FilteredMsgRelay,
         },
-        utils_dep::{ProtocolError, ProtocolParticipant},
+        utils_dep::ProtocolError,
     },
     utilities::{
         commitments::Commitment,
@@ -443,13 +443,14 @@ mod tests {
                 p2p_send_to_next_receive_from_prev, run_common_randomness,
                 FilteredMsgRelay, SetupMessage,
             },
-            utils_dep::{ProtocolError, ProtocolParticipant},
+            utils_dep::ProtocolError,
         },
         utilities::{
             commitments::HashCommitment, garble_hash::AesGarbleHash,
             shahash::Sha512Hash, types::YaoSetup, utils::bool_vec_to_hex,
         },
     };
+    use sl_messages::setup::ProtocolParticipant;
 
     use super::{
         batch_yao_to_binary_functionality, yao_to_binary_functionality,
