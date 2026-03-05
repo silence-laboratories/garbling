@@ -255,6 +255,7 @@ mod tests {
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
+        relay.init_abort(&setup).await?;
 
         let mut yao_setup =
             setup_yao_functionality(&setup, &mut relay).await?;
@@ -313,6 +314,7 @@ mod tests {
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
+        relay.init_abort(&setup).await?;
 
         let mut yao_setup =
             setup_yao_functionality(&setup, &mut relay).await?;

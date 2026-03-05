@@ -1,12 +1,7 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use std::{
-    collections::HashMap,
-    marker::PhantomData,
-    ops::{Deref, DerefMut},
-    time::Duration,
-};
+use std::{marker::PhantomData, time::Duration};
 
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -14,22 +9,24 @@ use signature::{SignatureEncoding, Signer, Verifier};
 
 use sl_compute_common::{BinaryString, CommonRandomness};
 use sl_messages::{
-    message::{InstanceId, MessageTag, MsgHdr, MsgId},
+    message::{InstanceId, MessageTag, MsgHdr},
     pairs::Pairs,
-    relay::{MessageSendError, Relay},
-    setup::ProtocolParticipant,
+    relay::{BufferedMsgRelay, MessageSendError, Relay},
+    setup::{
+        check_abort, MessageRound, ProtocolParticipant, RoundMode,
+        ABORT_MESSAGE_TAG,
+    },
     signed::SignedMessage,
-    BytesMut,
 };
 
 use crate::functionality::utils_dep::{Error, ProtocolError};
 
+const MAX_BUFFER_MESSAGES: usize = 2;
+
 /// custom message relay
-pub struct FilteredMsgRelay<R> {
-    relay: R,
-    in_buf: Vec<(BytesMut, usize, MessageTag)>,
-    expected: HashMap<MsgId, (usize, MessageTag)>,
-    unexpected: HashMap<MsgId, BytesMut>,
+pub struct FilteredMsgRelay<R: Relay> {
+    inner: BufferedMsgRelay<R>,
+    abort: MessageRound,
     tag_counter: u32,
 }
 
@@ -37,12 +34,18 @@ impl<R: Relay> FilteredMsgRelay<R> {
     /// Construct a FilteredMsgRelay by wrapping up a Relay object
     pub fn new(relay: R) -> Self {
         Self {
-            relay,
-            expected: HashMap::new(),
-            unexpected: HashMap::new(),
-            in_buf: vec![],
+            inner: BufferedMsgRelay::new(relay),
+            abort: MessageRound::default(),
             tag_counter: 0,
         }
+    }
+
+    pub async fn init_abort<P: ProtocolParticipant>(
+        &mut self,
+        setup: &P,
+    ) -> Result<(), MessageSendError> {
+        self.abort = MessageRound::broadcast(setup, ABORT_MESSAGE_TAG);
+        self.abort.ask_pending(&self.inner).await
     }
 
     pub fn tag_counter(&self) -> u32 {
@@ -54,205 +57,6 @@ impl<R: Relay> FilteredMsgRelay<R> {
         self.tag_counter = next_counter;
         MessageTag::tag1(tag, next_counter)
     }
-
-    /// Mark message with ID as expected and associate pair (party-id,
-    /// tag) with it.
-    pub async fn expect_message(
-        &mut self,
-        id: MsgId,
-        tag: MessageTag,
-        party_id: usize,
-        ttl: Duration,
-    ) -> Result<(), MessageSendError> {
-        self.relay.ask(&id, ttl).await?;
-        if let Some(msg) = self.unexpected.remove(&id) {
-            self.in_buf.push((msg, party_id, tag));
-        } else {
-            self.expected.insert(id, (party_id, tag));
-        }
-
-        Ok(())
-    }
-
-    fn put_back(
-        &mut self,
-        msg: &[u8],
-        tag: MessageTag,
-        party_id: usize,
-    ) -> bool {
-        // TODO Should we ASK it again?
-
-        msg.try_into()
-            .map(|id| self.expected.insert(id, (party_id, tag)))
-            .is_ok()
-    }
-
-    /// Receive an expected message with given tag, and return a
-    /// party-id associated with it.
-    pub async fn recv(
-        &mut self,
-        tag: MessageTag,
-    ) -> Result<(BytesMut, usize, bool), Error> {
-        if let Some(idx) = self.in_buf.iter().position(|ent| ent.2 == tag) {
-            let (msg, p, _) = self.in_buf.swap_remove(idx);
-            return Ok((msg, p, false));
-        }
-
-        loop {
-            let msg = self.relay.next().await.ok_or(Error::Recv)?;
-
-            if let Ok(id) = <&MsgId>::try_from(msg.as_ref()) {
-                if let Some((p, t)) = self.expected.remove(id) {
-                    match t {
-                        ABORT_MESSAGE_TAG => {
-                            return Ok((msg, p, true));
-                        }
-
-                        _ if t == tag => {
-                            return Ok((msg, p, false));
-                        }
-
-                        _ => {
-                            // some expected but not required right
-                            // now message.
-                            self.in_buf.push((msg, p, t));
-                        }
-                    }
-                } else {
-                    self.unexpected.insert(*id, msg);
-                }
-            }
-        }
-    }
-
-    /// Ask set of messages with a given `tag` from a set of `parties`.
-    ///
-    /// Filter out own `party_index` from `parties`.
-    ///
-    /// Returns number of messages with the same tag.
-    ///
-    pub async fn ask_messages_from_iter<P, I>(
-        &mut self,
-        setup: &P,
-        tag: MessageTag,
-        from_parties: I,
-        p2p: bool,
-    ) -> Result<usize, MessageSendError>
-    where
-        P: ProtocolParticipant,
-        I: IntoIterator<Item = usize>,
-    {
-        let my_party_index = setup.participant_index();
-        let receiver = p2p.then_some(my_party_index);
-        let mut count = 0;
-        for sender_index in from_parties.into_iter() {
-            if sender_index == my_party_index {
-                continue;
-            }
-
-            count += 1;
-
-            let id = setup.msg_id_from(sender_index, receiver, tag);
-            self.expect_message(id, tag, sender_index, setup.message_ttl())
-                .await?;
-        }
-
-        Ok(count)
-    }
-}
-
-/// Structure to receive a round of messages
-pub struct Round<'a, R> {
-    tag: MessageTag,
-    count: usize,
-    relay: &'a mut FilteredMsgRelay<R>,
-}
-
-impl<'a, R: Relay> Round<'a, R> {
-    /// Create a new round with a given number of messages to receive.
-    pub fn new(
-        count: usize,
-        tag: MessageTag,
-        relay: &'a mut FilteredMsgRelay<R>,
-    ) -> Self {
-        Self { count, tag, relay }
-    }
-
-    /// Receive next message in the round.
-    /// On success returns Ok(Some(message, party_index, is_abort_flag)).
-    /// At the end of the round it returns Ok(None).
-    ///
-    pub async fn recv(
-        &mut self,
-    ) -> Result<Option<(BytesMut, usize, bool)>, Error> {
-        Ok(if self.count > 0 {
-            let msg = self.relay.recv(self.tag).await;
-            if msg.is_err() {
-                for (id, (p, t)) in &self.relay.expected {
-                    if t == &self.tag {
-                        eprintln!("waiting for {id:X} {p} {t:?}");
-                    }
-                }
-            }
-            let msg = msg?;
-            self.count -= 1;
-            Some(msg)
-        } else {
-            None
-        })
-    }
-
-    /// It is possible to receive a invalid message with a correct ID.
-    /// In this case, it have to put the message id back into
-    /// relay.expected table and increment a counter of waiting
-    /// messages in the round.
-    pub fn put_back(&mut self, msg: &[u8], tag: MessageTag, party_id: usize) {
-        if self.relay.put_back(msg, tag, party_id) {
-            self.count += 1;
-        }
-    }
-}
-
-impl<R> Deref for FilteredMsgRelay<R> {
-    type Target = R;
-
-    fn deref(&self) -> &Self::Target {
-        &self.relay
-    }
-}
-
-impl<R> DerefMut for FilteredMsgRelay<R> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.relay
-    }
-}
-
-/// the message contains error code.
-pub const ABORT_MESSAGE_TAG: MessageTag = MessageTag::tag(u64::MAX);
-
-// /// Create an Abort Message.
-// pub fn create_abort_message<P>(setup: &P) -> Bytes
-// where
-//     P: ProtocolParticipant,
-// {
-//     SignedMessage::<(), _>::new(
-//         &setup.msg_id(None, ABORT_MESSAGE_TAG),
-//         setup.message_ttl(),
-//         0,
-//         0,
-//     )
-//     .sign(setup.signer())
-// }
-
-/// Returns passed error if msg is a vaild abort message.
-fn check_abort<P: ProtocolParticipant, E>(
-    setup: &P,
-    msg: &[u8],
-    party_id: usize,
-    err: impl FnOnce(usize) -> E,
-) -> Result<(), E> {
-    SignedMessage::<(), _>::verify(msg, setup.verifier(party_id))
-        .map_or(Ok(()), |_| Err(err(party_id)))
 }
 
 /// Party sends a message to other party
@@ -278,7 +82,7 @@ where
     message.encode(t);
     let buffer = msg.sign(setup.signer());
 
-    relay.send(buffer).await?;
+    relay.inner.send(buffer).await?;
 
     Ok(())
 }
@@ -294,28 +98,42 @@ where
     R: Relay,
     T: Wrap,
 {
-    relay
-        .ask_messages_from_iter(setup, tag, [from_party], true)
-        .await?;
+    let mut round =
+        MessageRound::from_parties(setup, tag, [from_party], RoundMode::P2P);
 
-    let mut round = Round::new(1, tag, relay);
-    while let Some((msg, party_id, is_abort)) = round.recv().await? {
-        if is_abort {
+    round.ask_pending(&relay.inner).await?;
+
+    while !round.is_complete() {
+        let msg = relay
+            .inner
+            .wait_for_bounded(MAX_BUFFER_MESSAGES, |id| {
+                round.is_pending(id) || relay.abort.is_pending(id)
+            })
+            .await
+            .ok_or(Error::Recv)?;
+
+        if let Some(party_id) = relay.abort.pending_sender_message(&msg) {
             check_abort(setup, &msg, party_id, ProtocolError::AbortProtocol)?;
+            // At this point, we figured out that the received message
+            // has a valid msg-id but invalid signature.
             continue;
         }
 
-        if party_id != from_party {
-            round.put_back(&msg, tag, party_id);
+        let Some(party_id) = round.pending_sender_message(&msg) else {
             continue;
-        }
+        };
 
-        let v = SignedMessage::<(), _>::verify_with_trailer(
+        let Some((_, buf)) = SignedMessage::<(), _>::verify_with_trailer(
             &msg,
             setup.verifier(party_id),
-        )
-        .and_then(|(_, buf)| Wrap::read(buf))
-        .ok_or(ProtocolError::InvalidMessage)?;
+        ) else {
+            continue;
+        };
+
+        let v = Wrap::read(buf).ok_or(ProtocolError::InvalidMessage)?;
+
+        // Mark as received only after successful auth + parse.
+        round.mark_received_message_with_sender(&msg);
 
         return Ok(v);
     }
@@ -335,37 +153,43 @@ where
     R: Relay,
     T: Wrap,
 {
-    relay
-        .ask_messages_from_iter(
-            setup,
-            tag,
-            from_parties.iter().cloned(),
-            true,
-        )
-        .await?;
+    let mut round =
+        MessageRound::from_parties(setup, tag, from_parties, RoundMode::P2P);
+
+    round.ask_pending(&relay.inner).await?;
 
     let mut p0 = Pairs::new();
 
-    let mut round = Round::new(from_parties.len(), tag, relay);
-    while let Some((msg, party_id, is_abort)) = round.recv().await? {
-        if is_abort {
+    while !round.is_complete() {
+        let msg = relay
+            .inner
+            .wait_for_bounded(MAX_BUFFER_MESSAGES, |id| {
+                round.is_pending(id) || relay.abort.is_pending(id)
+            })
+            .await
+            .ok_or(Error::Recv)?;
+
+        if let Some(party_id) = relay.abort.pending_sender_message(&msg) {
             check_abort(setup, &msg, party_id, ProtocolError::AbortProtocol)?;
-            round.put_back(&msg, ABORT_MESSAGE_TAG, party_id);
+            // At this point, we figured out that the received message
+            // has a valid msg-id but invalid signature.
             continue;
         }
 
-        // We got message with a right TAG but from not expected party.
-        if !from_parties.contains(&party_id) {
-            round.put_back(&msg, tag, party_id);
+        let Some(party_id) = round.pending_sender_message(&msg) else {
             continue;
-        }
+        };
 
-        let v1 = SignedMessage::<(), _>::verify_with_trailer(
+        let Some((_, buf)) = SignedMessage::<(), _>::verify_with_trailer(
             &msg,
             setup.verifier(party_id),
-        )
-        .and_then(|(_, buf)| T::read(buf))
-        .ok_or(ProtocolError::InvalidMessage)?;
+        ) else {
+            continue;
+        };
+
+        let v1 = T::read(buf).ok_or(ProtocolError::InvalidMessage)?;
+
+        round.mark_received_message_with_sender(&msg);
 
         p0.push(party_id, v1);
     }
@@ -400,37 +224,9 @@ where
         msg.sign(setup.signer())
     };
 
-    relay
-        .ask_messages_from_iter(setup, tag, [prev_party_id], true)
-        .await?;
+    relay.inner.send(buffer).await?;
 
-    relay.send(buffer).await?;
-
-    let mut round = Round::new(1, tag, relay);
-    while let Some((msg, party_id, is_abort)) = round.recv().await? {
-        if is_abort {
-            check_abort(setup, &msg, party_id, ProtocolError::AbortProtocol)?;
-            round.put_back(&msg, ABORT_MESSAGE_TAG, party_id);
-            continue;
-        }
-
-        // We got message with a right TAG but from not expected party.
-        if party_id != prev_party_id {
-            round.put_back(&msg, tag, party_id);
-            continue;
-        }
-
-        let v1 = SignedMessage::<(), _>::verify_with_trailer(
-            &msg,
-            setup.verifier(party_id),
-        )
-        .and_then(|(_, buf)| T::read(buf))
-        .ok_or(ProtocolError::InvalidMessage)?;
-
-        return Ok(v1);
-    }
-
-    Err(ProtocolError::InvalidMessage)
+    receive_from_one_party(setup, tag, prev_party_id, relay).await
 }
 
 /// Type of empty signature.
@@ -647,7 +443,7 @@ where
     const COMMON_RAND_MSG: MessageTag = MessageTag::tag(2);
 
     let mut rng = ChaCha20Rng::from_seed(*seed);
-    let key_next: [u8; 32] = rng.gen();
+    let key_next: [u8; 32] = rng.r#gen();
 
     let key_prev = p2p_send_to_next_receive_from_prev(
         setup,

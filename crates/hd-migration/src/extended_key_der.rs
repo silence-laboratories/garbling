@@ -159,6 +159,7 @@ where
     R: Relay,
 {
     let mut relay = FilteredMsgRelay::new(relay);
+    relay.init_abort(&setup).await?;
 
     let mut rng = StdRng::from_entropy();
     let mut seed = [0u8; 32];
@@ -235,6 +236,7 @@ where
     R: Relay,
 {
     let mut relay = FilteredMsgRelay::new(relay);
+    relay.init_abort(&setup).await?;
 
     let mut rng = StdRng::from_entropy();
     let mut seed = [0u8; 32];

@@ -465,6 +465,7 @@ mod tests {
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
+        relay.init_abort(&setup).await?;
 
         let mut init_seed = [0u8; 32];
         let common_randomness_seed = [setup.participant_index() as u8; 32];
@@ -636,6 +637,7 @@ mod tests {
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
+        relay.init_abort(&setup).await?;
 
         let mut init_seed = [0u8; 32];
         let common_randomness_seed = [setup.participant_index() as u8; 32];
