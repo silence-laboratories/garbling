@@ -1,6 +1,6 @@
 [package]
 name = "hd-migration"
-version = "1.2.0-pre.2"
+version = "1.2.0-pre.3"
 edition = "2021"
 rust-version = "1.88"
 publish = [ "sl" ]

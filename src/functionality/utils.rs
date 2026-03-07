@@ -11,17 +11,16 @@ use sl_compute_common::{BinaryString, CommonRandomness};
 use sl_messages::{
     message::{InstanceId, MessageTag, MsgHdr},
     pairs::Pairs,
-    relay::{BufferedMsgRelay, MessageSendError, Relay},
+    relay::{BufferedError, BufferedMsgRelay, MessageSendError, Relay},
     setup::{
-        check_abort, MessageRound, ProtocolParticipant, RoundMode,
-        ABORT_MESSAGE_TAG,
+        MessageRound, ProtocolParticipant, RoundMode, ABORT_MESSAGE_TAG,
     },
     signed::SignedMessage,
 };
 
-use crate::functionality::utils_dep::{Error, ProtocolError};
+use crate::functionality::utils_dep::ProtocolError;
 
-const MAX_BUFFER_MESSAGES: usize = 2;
+const MAX_BUFFERED_MESSAGES: usize = 2;
 
 /// custom message relay
 pub struct FilteredMsgRelay<R: Relay> {
@@ -43,7 +42,7 @@ impl<R: Relay> FilteredMsgRelay<R> {
     pub async fn init_abort<P: ProtocolParticipant>(
         &mut self,
         setup: &P,
-    ) -> Result<(), MessageSendError> {
+    ) -> Result<usize, MessageSendError> {
         self.abort = MessageRound::broadcast(setup, ABORT_MESSAGE_TAG);
         self.abort.ask_pending(&self.inner).await
     }
@@ -98,47 +97,29 @@ where
     R: Relay,
     T: Wrap,
 {
-    let mut round =
+    let round =
         MessageRound::from_parties(setup, tag, [from_party], RoundMode::P2P);
 
     round.ask_pending(&relay.inner).await?;
 
-    while !round.is_complete() {
-        let msg = relay
-            .inner
-            .wait_for_bounded(MAX_BUFFER_MESSAGES, |id| {
-                round.is_pending(id) || relay.abort.is_pending(id)
-            })
-            .await
-            .ok_or(Error::Recv)?;
+    let mut received = None;
+    relay
+        .inner
+        .process_signed(
+            setup,
+            MAX_BUFFERED_MESSAGES,
+            round,
+            Some(&relay.abort),
+            |_: &(), trailer, _| {
+                let val =
+                    T::read(trailer).ok_or(BufferedError::InvalidMessage)?;
+                received = Some(val);
+                Ok::<_, BufferedError>(())
+            },
+        )
+        .await?;
 
-        if let Some(party_id) = relay.abort.pending_sender_message(&msg) {
-            check_abort(setup, &msg, party_id, ProtocolError::AbortProtocol)?;
-            // At this point, we figured out that the received message
-            // has a valid msg-id but invalid signature.
-            continue;
-        }
-
-        let Some(party_id) = round.pending_sender_message(&msg) else {
-            continue;
-        };
-
-        let Some((_, buf)) = SignedMessage::<(), _>::verify_with_trailer(
-            &msg,
-            setup.verifier(party_id),
-        ) else {
-            continue;
-        };
-
-        let v = Wrap::read(buf).ok_or(ProtocolError::InvalidMessage)?;
-
-        // Mark as received only after successful auth + parse.
-        round.mark_received_message_with_sender(&msg);
-
-        return Ok(v);
-    }
-
-    Err(ProtocolError::MissingMessage)
+    received.ok_or(ProtocolError::MissingMessage)
 }
 
 /// Party receives a message from other party
@@ -153,46 +134,28 @@ where
     R: Relay,
     T: Wrap,
 {
-    let mut round =
+    let round =
         MessageRound::from_parties(setup, tag, from_parties, RoundMode::P2P);
 
     round.ask_pending(&relay.inner).await?;
 
     let mut p0 = Pairs::new();
 
-    while !round.is_complete() {
-        let msg = relay
-            .inner
-            .wait_for_bounded(MAX_BUFFER_MESSAGES, |id| {
-                round.is_pending(id) || relay.abort.is_pending(id)
-            })
-            .await
-            .ok_or(Error::Recv)?;
-
-        if let Some(party_id) = relay.abort.pending_sender_message(&msg) {
-            check_abort(setup, &msg, party_id, ProtocolError::AbortProtocol)?;
-            // At this point, we figured out that the received message
-            // has a valid msg-id but invalid signature.
-            continue;
-        }
-
-        let Some(party_id) = round.pending_sender_message(&msg) else {
-            continue;
-        };
-
-        let Some((_, buf)) = SignedMessage::<(), _>::verify_with_trailer(
-            &msg,
-            setup.verifier(party_id),
-        ) else {
-            continue;
-        };
-
-        let v1 = T::read(buf).ok_or(ProtocolError::InvalidMessage)?;
-
-        round.mark_received_message_with_sender(&msg);
-
-        p0.push(party_id, v1);
-    }
+    relay
+        .inner
+        .process_signed(
+            setup,
+            MAX_BUFFERED_MESSAGES,
+            round,
+            Some(&relay.abort),
+            |_: &(), trailer, party_id| {
+                let val =
+                    T::read(trailer).ok_or(BufferedError::InvalidMessage)?;
+                p0.push(party_id, val);
+                Ok::<_, BufferedError>(())
+            },
+        )
+        .await?;
 
     Ok(p0.into())
 }

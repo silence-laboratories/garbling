@@ -416,7 +416,7 @@ checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
 
 [[package]]
 name = "garbled-circuit"
-version = "1.2.0-pre.2"
+version = "1.2.0-pre.3"
 dependencies = [
  "aes",
  "criterion",
@@ -478,7 +478,7 @@ dependencies = [
 
 [[package]]
 name = "hd-migration"
-version = "1.2.0-pre.2"
+version = "1.2.0-pre.3"
 dependencies = [
  "derivation-path",
  "garbled-circuit",
@@ -918,15 +918,16 @@ dependencies = [
 
 [[package]]
 name = "sl-messages"
-version = "1.2.0-pre.2"
+version = "1.2.0-pre.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4464343f4fd4ad2df651ea8d7b625ed810014e5da73b55023a2621b56b2da4aa"
+checksum = "97cb5602adbb463e99af7554fc24dd0e23da929d4839cd7f4adb307b514b5910"
 dependencies = [
  "aead",
  "bytemuck",
  "bytes",
  "chacha20",
  "chacha20poly1305",
+ "derivation-path",
  "fastwebsockets",
  "generic-array",
  "rand_core",

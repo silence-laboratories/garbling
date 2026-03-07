@@ -1,19 +1,7 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use sl_messages::relay::MessageSendError;
-
-/// Relay Errors
-pub enum Error {
-    /// Abort
-    Abort(usize),
-    /// Recv
-    Recv,
-    /// Send
-    Send,
-    /// InvalidMessage
-    InvalidMessage,
-}
+use sl_messages::relay::{BufferedError, MessageSendError};
 
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
@@ -45,8 +33,8 @@ pub enum ProtocolError {
     #[error("Missing message")]
     MissingMessage,
 
-    /// We can't a send message
-    #[error("Send message")]
+    /// We can't send a message
+    #[error("Failed to send a message")]
     SendMessage,
 
     /// Verification Error
@@ -64,13 +52,13 @@ impl From<MessageSendError> for ProtocolError {
     }
 }
 
-impl From<Error> for ProtocolError {
-    fn from(err: Error) -> Self {
+impl From<BufferedError> for ProtocolError {
+    fn from(err: BufferedError) -> Self {
         match err {
-            Error::Abort(p) => ProtocolError::AbortProtocol(p as _),
-            Error::Recv => ProtocolError::MissingMessage,
-            Error::Send => ProtocolError::SendMessage,
-            Error::InvalidMessage => ProtocolError::InvalidMessage,
+            BufferedError::Abort(p) => ProtocolError::AbortProtocol(p as _),
+            BufferedError::Recv => ProtocolError::MissingMessage,
+            BufferedError::Send => ProtocolError::SendMessage,
+            BufferedError::InvalidMessage => ProtocolError::InvalidMessage,
         }
     }
 }
