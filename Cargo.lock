@@ -416,7 +416,7 @@ checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
 
 [[package]]
 name = "garbled-circuit"
-version = "1.2.0-pre.3"
+version = "1.2.0-pre.4"
 dependencies = [
  "aes",
  "criterion",
@@ -478,7 +478,7 @@ dependencies = [
 
 [[package]]
 name = "hd-migration"
-version = "1.2.0-pre.3"
+version = "1.2.0-pre.4"
 dependencies = [
  "derivation-path",
  "garbled-circuit",

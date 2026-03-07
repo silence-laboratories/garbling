@@ -20,7 +20,7 @@ use sl_messages::{
 
 use crate::functionality::utils_dep::ProtocolError;
 
-const MAX_BUFFERED_MESSAGES: usize = 2;
+const MAX_BUFFERED_MESSAGES: usize = 10; // min 3 for hd-migration
 
 /// custom message relay
 pub struct FilteredMsgRelay<R: Relay> {
