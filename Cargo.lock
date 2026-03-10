@@ -385,20 +385,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fastwebsockets"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "305d3ba574508e27190906d11707dad683e0494e6b85eae9b044cb2734a5e422"
-dependencies = [
- "bytes",
- "rand",
- "simdutf8",
- "thiserror",
- "tokio",
- "utf-8",
-]
-
-[[package]]
 name = "ff"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -416,7 +402,7 @@ checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
 
 [[package]]
 name = "garbled-circuit"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "aes",
  "criterion",
@@ -478,7 +464,7 @@ dependencies = [
 
 [[package]]
 name = "hd-migration"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "derivation-path",
  "garbled-circuit",
@@ -574,9 +560,9 @@ dependencies = [
 
 [[package]]
 name = "keccak"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecc2af9a1119c51f12a14607e783cb977bde58bc069ff0c3da1095e635d70654"
+checksum = "cb26cec98cce3a3d96cbb7bced3c4b16e3d13f27ec56dbd62cbc8f39cfb9d653"
 dependencies = [
  "cpufeatures",
 ]
@@ -897,12 +883,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 
 [[package]]
-name = "simdutf8"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
-
-[[package]]
 name = "sl-compute-common"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -918,21 +898,20 @@ dependencies = [
 
 [[package]]
 name = "sl-messages"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1464c51819f136745525faa699f0c39fd821d7e0d16e5632ddd57d9f3d9fc881"
+checksum = "922b84e74cf2498f45c0fc9284b2153a58be7ea02d4004350133428f7239d7df"
 dependencies = [
  "aead",
  "bytemuck",
  "bytes",
  "chacha20",
  "chacha20poly1305",
- "fastwebsockets",
+ "derivation-path",
  "generic-array",
  "rand_core",
  "sha2",
  "signature",
- "tokio",
  "x25519-dalek",
  "zeroize",
 ]
@@ -990,7 +969,6 @@ version = "1.49.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72a2903cd7736441aac9df9d7688bd0ce48edccaadf181c3b90be801e81d3d86"
 dependencies = [
- "bytes",
  "pin-project-lite",
  "tokio-macros",
 ]
@@ -1027,12 +1005,6 @@ dependencies = [
  "crypto-common",
  "subtle",
 ]
-
-[[package]]
-name = "utf-8"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "version_check"

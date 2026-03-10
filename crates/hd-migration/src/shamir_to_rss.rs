@@ -138,6 +138,7 @@ mod tests {
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
+        relay.init_abort(&setup).await?;
 
         let mut seed = [0u8; 32];
         let mut r = StdRng::from_entropy();

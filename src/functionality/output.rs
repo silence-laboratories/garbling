@@ -2,7 +2,7 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use sl_compute_common::BinaryString;
-use sl_messages::relay::Relay;
+use sl_messages::{relay::Relay, setup::ProtocolParticipant};
 
 use crate::{
     config::constants::{
@@ -13,7 +13,7 @@ use crate::{
             receive_from_one_party, receive_from_parties, send_to_party,
             FilteredMsgRelay,
         },
-        utils_dep::{ProtocolError, ProtocolParticipant},
+        utils_dep::ProtocolError,
     },
     utilities::{
         types::{Block, YaoShare},

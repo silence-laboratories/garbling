@@ -4,7 +4,7 @@
 use rand::{rngs::StdRng, Rng, RngCore, SeedableRng};
 
 use sl_compute_common::BinaryString;
-use sl_messages::relay::Relay;
+use sl_messages::{relay::Relay, setup::ProtocolParticipant};
 
 use crate::{
     config::constants::{
@@ -17,7 +17,7 @@ use crate::{
             receive_from_one_party, receive_from_parties, send_to_party,
             Byte, FilteredMsgRelay, Wrap,
         },
-        utils_dep::{ProtocolError, ProtocolParticipant},
+        utils_dep::ProtocolError,
     },
     utilities::{
         commitments::Commitment,

@@ -4,7 +4,7 @@
 use rand::{CryptoRng, RngCore};
 
 use sl_compute_common::BinaryShare;
-use sl_messages::relay::Relay;
+use sl_messages::{relay::Relay, setup::ProtocolParticipant};
 
 use crate::{
     config::constants::B2Y_FUNC_MSG1,
@@ -13,7 +13,7 @@ use crate::{
             receive_from_parties, send_to_party, FilteredMsgRelay,
             FixedExternalSize, Wrap,
         },
-        utils_dep::{ProtocolError, ProtocolParticipant},
+        utils_dep::ProtocolError,
     },
     utilities::{
         commitments::Commitment,
@@ -475,6 +475,7 @@ mod tests {
     use sl_messages::relay::{
         MessageRelayService, Relay, SimpleMessageRelay,
     };
+    use sl_messages::setup::ProtocolParticipant;
     use tokio::task::JoinSet;
 
     use crate::{
@@ -482,7 +483,7 @@ mod tests {
             output::batch_output_yao_functionality,
             setup::setup_yao_functionality,
             utils::{FilteredMsgRelay, SetupMessage},
-            utils_dep::{ProtocolError, ProtocolParticipant},
+            utils_dep::ProtocolError,
         },
         utilities::{
             commitments::HashCommitment,
@@ -506,6 +507,7 @@ mod tests {
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
+        relay.init_abort(&setup).await?;
 
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];
@@ -576,6 +578,7 @@ mod tests {
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
+        relay.init_abort(&setup).await?;
 
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];

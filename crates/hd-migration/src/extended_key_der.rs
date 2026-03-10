@@ -159,6 +159,7 @@ where
     R: Relay,
 {
     let mut relay = FilteredMsgRelay::new(relay);
+    relay.init_abort(&setup).await?;
 
     let mut rng = StdRng::from_entropy();
     let mut seed = [0u8; 32];
@@ -235,6 +236,7 @@ where
     R: Relay,
 {
     let mut relay = FilteredMsgRelay::new(relay);
+    relay.init_abort(&setup).await?;
 
     let mut rng = StdRng::from_entropy();
     let mut seed = [0u8; 32];
@@ -306,32 +308,35 @@ where
 
     Ok(children)
 }
+
 #[cfg(test)]
 mod tests {
-
     use std::str::FromStr;
 
     use derivation_path::{ChildIndex, DerivationPath};
-    use garbled_circuit::functionality::utils_dep::ProtocolParticipant;
     use hmac::{Hmac, Mac};
-    use k256::elliptic_curve::bigint::Encoding;
-    use k256::elliptic_curve::{ops::Reduce, Curve};
     use k256::{
-        elliptic_curve::sec1::ToEncodedPoint, ProjectivePoint, Scalar,
-        Secp256k1, U256,
+        elliptic_curve::{
+            bigint::Encoding, ops::Reduce, sec1::ToEncodedPoint, Curve,
+        },
+        FieldBytes, NonZeroScalar, ProjectivePoint, Scalar, Secp256k1, U256,
     };
-    use k256::{FieldBytes, NonZeroScalar};
-    use rand::rngs::StdRng;
-    use rand::{RngCore, SeedableRng};
-    use sl_messages::relay::{Relay, SimpleMessageRelay};
+    use rand::{rngs::StdRng, RngCore, SeedableRng};
 
-    use crate::extended_key_der::{
-        run_extended_key_derivation,
-        run_extended_key_derivation_multiple_children,
+    use sl_messages::{
+        relay::{Relay, SimpleMessageRelay},
+        setup::ProtocolParticipant,
     };
-    use crate::shamir_to_rss::scalar_rss_to_shamir;
-    use crate::types::{HardDerivationError, PrivKeyShareBip};
-    use crate::utils::{get_evaluation, run_init};
+
+    use crate::{
+        extended_key_der::{
+            run_extended_key_derivation,
+            run_extended_key_derivation_multiple_children,
+        },
+        shamir_to_rss::scalar_rss_to_shamir,
+        types::{HardDerivationError, PrivKeyShareBip},
+        utils::{get_evaluation, run_init},
+    };
 
     fn generate_random_input() -> (
         Scalar,

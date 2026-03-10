@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use sha2::{Digest, Sha256};
 
-use sl_messages::relay::Relay;
+use sl_messages::{relay::Relay, setup::ProtocolParticipant};
 
 use crate::{
     circuitop::circuit::BinaryCircuit,
@@ -13,7 +13,7 @@ use crate::{
     functionality::{
         evaluate::evaluate_functionality,
         utils::{receive_from_one_party, send_to_party, FilteredMsgRelay},
-        utils_dep::{ProtocolError, ProtocolParticipant},
+        utils_dep::ProtocolError,
     },
     utilities::{
         hash_function::HashFunction,
@@ -406,6 +406,7 @@ mod tests {
     use sl_messages::relay::{
         MessageRelayService, Relay, SimpleMessageRelay,
     };
+    use sl_messages::setup::ProtocolParticipant;
 
     use crate::{
         circuitop::circuit::BinaryCircuit,
@@ -425,7 +426,7 @@ mod tests {
             },
             setup::setup_yao_functionality,
             utils::{FilteredMsgRelay, SetupMessage},
-            utils_dep::{ProtocolError, ProtocolParticipant},
+            utils_dep::ProtocolError,
         },
         utilities::{
             commitments::HashCommitment,
@@ -450,6 +451,7 @@ mod tests {
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
+        relay.init_abort(&setup).await?;
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];
         let mut transcript = Transcript::new(b"test");
@@ -812,6 +814,7 @@ mod tests {
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
+        relay.init_abort(&setup).await?;
 
         let mut init_seed = [0u8; 32];
         let mut common_randomness_seed = [0u8; 32];

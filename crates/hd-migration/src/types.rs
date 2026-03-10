@@ -7,17 +7,17 @@ use k256::{
 };
 
 use sl_compute_common::CommonRandomness;
-use sl_messages::relay::MessageSendError;
+use sl_messages::relay::{BufferedError, MessageSendError};
 
 use garbled_circuit::{
     functionality::{
         utils::{FixedExternalSize, Wrap},
-        utils_dep::{Error, ProtocolError},
+        utils_dep::ProtocolError,
     },
     utilities::types::YaoShare,
 };
 
-pub use garbled_circuit::functionality::utils_dep::ProtocolParticipant;
+pub use sl_messages::setup::ProtocolParticipant;
 
 /// Trait to convert any random byte array into a Group scalar.
 /// The input bytes need not necessarily be the byte representation of the scalar.
@@ -99,7 +99,7 @@ pub enum HardDerivationError {
     InvalidMessage,
 
     /// Failed to receive a message
-    #[error("Can't recevie required message")]
+    #[error("Can't receive required message")]
     MissingMessage,
 
     /// Some party decided to not participate in the protocol.
@@ -116,13 +116,17 @@ impl From<MessageSendError> for HardDerivationError {
     }
 }
 
-impl From<Error> for HardDerivationError {
-    fn from(err: Error) -> Self {
+impl From<BufferedError> for HardDerivationError {
+    fn from(err: BufferedError) -> Self {
         match err {
-            Error::Abort(p) => HardDerivationError::AbortProtocol(p as _),
-            Error::Recv => HardDerivationError::MissingMessage,
-            Error::Send => HardDerivationError::SendMessage,
-            Error::InvalidMessage => HardDerivationError::InvalidMessage,
+            BufferedError::Abort(p) => {
+                HardDerivationError::AbortProtocol(p as _)
+            }
+            BufferedError::Recv => HardDerivationError::MissingMessage,
+            BufferedError::Send => HardDerivationError::SendMessage,
+            BufferedError::InvalidMessage => {
+                HardDerivationError::InvalidMessage
+            }
         }
     }
 }

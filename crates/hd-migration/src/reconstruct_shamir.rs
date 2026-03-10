@@ -105,6 +105,7 @@ mod tests {
         R: Relay,
     {
         let mut relay = FilteredMsgRelay::new(relay);
+        relay.init_abort(&setup).await?;
 
         let output = run_reconstruct_shamir(
             &setup,
