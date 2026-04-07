@@ -14,6 +14,7 @@ hex = "0.4"
 criterion = "0.5.1"
 rand = { workspace = true }
 rand_chacha = "0.3"
+pasta_curves = "0.5.1"
 
 [[bench]]
 name = "blake2b_bench"
