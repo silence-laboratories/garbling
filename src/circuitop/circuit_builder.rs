@@ -1,6 +1,8 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
+//! Incremental builder for constructing and composing Boolean circuits.
+
 use std::collections::HashMap;
 
 use crate::circuitop::{
@@ -8,63 +10,55 @@ use crate::circuitop::{
     gate::{BinaryGate, ID},
 };
 
-/// `CircuitBuilder` is a struct used to construct a `BinaryCircuit`.
-/// It maintains internal state during the circuit construction
-/// process.  Once the circuit is built and returned, the builder can
-/// either be discarded or reused to construct a new circuit on top of
-/// the existing one.
+/// Builder used to allocate wires and append gates into a [`BinaryCircuit`].
+///
+/// The builder owns a circuit under construction and keeps track of the next
+/// wire ID, cached constant wires, and the numbering of non-free gates.
 #[derive(Default)]
 pub struct CircuitBuilder {
-    /// Tracks the next available gate ID in the circuit.
+    /// Next global wire ID to allocate.
     next_ref_id: u32,
 
-    /// A mapping of constant values to their corresponding gate IDs.
-    /// This allows reuse of constant gates instead of creating
-    /// duplicates.
+    /// Reuses constant wires instead of emitting duplicate constant gates.
     const_map: HashMap<u16, u32>,
 
-    /// The binary circuit being constructed.  This is incrementally
-    /// updated as new gates and inputs are added.  Once the
-    /// construction is complete, the circuit can be extracted from
-    /// the builder.
+    /// Circuit being built.
     circ: BinaryCircuit,
 }
 
 impl CircuitBuilder {
-    /// Creates a new, empty `CircuitBuilder` instance.  Initializes
-    /// all tracking counters to zero and sets up an empty circuit.
+    /// Creates an empty builder.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Returns the built `BinaryCircuit`.
+    /// Consumes the builder and returns the constructed circuit.
     pub fn finish(self) -> BinaryCircuit {
         self.circ
     }
 
-    /// Retrieves the next available input ID for the n-th input.
+    /// Returns the next local input index inside input group `n`.
     fn get_next_nth_input_id(&mut self, n: u32) -> u32 {
         self.circ.get_nth_input_ids(n as _).len() as u32
     }
 
-    /// Retrieves the next available ciphertext ID for non-free gates.
-    /// This ID is used to reference ciphertexts in the circuit.
+    /// Allocates the next non-free-gate identifier.
     fn get_next_ciphertext_id(&mut self) -> u32 {
         let current = self.circ.get_num_nonfree_gates();
         self.circ.increment_nonfree_gates();
         current as u32
     }
 
-    /// Retrieves the next available reference ID for a gate and
-    /// increments the counter.
+    /// Allocates the next global wire ID.
     fn get_next_ref_id(&mut self) -> u32 {
         let current = self.next_ref_id;
         self.next_ref_id += 1;
         current
     }
 
-    /// Adds a new input gate to the circuit.
-    /// Returns the reference ID of the created input gate.
+    /// Adds a new input group containing a single input wire.
+    ///
+    /// Returns the global wire ID of that input.
     pub fn new_input(&mut self) -> u32 {
         let id = self.get_next_nth_input_id(self.circ.num_inputs());
         let gate_id = self.get_next_ref_id();
@@ -82,8 +76,9 @@ impl CircuitBuilder {
         gate_id
     }
 
-    /// Adds multiple garbler input gates to the circuit.
-    /// Returns a vector of reference IDs corresponding to the created inputs.
+    /// Adds one input group containing `number_of_inputs` wires.
+    ///
+    /// Returns their global wire IDs in order.
     pub fn new_inputs(&mut self, number_of_inputs: u16) -> Vec<u32> {
         let mut output: Vec<u32> = Vec::new();
         self.circ.new_input();
@@ -103,8 +98,7 @@ impl CircuitBuilder {
         output
     }
 
-    /// Adds an XOR gate to the circuit.  Returns the reference ID of
-    /// the resulting gate.
+    /// Appends an XOR gate and returns its output wire ID.
     pub fn xor(&mut self, xid: u32, yid: u32) -> u32 {
         let out_id = self.get_next_ref_id();
         let gate = BinaryGate::Xor {
@@ -117,8 +111,7 @@ impl CircuitBuilder {
         out_id
     }
 
-    /// Adds a NOT gate (negation) to the circuit.  Returns the
-    /// reference ID of the resulting gate.
+    /// Appends an inverter gate and returns its output wire ID.
     pub fn negate(&mut self, xid: u32) -> u32 {
         let out_id = self.get_next_ref_id();
         let gate = BinaryGate::Inv { xid, out: out_id };
@@ -127,8 +120,7 @@ impl CircuitBuilder {
         out_id
     }
 
-    /// Adds an AND gate to the circuit.  Returns the reference ID of
-    /// the resulting gate.
+    /// Appends an AND gate and returns its output wire ID.
     pub fn and(&mut self, xid: u32, yid: u32) -> u32 {
         let out_id = self.get_next_ref_id();
         let gate = BinaryGate::And {
@@ -142,32 +134,39 @@ impl CircuitBuilder {
         out_id
     }
 
-    /// Adds a constant gate to the circuit.  If the constant already
-    /// exists in the circuit, returns its reference ID.  Otherwise,
-    /// creates a new constant gate, stores it in `const_map`, and
-    /// returns its reference ID.
+    /// Returns the wire ID for a constant value, creating the constant wire if
+    /// necessary.
     pub fn constant(&mut self, val: u16) -> u32 {
         match self.const_map.get(&val) {
             Some(&r) => r,
             None => {
-                let out_id = self.get_next_ref_id();
-                let gate = BinaryGate::Constant { val, wire: out_id };
+                let wire = self.get_next_ref_id();
+                let gate = BinaryGate::Constant { val, wire };
 
                 self.circ.push_gate(gate);
-                self.const_map.insert(val, out_id);
+                self.const_map.insert(val, wire);
                 self.circ.increment_wires();
-                self.circ.push_constant_gate(val, out_id);
+                self.circ.push_constant_gate(val, wire);
 
-                out_id
+                wire
             }
         }
     }
 
-    /// Marks a gate as an output in the circuit.
+    /// Marks an existing wire as a circuit output.
     pub fn output(&mut self, id: u32) {
         self.circ.push_output_gate(id);
     }
 
+    /// Copies `other_circuit` into this builder with all wire references
+    /// remapped to the current circuit.
+    ///
+    /// `input_ids` supplies the concrete wires that should replace each input
+    /// group of `other_circuit`. The outer slice must have one entry per input
+    /// group, and each inner slice must match that group's width.
+    ///
+    /// The returned vector contains the remapped output wire IDs of the embedded
+    /// circuit.
     pub fn add_circuit(
         &mut self,
         other_circuit: &BinaryCircuit,
@@ -181,6 +180,8 @@ impl CircuitBuilder {
             )
         });
 
+        // Maps each wire ID in `other_circuit` to the corresponding wire ID in
+        // the builder's circuit as gates are replayed.
         let mut old_to_new_map = vec![0; other_circuit.num_wires as usize];
 
         for gate in &other_circuit.gates {

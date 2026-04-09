@@ -10,12 +10,13 @@ use k256::{
 
 use sl_compute_common::BinaryString;
 
-use garbled_circuit::{
-    circuitop::{circuit::BinaryCircuit, circuit_builder::CircuitBuilder},
-    config::constants::SHA512_CIRCUIT,
+use garbled_circuit::circuitop::{
+    circuit::BinaryCircuit, circuit_builder::CircuitBuilder,
 };
 
 use crate::{constants::SECP256_K1_Q, utils::u8_vec_to_bool_vec};
+
+const SHA512_CIRCUIT: &str = include_str!("../../../circuits/sha512.txt");
 
 pub fn build_child_key_der_hmac_round1_circuit(
     public_key_par: &ProjectivePoint,

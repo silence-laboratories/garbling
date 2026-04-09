@@ -6,21 +6,24 @@ use std::collections::HashMap;
 use criterion::{criterion_group, criterion_main, Criterion};
 use garbled_circuit::{
     circuitop::circuit::BinaryCircuit,
-    config::constants::{
-        AES128_CIRCUIT, AES256_CIRCUIT, AES_KEY, SHA256_CIRCUIT,
-    },
     functionality::{
         evaluate::evaluate_functionality, garble::garble_functionality,
     },
     utilities::{
         garble_hash::AesGarbleHash,
         types::{
-            Block, GarblerSetup, YaoEvaluatorShare, YaoGarblerShare, YaoShare,
+            Block, GarblerSetup, YaoEvaluatorShare, YaoGarblerShare,
+            YaoShare, BLOCK_SIZE,
         },
     },
 };
 use rand::{prelude::*, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+
+pub const AES_KEY: Block = [1u8; BLOCK_SIZE];
+pub const AES128_CIRCUIT: &str = include_str!("../circuits/aes128.txt");
+pub const AES256_CIRCUIT: &str = include_str!("../circuits/aes256.txt");
+pub const SHA256_CIRCUIT: &str = include_str!("../circuits/sha256.txt");
 
 pub fn eval_aes256_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Evaluate");

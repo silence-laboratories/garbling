@@ -1,56 +1,55 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
+//! Owned Boolean-circuit representation used by the garbling code.
+
 use std::collections::HashMap;
 
 use crate::circuitop::gate::{BinaryGate, ID};
 use crate::config::errors::FileParsingError;
 
-/// Represents a binary circuit composed of various logic gates.
-/// This struct keeps track of gates, inputs, outputs, and metadata
-/// required for evaluation and is mainly used for garbling circuits.
+/// Represents a Boolean circuit together with the metadata needed for
+/// evaluation and garbling.
 #[derive(Debug, Default, PartialEq)]
 pub struct BinaryCircuit {
-    /// A list of all gates in the circuit.
+    /// Gates in topological order.
     pub gates: Vec<BinaryGate>,
 
-    /// A number of inputs in the circuit.
+    /// Number of logical input groups/parties.
     pub num_inputs: u32,
 
-    /// The list of gate IDs corresponding to the circuit's input wires.
+    /// For each input group, the local input IDs belonging to that group.
+    ///
+    /// The entries are local positions within each group, not global wire IDs.
     pub input_gate_ids: Vec<Vec<ID>>,
 
-    /// A list of gate IDs corresponding to the circuit's output wires.
+    /// Global wire IDs exposed as circuit outputs.
     pub output_gate_ids: Vec<ID>,
 
-    /// A list of gate IDs corresponding to constant values in the circuit.
+    /// Mapping from constant value to the wire carrying that constant.
     pub constant_map: HashMap<u16, ID>,
 
-    /// The number of non-free (i.e., AND) gates in the circuit.
-    /// This is used to track the complexity of garbled circuit evaluation.
+    /// Number of non-free gates, currently the number of `AND` gates.
     pub num_nonfree_gates: usize,
 
-    /// The total number of wires used in the circuit.
-    /// This includes inputs, outputs, and intermediate wires.
+    /// Total number of wires allocated by the circuit.
     pub num_wires: u32,
 }
 
-/// Implementation of the `BinaryCircuit` struct.
-/// This provides methods for constructing, modifying, and parsing binary circuits.
 impl BinaryCircuit {
-    /// Parses a circuit definition from a file in the Bristol Fashion format.
+    /// Parses a Bristol Fashion circuit from its textual contents.
     ///
     /// The Bristol Fashion format is a standard plaintext representation of
-    /// boolean circuits, commonly used in secure computation protocols.
-    /// More details can be found at:
+    /// Boolean circuits commonly used in MPC tooling. More details:
     /// <https://nigelsmart.github.io/MPC-Circuits/>
     ///
     /// # Arguments
-    /// * `file_name` - A string slice representing the path to the circuit file.
+    /// * `file` - Entire file contents to parse.
     ///
     /// # Returns
-    /// * `Ok(Self)` if the file is successfully parsed into a `BinaryCircuit`.
-    /// * `Err(FileParsingError)` if there is an issue reading or parsing the file.
+    /// * `Ok(Self)` if parsing succeeds.
+    /// * `Err(FileParsingError)` if the input is missing required sections or a
+    ///   gate line cannot be decoded.
     pub fn parse(file: &str) -> Result<Self, FileParsingError> {
         let mut reader = file.lines();
 
@@ -174,13 +173,10 @@ impl BinaryCircuit {
         Ok(output_circuit)
     }
 
-    /// Creates a new `BinaryCircuit` with a specified number of gates.
+    /// Creates an empty circuit with capacity reserved for `ngates`.
     ///
     /// # Arguments
-    /// * `ngates` - The expected number of gates in the circuit.
-    ///
-    /// # Returns
-    /// * A new `BinaryCircuit` instance with preallocated space for gates.
+    /// * `ngates` - Expected number of gates.
     pub fn new(ngates: usize) -> Self {
         let gates: Vec<BinaryGate> = Vec::with_capacity(ngates);
         Self {
@@ -194,114 +190,78 @@ impl BinaryCircuit {
         }
     }
 
-    /// Adds a new gate to the circuit.
-    ///
-    /// # Arguments
-    /// * `gate` - A `BinaryGate` representing the gate to be added.
+    /// Appends a gate to the circuit.
     pub fn push_gate(&mut self, gate: BinaryGate) {
         self.gates.push(gate);
     }
 
-    /// Adds an output gate ID to the circuit.
-    ///
-    /// # Arguments
-    /// * `output_gate_id` - The ID of the output gate.
+    /// Registers an output wire.
     pub fn push_output_gate(&mut self, output_gate_id: u32) {
         self.output_gate_ids.push(output_gate_id);
     }
 
-    /// Adds a constant gate ID to the circuit.
-    ///
-    /// # Arguments
-    /// * `constant_gate_id` - The ID of the constant gate.
+    /// Records the wire used for a constant value.
     pub fn push_constant_gate(&mut self, val: u16, constant_gate_id: u32) {
         self.constant_map.insert(val, constant_gate_id);
     }
 
-    /// Adds an input gate ID to the circuit.
-    ///
-    /// # Arguments
-    /// * `garbler_input_id` - The ID of the garbler input gate.
+    /// Starts a new logical input group.
     pub fn new_input(&mut self) {
         self.input_gate_ids.push(vec![]);
         self.num_inputs += 1
     }
 
-    /// Adds an input gate ID to the circuit.
-    ///
-    /// # Arguments
-    /// * `garbler_input_id` - The ID of the garbler input gate.
+    /// Appends a local input ID to the `n`th input group.
     pub fn push_nth_input(&mut self, n: u32, input_id: u32) {
         self.input_gate_ids[n as usize].push(input_id);
     }
 
-    /// Adds an input gate ID to the circuit.
-    ///
-    /// # Arguments
-    /// * `garbler_input_id` - The ID of the garbler input gate.
+    /// Appends several local input IDs to the `n`th input group.
     pub fn push_nth_inputs(&mut self, n: usize, input_id: &[u32]) {
         self.input_gate_ids[n].extend_from_slice(input_id);
     }
 
-    /// Returns a reference to the list of output gate IDs.
-    ///
-    /// # Returns
-    /// * A slice containing the IDs of all output gates in the circuit.
+    /// Returns the circuit output wire IDs.
     pub fn get_output_gate_ids(&self) -> &[ID] {
         &self.output_gate_ids
     }
 
-    /// Returns a reference to the list of n-th input gate IDs.
-    ///
-    /// # Returns
-    /// * A slice containing the IDs of all n-th input gates.
+    /// Returns the local input IDs for the `n`th input group.
     pub fn get_nth_input_ids(&self, n: usize) -> &[ID] {
         &self.input_gate_ids[n]
     }
 
-    /// Returns a reference to the list of all input gate IDs.
-    ///
-    /// # Returns
-    /// * A slice containing the Vectors of IDs of all input gates.
+    /// Returns the local input-ID lists for all input groups.
     pub fn get_input_ids(&self) -> &[Vec<ID>] {
         &self.input_gate_ids
     }
 
-    /// Increments the count of non-free (AND) gates in the circuit.
+    /// Increments the number of non-free gates.
     pub fn increment_nonfree_gates(&mut self) {
         self.num_nonfree_gates += 1;
     }
 
-    /// Increments the count of wires in the circuit.
+    /// Increments the wire count after allocating a new output wire.
     pub fn increment_wires(&mut self) {
         self.num_wires += 1;
     }
 
-    /// Returns the number of non-free (AND) gates in the circuit.
-    ///
-    /// # Returns
-    /// * The number of non-free gates.
+    /// Returns the number of non-free gates.
     pub fn get_num_nonfree_gates(&self) -> usize {
         self.num_nonfree_gates
     }
 
-    /// Returns the number of inputs in the circuit.
-    ///
-    /// # Returns
-    /// * The total count of garbler input gates.
+    /// Returns the number of logical input groups.
     pub fn num_inputs(&self) -> u32 {
         self.num_inputs
     }
 
-    /// Returns the number of input gate IDs in the n-th input in the circuit.
-    ///
-    /// # Returns
-    /// * The total count of garbler input gates.
+    /// Returns the number of wires in the `n`th input group.
     pub fn num_nth_inputs(&self, n: usize) -> usize {
         self.input_gate_ids[n].len()
     }
 
-    /// Prints a textual representation of the circuit.
+    /// Prints a human-readable dump of the circuit to standard output.
     pub fn print_circuit(&self) {
         for gate in &self.gates {
             match gate {
@@ -343,10 +303,9 @@ mod tests {
 
     use std::collections::HashMap;
 
-    use crate::{
-        circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
-        config::constants::BINMULT_CIRCUIT,
-    };
+    use crate::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
+
+    const BINMULT_CIRCUIT: &str = include_str!("../../circuits/binmult.txt");
 
     #[test]
     fn test_circuit() {

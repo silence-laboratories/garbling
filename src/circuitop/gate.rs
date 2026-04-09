@@ -1,38 +1,44 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
+/// Identifier type used for wires and gate outputs inside a circuit.
 pub type ID = u32;
 
 /// Represents a binary gate in a Boolean circuit.
 ///
-/// Each variant corresponds to a different type of gate that
-/// can appear in a circuit.
+/// The circuit representation is wire-oriented: each variant stores the input
+/// wire IDs it reads from and the output wire ID it writes to.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BinaryGate {
-    /// Represents an input gate.
+    /// An input wire belonging to party/input group `no`.
+    ///
+    /// `id` is the position within that input group and `wire` is the global
+    /// wire ID used by subsequent gates.
     Input { no: u32, id: u32, wire: u32 },
 
-    /// Represents a constant value gate.
+    /// A constant-valued wire.
     ///
     /// # Fields
-    /// * `val` - The constant value stored in the gate.
+    /// * `val` - Constant value stored on the wire.
+    /// * `wire` - Global wire ID carrying that constant.
     Constant { val: u16, wire: u32 },
 
-    /// Represents an XOR gate, which performs a bitwise XOR operation.
+    /// A free XOR gate.
     ///
     /// # Fields
-    /// * `xid` - The ID of the first input wire.
-    /// * `yid` - The ID of the second input wire.
-    /// * `out` - The optional ID of the output wire.
+    /// * `xid` - First input wire ID.
+    /// * `yid` - Second input wire ID.
+    /// * `out` - Output wire ID.
     Xor { xid: u32, yid: u32, out: u32 },
 
-    /// Represents an AND gate, which performs a bitwise AND operation.
+    /// An AND gate.
     ///
     /// # Fields
-    /// * `xid` - The ID of the first input wire.
-    /// * `yid` - The ID of the second input wire.
-    /// * `id` - The unique identifier for this AND gate (used for garbling).
-    /// * `out` - The optional ID of the output wire.
+    /// * `xid` - First input wire ID.
+    /// * `yid` - Second input wire ID.
+    /// * `id` - Sequential identifier of the non-free gate, used when
+    ///   indexing garbled tables/ciphertexts.
+    /// * `out` - Output wire ID.
     And {
         xid: u32,
         yid: u32,
@@ -40,10 +46,10 @@ pub enum BinaryGate {
         out: u32,
     },
 
-    /// Represents an inverter (NOT gate), which negates a bit.
+    /// An inverter (NOT) gate.
     ///
     /// # Fields
-    /// * `xid` - The ID of the input wire.
-    /// * `out` - The optional ID of the output wire.
+    /// * `xid` - Input wire ID.
+    /// * `out` - Output wire ID.
     Inv { xid: u32, out: u32 },
 }
