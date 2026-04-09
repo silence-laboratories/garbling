@@ -19,9 +19,9 @@ pub enum BinaryGate {
     /// A constant-valued wire.
     ///
     /// # Fields
-    /// * `val` - Constant value stored on the wire.
+    /// * `val` - Boolean value stored on the wire.
     /// * `wire` - Global wire ID carrying that constant.
-    Constant { val: u16, wire: u32 },
+    Constant { val: bool, wire: u32 },
 
     /// A free XOR gate.
     ///

@@ -20,7 +20,7 @@ pub fn build_comparison_circuit() -> BinaryCircuit {
     let eq0 = builder.xor(eval_input_1, garb_input_1);
     let eq1 = builder.xor(eval_input_2, garb_input_2);
 
-    let onewire = builder.constant(1);
+    let onewire = builder.constant(true);
     let temp1 = builder.and(eq0, eq1);
     let temp2 = builder.xor(eq0, eq1);
     let before_not = builder.xor(temp1, temp2);

@@ -11,12 +11,10 @@ use k256::{
 use sl_compute_common::BinaryString;
 
 use garbled_circuit::circuitop::{
-    circuit::BinaryCircuit, circuit_builder::CircuitBuilder,
+    circuit::BinaryCircuit, circuit_builder::CircuitBuilder, prebuilt,
 };
 
 use crate::{constants::SECP256_K1_Q, utils::u8_vec_to_bool_vec};
-
-const SHA512_CIRCUIT: &str = include_str!("../../../circuits/sha512.txt");
 
 pub fn build_child_key_der_hmac_round1_circuit(
     public_key_par: &ProjectivePoint,
@@ -60,23 +58,19 @@ pub fn build_child_key_der_hmac_round1_circuit(
         // Hardened child
         // data = 0x00 || privkey_par || index (all in big endian)
 
-        let chain = u8_vec_to_bool_vec(chain_code.to_vec());
         let mut chain_par_ids = Vec::new();
-        for i in chain {
-            let val = if i { 1 } else { 0 };
-            chain_par_ids.push(builder.constant(val));
+        for i in u8_vec_to_bool_vec(chain_code) {
+            chain_par_ids.push(builder.constant(i));
         }
 
         for _ in 0..8 {
-            data_ids.push(builder.constant(0));
+            data_ids.push(builder.constant(false));
         }
         data_ids.extend_from_slice(&key_par_ids);
 
-        let index_be = index_child.to_bits().to_be_bytes();
-        let index_bool = u8_vec_to_bool_vec(index_be.to_vec());
         let mut index_ids = Vec::new();
-        for i in index_bool {
-            index_ids.push(builder.constant(if i { 1 } else { 0 }));
+        for i in u8_vec_to_bool_vec(index_child.to_bits().to_be_bytes()) {
+            index_ids.push(builder.constant(i));
         }
         data_ids.extend_from_slice(&index_ids);
 
@@ -93,13 +87,8 @@ pub fn build_child_key_der_hmac_round1_circuit(
 
         hmac_hasher.update(&index_child.to_bits().to_be_bytes());
         let hashout = hmac_hasher.finalize().into_bytes();
-        let hashoutbool = u8_vec_to_bool_vec(hashout.to_vec());
-        hashoutbool
-            .iter()
-            .map(|v| {
-                let val = if *v { 1 } else { 0 };
-                builder.constant(val)
-            })
+        u8_vec_to_bool_vec(&hashout)
+            .map(|bit| builder.constant(bit))
             .collect()
     };
 
@@ -148,23 +137,19 @@ pub fn build_child_key_der_hmac_circuit(
         // Hardened child
         // data = 0x00 || privkey_par || index (all in big endian)
 
-        let chain = u8_vec_to_bool_vec(chain_code.to_vec());
         let mut chain_par_ids = Vec::new();
-        for i in chain {
-            let val = if i { 1 } else { 0 };
-            chain_par_ids.push(builder.constant(val));
+        for i in u8_vec_to_bool_vec(chain_code) {
+            chain_par_ids.push(builder.constant(i));
         }
 
         for _ in 0..8 {
-            data_ids.push(builder.constant(0));
+            data_ids.push(builder.constant(false));
         }
         data_ids.extend_from_slice(&key_par_ids);
 
-        let index_be = index_child.to_bits().to_be_bytes();
-        let index_bool = u8_vec_to_bool_vec(index_be.to_vec());
         let mut index_ids = Vec::new();
-        for i in index_bool {
-            index_ids.push(builder.constant(if i { 1 } else { 0 }));
+        for i in u8_vec_to_bool_vec(index_child.to_bits().to_be_bytes()) {
+            index_ids.push(builder.constant(i));
         }
         data_ids.extend_from_slice(&index_ids);
 
@@ -181,13 +166,8 @@ pub fn build_child_key_der_hmac_circuit(
 
         hmac_hasher.update(&index_child.to_bits().to_be_bytes());
         let hashout = hmac_hasher.finalize().into_bytes();
-        let hashoutbool = u8_vec_to_bool_vec(hashout.to_vec());
-        hashoutbool
-            .iter()
-            .map(|v| {
-                let val = if *v { 1 } else { 0 };
-                builder.constant(val)
-            })
+        u8_vec_to_bool_vec(&hashout)
+            .map(|bit| builder.constant(bit))
             .collect()
     };
 
@@ -228,7 +208,7 @@ pub fn build_hmac_512_circuit(
         resized_key_ids = key_ids;
     }
     for _ in resized_key_ids.len()..1024 {
-        resized_key_ids.push(builder.constant(0));
+        resized_key_ids.push(builder.constant(false));
     }
 
     let mut i_key_pad_ids = resized_key_ids.clone();
@@ -315,9 +295,9 @@ pub fn build_sha512_circuit(len: u128) -> BinaryCircuit {
 
     for i in pad {
         let inp = if i {
-            builder.constant(1)
+            builder.constant(true)
         } else {
-            builder.constant(0)
+            builder.constant(false)
         };
 
         padded.push(inp);
@@ -329,23 +309,23 @@ pub fn build_sha512_circuit(len: u128) -> BinaryCircuit {
 
     for i in 0..chaining_state.length as usize {
         let inp = if chaining_state.get(i) {
-            builder.constant(1)
+            builder.constant(true)
         } else {
-            builder.constant(0)
+            builder.constant(false)
         };
         chain_input.push(inp);
     }
 
     let count = padded.len() / 1024;
 
-    let sha512_circuit = BinaryCircuit::parse(SHA512_CIRCUIT).unwrap();
+    let sha512_circuit = prebuilt::sha512();
 
     for i in 0..count {
         let mut block_inp = padded[1024 * i..1024 * (i + 1)].to_vec();
         block_inp.reverse();
 
         chain_input =
-            builder.add_circuit(&sha512_circuit, &[&block_inp, &chain_input]);
+            builder.add_circuit(sha512_circuit, &[&block_inp, &chain_input]);
     }
 
     chain_input.reverse();
@@ -476,7 +456,7 @@ fn build_mod_add_circut(size: usize, prime: U256) -> BinaryCircuit {
 
     let mut ps = Vec::new();
     for i in 0..pbin.length as usize {
-        ps.push(builder.constant(if pbin.get(i) { 1 } else { 0 }));
+        ps.push(builder.constant(pbin.get(i)));
     }
 
     let x = builder.new_inputs(size as u16);
@@ -549,7 +529,7 @@ pub fn build_subtract_order_circuit(
     let mut pbin_ids = Vec::new();
     let mut pt = Vec::new();
     for i in 0..pbin.length as usize {
-        let id = builder.constant(if pbin.get(i) { 1 } else { 0 });
+        let id = builder.constant(pbin.get(i));
         pt.push(pbin.get(i));
         pbin_ids.push(id);
     }
@@ -626,7 +606,7 @@ pub fn build_ppa_circuit(size: usize) -> BinaryCircuit {
     }
 
     let g_size = g[size - 1];
-    let mut g_mul_two = vec![builder.constant(0)];
+    let mut g_mul_two = vec![builder.constant(false)];
     g_mul_two.extend_from_slice(&g[..size - 1]);
 
     let sum: Vec<u32> = pc

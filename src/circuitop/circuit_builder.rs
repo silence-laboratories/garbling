@@ -3,8 +3,6 @@
 
 //! Incremental builder for constructing and composing Boolean circuits.
 
-use std::collections::HashMap;
-
 use crate::circuitop::{
     circuit::BinaryCircuit,
     gate::{BinaryGate, ID},
@@ -19,8 +17,11 @@ pub struct CircuitBuilder {
     /// Next global wire ID to allocate.
     next_ref_id: u32,
 
-    /// Reuses constant wires instead of emitting duplicate constant gates.
-    const_map: HashMap<u16, u32>,
+    /// Cached wire for the `false` constant, if already emitted.
+    false_wire: Option<u32>,
+
+    /// Cached wire for the `true` constant, if already emitted.
+    true_wire: Option<u32>,
 
     /// Circuit being built.
     circ: BinaryCircuit,
@@ -100,57 +101,58 @@ impl CircuitBuilder {
 
     /// Appends an XOR gate and returns its output wire ID.
     pub fn xor(&mut self, xid: u32, yid: u32) -> u32 {
-        let out_id = self.get_next_ref_id();
-        let gate = BinaryGate::Xor {
-            xid,
-            yid,
-            out: out_id,
-        };
+        let out = self.get_next_ref_id();
+        let gate = BinaryGate::Xor { xid, yid, out };
         self.circ.push_gate(gate);
         self.circ.increment_wires();
-        out_id
+        out
     }
 
     /// Appends an inverter gate and returns its output wire ID.
     pub fn negate(&mut self, xid: u32) -> u32 {
-        let out_id = self.get_next_ref_id();
-        let gate = BinaryGate::Inv { xid, out: out_id };
+        let out = self.get_next_ref_id();
+        let gate = BinaryGate::Inv { xid, out };
         self.circ.push_gate(gate);
         self.circ.increment_wires();
-        out_id
+        out
     }
 
     /// Appends an AND gate and returns its output wire ID.
     pub fn and(&mut self, xid: u32, yid: u32) -> u32 {
-        let out_id = self.get_next_ref_id();
+        let out = self.get_next_ref_id();
         let gate = BinaryGate::And {
             xid,
             yid,
             id: self.get_next_ciphertext_id(),
-            out: out_id,
+            out,
         };
         self.circ.push_gate(gate);
         self.circ.increment_wires();
-        out_id
+        out
     }
 
-    /// Returns the wire ID for a constant value, creating the constant wire if
+    /// Returns the wire ID for a Boolean constant value, creating the wire if
     /// necessary.
-    pub fn constant(&mut self, val: u16) -> u32 {
-        match self.const_map.get(&val) {
-            Some(&r) => r,
-            None => {
-                let wire = self.get_next_ref_id();
-                let gate = BinaryGate::Constant { val, wire };
+    pub fn constant(&mut self, val: bool) -> u32 {
+        let cached_wire = if val { self.true_wire } else { self.false_wire };
 
-                self.circ.push_gate(gate);
-                self.const_map.insert(val, wire);
-                self.circ.increment_wires();
-                self.circ.push_constant_gate(val, wire);
-
-                wire
-            }
+        if let Some(wire) = cached_wire {
+            return wire;
         }
+
+        let wire = self.get_next_ref_id();
+        let gate = BinaryGate::Constant { val, wire };
+
+        self.circ.push_gate(gate);
+        if val {
+            self.true_wire = Some(wire);
+        } else {
+            self.false_wire = Some(wire);
+        }
+        self.circ.increment_wires();
+        self.circ.push_constant_gate(val, wire);
+
+        wire
     }
 
     /// Marks an existing wire as a circuit output.
@@ -247,10 +249,10 @@ mod tests {
         let circuit = build_comparison_circuit();
 
         let mut reqconst = HashMap::new();
-        reqconst.insert(1, 6);
+        reqconst.insert(true, 6);
 
         let mut constmap = HashMap::new();
-        constmap.insert(1, 6);
+        constmap.insert(true, 6);
 
         let required_circuit = BinaryCircuit {
             gates: vec![
@@ -284,7 +286,7 @@ mod tests {
                     yid: 1,
                     out: 5,
                 },
-                BinaryGate::Constant { val: 1, wire: 6 },
+                BinaryGate::Constant { val: true, wire: 6 },
                 BinaryGate::And {
                     xid: 4,
                     yid: 5,

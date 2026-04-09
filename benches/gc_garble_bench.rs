@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use garbled_circuit::{
-    circuitop::circuit::BinaryCircuit,
+    circuitop::{circuit::BinaryCircuit, prebuilt},
     functionality::garble::garble_functionality,
     utilities::{
         garble_hash::AesGarbleHash,
@@ -16,16 +16,34 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 pub const AES_KEY: Block = [1u8; BLOCK_SIZE];
-pub const AES128_CIRCUIT: &str = include_str!("../circuits/aes128.txt");
-pub const AES256_CIRCUIT: &str = include_str!("../circuits/aes256.txt");
-pub const SHA256_CIRCUIT: &str = include_str!("../circuits/sha256.txt");
+
+fn aes128_circuit() -> BinaryCircuit {
+    prebuilt::decode(include_bytes!(concat!(
+        env!("OUT_DIR"),
+        "/circuits/aes128.bin"
+    )))
+}
+
+fn aes256_circuit() -> BinaryCircuit {
+    prebuilt::decode(include_bytes!(concat!(
+        env!("OUT_DIR"),
+        "/circuits/aes256.bin"
+    )))
+}
+
+fn sha256_circuit() -> BinaryCircuit {
+    prebuilt::decode(include_bytes!(concat!(
+        env!("OUT_DIR"),
+        "/circuits/sha256.bin"
+    )))
+}
 
 pub fn garble_aes256_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Garble");
     let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
 
     // 8832 AND Gates
-    let circuit = BinaryCircuit::parse(AES256_CIRCUIT).unwrap();
+    let circuit = aes256_circuit();
 
     let mut delta = Block::default();
     rng.fill_bytes(&mut delta);
@@ -70,7 +88,7 @@ pub fn garble_aes128_benchmark(c: &mut Criterion) {
     let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
 
     // 6400 AND Gates
-    let circuit = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
+    let circuit = aes128_circuit();
 
     let mut delta = Block::default();
     rng.fill_bytes(&mut delta);
@@ -114,7 +132,7 @@ pub fn garble_sha256_benchmark(c: &mut Criterion) {
     let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
 
     // 22573 AND Gates
-    let circuit = BinaryCircuit::parse(SHA256_CIRCUIT).unwrap();
+    let circuit = sha256_circuit();
 
     let mut delta = Block::default();
     rng.fill_bytes(&mut delta);

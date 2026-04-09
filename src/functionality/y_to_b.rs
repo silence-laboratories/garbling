@@ -432,8 +432,7 @@ mod tests {
     use tokio::task::JoinSet;
 
     use crate::{
-        circuitop::circuit::BinaryCircuit,
-        config::constants::AES128_CIRCUIT,
+        circuitop::{circuit::BinaryCircuit, prebuilt},
         functionality::{
             circuit_eval::yao_circuit_eval_functionality,
             input::batch_input_yao_functionality,
@@ -455,6 +454,13 @@ mod tests {
     use super::{
         batch_yao_to_binary_functionality, yao_to_binary_functionality,
     };
+
+    fn aes128_circuit() -> BinaryCircuit {
+        prebuilt::decode(include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/circuits/aes128.bin"
+        )))
+    }
 
     async fn test_run_y_to_b<T, R>(
         setup: T,
@@ -497,7 +503,7 @@ mod tests {
             }
         };
 
-        let circuit = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
+        let circuit = aes128_circuit();
 
         for x in 0..2 {
             for y in 0..2 {
@@ -669,7 +675,7 @@ mod tests {
             }
         };
 
-        let circuit = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
+        let circuit = aes128_circuit();
 
         for x in 0..2 {
             for y in 0..2 {

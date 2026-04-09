@@ -9,6 +9,7 @@ include = [
   "/benches",
   "/circuits",
   "/src/",
+  "/build.rs",
 ]
 
 [dev-dependencies]

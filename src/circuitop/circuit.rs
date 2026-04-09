@@ -10,7 +10,7 @@ use crate::config::errors::FileParsingError;
 
 /// Represents a Boolean circuit together with the metadata needed for
 /// evaluation and garbling.
-#[derive(Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct BinaryCircuit {
     /// Gates in topological order.
     pub gates: Vec<BinaryGate>,
@@ -26,14 +26,79 @@ pub struct BinaryCircuit {
     /// Global wire IDs exposed as circuit outputs.
     pub output_gate_ids: Vec<ID>,
 
-    /// Mapping from constant value to the wire carrying that constant.
-    pub constant_map: HashMap<u16, ID>,
+    /// Mapping from a Boolean constant value to the wire carrying it.
+    pub constant_map: HashMap<bool, ID>,
 
     /// Number of non-free gates, currently the number of `AND` gates.
     pub num_nonfree_gates: usize,
 
     /// Total number of wires allocated by the circuit.
     pub num_wires: u32,
+}
+
+const COMPACT_MAGIC: [u8; 4] = *b"GCB1";
+const COMPACT_VERSION: u16 = 2;
+
+const TAG_INPUT: u8 = 0;
+const TAG_CONST_FALSE: u8 = 1;
+const TAG_CONST_TRUE: u8 = 2;
+const TAG_XOR: u8 = 3;
+const TAG_AND: u8 = 4;
+const TAG_INV: u8 = 5;
+
+struct CompactReader<'a> {
+    bytes: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> CompactReader<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, pos: 0 }
+    }
+
+    fn read_u8(&mut self) -> u8 {
+        let byte = *self.bytes.get(self.pos).unwrap_or_else(|| {
+            panic!("invalid compact circuit: unexpected EOF")
+        });
+        self.pos += 1;
+        byte
+    }
+
+    fn read_u16(&mut self) -> u16 {
+        let end = self.pos + 2;
+        let chunk = self.bytes.get(self.pos..end).unwrap_or_else(|| {
+            panic!("invalid compact circuit: unexpected EOF")
+        });
+        self.pos = end;
+        u16::from_le_bytes([chunk[0], chunk[1]])
+    }
+
+    fn read_u32(&mut self) -> u32 {
+        let end = self.pos + 4;
+        let chunk = self.bytes.get(self.pos..end).unwrap_or_else(|| {
+            panic!("invalid compact circuit: unexpected EOF")
+        });
+        self.pos = end;
+        u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+    }
+
+    fn read_u24(&mut self) -> u32 {
+        let end = self.pos + 3;
+        let chunk = self.bytes.get(self.pos..end).unwrap_or_else(|| {
+            panic!("invalid compact circuit: unexpected EOF")
+        });
+        self.pos = end;
+        u32::from_le_bytes([chunk[0], chunk[1], chunk[2], 0])
+    }
+
+    fn finish(self) {
+        assert_eq!(
+            self.pos,
+            self.bytes.len(),
+            "invalid compact circuit: {} trailing bytes",
+            self.bytes.len() - self.pos,
+        );
+    }
 }
 
 impl BinaryCircuit {
@@ -173,6 +238,193 @@ impl BinaryCircuit {
         Ok(output_circuit)
     }
 
+    /// Decodes a trusted compact circuit artifact emitted at build time.
+    ///
+    /// Assumptions:
+    /// - `bytes` were produced by this crate's `build.rs`
+    /// - the artifact format is private to this crate and not a public input
+    ///   format
+    /// - the encoded circuit follows the same invariants as
+    ///   [`BinaryCircuit::parse`], including one gate per wire and valid wire
+    ///   references
+    ///
+    /// This function is intended for embedded prebuilt assets. It validates
+    /// internal consistency with `assert!` and will panic if those assumptions
+    /// are violated.
+    pub(crate) fn from_compact_bytes(bytes: &[u8]) -> Self {
+        let mut reader = CompactReader::new(bytes);
+
+        let mut magic = [0u8; 4];
+        for byte in &mut magic {
+            *byte = reader.read_u8();
+        }
+        assert_eq!(
+            magic, COMPACT_MAGIC,
+            "invalid compact circuit: bad magic"
+        );
+
+        let version = reader.read_u16();
+        assert_eq!(
+            version, COMPACT_VERSION,
+            "invalid compact circuit: unsupported version {version}",
+        );
+
+        let _reserved = reader.read_u16();
+        let num_wires = reader.read_u32();
+        let num_inputs = reader.read_u32();
+        let num_outputs = reader.read_u32();
+        let num_gates = reader.read_u32();
+
+        let mut input_sizes = Vec::with_capacity(num_inputs as usize);
+        for _ in 0..num_inputs {
+            input_sizes.push(reader.read_u32());
+        }
+
+        let max_wire = num_wires.saturating_sub(1);
+        let mut output_gate_ids = Vec::with_capacity(num_outputs as usize);
+        for _ in 0..num_outputs {
+            let wire = reader.read_u24();
+            assert!(
+                wire < num_wires,
+                "invalid compact circuit: output wire {wire} out of range 0..={max_wire}",
+            );
+            output_gate_ids.push(wire);
+        }
+
+        let mut input_gate_ids = Vec::with_capacity(input_sizes.len());
+        for &size in &input_sizes {
+            input_gate_ids.push(Vec::with_capacity(size as usize));
+        }
+
+        assert_eq!(
+            num_gates,
+            num_wires,
+            "invalid compact circuit: {num_gates} gates for {num_wires} wires",
+        );
+
+        let mut gates = Vec::with_capacity(num_gates as usize);
+        let mut constant_map = HashMap::new();
+        let mut and_count = 0u32;
+
+        for _ in 0..num_gates {
+            let gate = match reader.read_u8() {
+                TAG_INPUT => {
+                    let no = reader.read_u32();
+                    let wire = reader.read_u24();
+                    let ids = input_gate_ids.get_mut(no as usize).unwrap_or_else(|| {
+                        panic!("invalid compact circuit: input group {no} out of range")
+                    });
+                    assert!(
+                        wire < num_wires,
+                        "invalid compact circuit: wire {wire} out of range 0..={max_wire}",
+                    );
+
+                    let id = ids.len() as u32;
+                    ids.push(id);
+                    BinaryGate::Input { no, id, wire }
+                }
+
+                TAG_CONST_FALSE => {
+                    let wire = reader.read_u24();
+                    assert!(
+                        wire < num_wires,
+                        "invalid compact circuit: wire {wire} out of range 0..={max_wire}",
+                    );
+                    constant_map.insert(false, wire);
+                    BinaryGate::Constant { val: false, wire }
+                }
+
+                TAG_CONST_TRUE => {
+                    let wire = reader.read_u24();
+                    assert!(
+                        wire < num_wires,
+                        "invalid compact circuit: wire {wire} out of range 0..={max_wire}",
+                    );
+                    constant_map.insert(true, wire);
+                    BinaryGate::Constant { val: true, wire }
+                }
+
+                TAG_XOR => {
+                    let xid = reader.read_u24();
+                    let yid = reader.read_u24();
+                    let out = reader.read_u24();
+                    assert!(
+                        xid < num_wires,
+                        "invalid compact circuit: wire {xid} out of range 0..={max_wire}",
+                    );
+                    assert!(
+                        yid < num_wires,
+                        "invalid compact circuit: wire {yid} out of range 0..={max_wire}",
+                    );
+                    assert!(
+                        out < num_wires,
+                        "invalid compact circuit: wire {out} out of range 0..={max_wire}",
+                    );
+
+                    BinaryGate::Xor { xid, yid, out }
+                }
+
+                TAG_AND => {
+                    let xid = reader.read_u24();
+                    let yid = reader.read_u24();
+                    let out = reader.read_u24();
+                    assert!(
+                        xid < num_wires,
+                        "invalid compact circuit: wire {xid} out of range 0..={max_wire}",
+                    );
+                    assert!(
+                        yid < num_wires,
+                        "invalid compact circuit: wire {yid} out of range 0..={max_wire}",
+                    );
+                    assert!(
+                        out < num_wires,
+                        "invalid compact circuit: wire {out} out of range 0..={max_wire}",
+                    );
+
+                    let gate = BinaryGate::And {
+                        xid,
+                        yid,
+                        id: and_count,
+                        out,
+                    };
+                    and_count += 1;
+                    gate
+                }
+
+                TAG_INV => {
+                    let xid = reader.read_u24();
+                    let out = reader.read_u24();
+                    assert!(
+                        xid < num_wires,
+                        "invalid compact circuit: wire {xid} out of range 0..={max_wire}",
+                    );
+                    assert!(
+                        out < num_wires,
+                        "invalid compact circuit: wire {out} out of range 0..={max_wire}",
+                    );
+
+                    BinaryGate::Inv { xid, out }
+                }
+
+                tag => panic!("invalid compact circuit: invalid tag {tag}"),
+            };
+
+            gates.push(gate);
+        }
+
+        reader.finish();
+
+        Self {
+            gates,
+            num_inputs,
+            input_gate_ids,
+            output_gate_ids,
+            constant_map,
+            num_nonfree_gates: and_count as usize,
+            num_wires,
+        }
+    }
+
     /// Creates an empty circuit with capacity reserved for `ngates`.
     ///
     /// # Arguments
@@ -200,8 +452,8 @@ impl BinaryCircuit {
         self.output_gate_ids.push(output_gate_id);
     }
 
-    /// Records the wire used for a constant value.
-    pub fn push_constant_gate(&mut self, val: u16, constant_gate_id: u32) {
+    /// Records the wire used for a Boolean constant value.
+    pub fn push_constant_gate(&mut self, val: bool, constant_gate_id: u32) {
         self.constant_map.insert(val, constant_gate_id);
     }
 
@@ -303,9 +555,63 @@ mod tests {
 
     use std::collections::HashMap;
 
-    use crate::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
+    use super::{BinaryCircuit, COMPACT_MAGIC, COMPACT_VERSION, TAG_INPUT};
+    use crate::circuitop::gate::BinaryGate;
 
+    const AES128_CIRCUIT: &str = include_str!("../../circuits/aes128.txt");
     const BINMULT_CIRCUIT: &str = include_str!("../../circuits/binmult.txt");
+
+    enum TestCompactGate {
+        Input { no: u32, wire: u32 },
+    }
+
+    fn push_u16(bytes: &mut Vec<u8>, value: u16) {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn push_u32(bytes: &mut Vec<u8>, value: u32) {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn push_u24(bytes: &mut Vec<u8>, value: u32) {
+        bytes.extend_from_slice(&value.to_le_bytes()[..3]);
+    }
+
+    fn encode_test_compact(
+        num_wires: u32,
+        input_sizes: &[u32],
+        output_gate_ids: &[u32],
+        gates: &[TestCompactGate],
+    ) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&COMPACT_MAGIC);
+        push_u16(&mut bytes, COMPACT_VERSION);
+        push_u16(&mut bytes, 0);
+        push_u32(&mut bytes, num_wires);
+        push_u32(&mut bytes, input_sizes.len() as u32);
+        push_u32(&mut bytes, output_gate_ids.len() as u32);
+        push_u32(&mut bytes, gates.len() as u32);
+
+        for &len in input_sizes {
+            push_u32(&mut bytes, len);
+        }
+
+        for &output in output_gate_ids {
+            push_u24(&mut bytes, output);
+        }
+
+        for gate in gates {
+            match *gate {
+                TestCompactGate::Input { no, wire } => {
+                    bytes.push(TAG_INPUT);
+                    push_u32(&mut bytes, no);
+                    push_u24(&mut bytes, wire);
+                }
+            }
+        }
+
+        bytes
+    }
 
     #[test]
     fn test_circuit() {
@@ -377,5 +683,38 @@ mod tests {
         };
 
         assert_eq!(required_circuit, circuit.unwrap());
+    }
+
+    #[test]
+    fn test_prebuilt_aes128() {
+        let bytes =
+            include_bytes!(concat!(env!("OUT_DIR"), "/circuits/aes128.bin"));
+        let circuit = BinaryCircuit::from_compact_bytes(bytes);
+        let parsed = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
+
+        assert_eq!(parsed, circuit);
+    }
+
+    #[test]
+    fn test_prebuilt_binmult() {
+        let bytes =
+            include_bytes!(concat!(env!("OUT_DIR"), "/circuits/binmult.bin"));
+        let circuit = BinaryCircuit::from_compact_bytes(bytes);
+        let parsed = BinaryCircuit::parse(BINMULT_CIRCUIT).unwrap();
+
+        assert_eq!(parsed, circuit);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_compact_rejects_out_of_range_input_wire() {
+        let bytes = encode_test_compact(
+            1,
+            &[1],
+            &[0],
+            &[TestCompactGate::Input { no: 0, wire: 1 }],
+        );
+
+        BinaryCircuit::from_compact_bytes(&bytes);
     }
 }

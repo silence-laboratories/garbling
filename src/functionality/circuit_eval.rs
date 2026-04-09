@@ -409,8 +409,7 @@ mod tests {
     use sl_messages::setup::ProtocolParticipant;
 
     use crate::{
-        circuitop::circuit::BinaryCircuit,
-        config::constants::AES128_CIRCUIT,
+        circuitop::{circuit::BinaryCircuit, prebuilt},
         customcircuits::comparison::build_comparison_circuit,
         functionality::{
             circuit_eval::yao_map_circuit_eval_functionality,
@@ -438,6 +437,13 @@ mod tests {
     };
 
     use super::yao_circuit_eval_functionality;
+
+    fn aes128_circuit() -> BinaryCircuit {
+        prebuilt::decode(include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/circuits/aes128.bin"
+        )))
+    }
 
     async fn test_run_entire_flow<T, R>(
         setup: T,
@@ -1152,7 +1158,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_entire_flow() {
-        let circuit = Arc::new(BinaryCircuit::parse(AES128_CIRCUIT).unwrap());
+        let circuit = Arc::new(aes128_circuit());
         let batched = false;
         for i in 0..2 {
             for j in 0..2 {

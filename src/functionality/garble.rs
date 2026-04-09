@@ -41,7 +41,7 @@ where
                 setup.prf.fill_bytes(&mut zerowire);
                 zerowire[0] |= 1;
                 let mut newwire = zerowire;
-                if val == 1 {
+                if val {
                     newwire = xor_blocks(&newwire, &setup.delta);
                 }
                 f.push(newwire);
@@ -131,8 +131,7 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use crate::{
-        circuitop::circuit::BinaryCircuit,
-        config::constants::AES128_CIRCUIT,
+        circuitop::{circuit::BinaryCircuit, prebuilt},
         customcircuits::comparison::build_comparison_circuit,
         utilities::{
             garble_hash::AesGarbleHash,
@@ -142,9 +141,16 @@ mod tests {
 
     use super::*;
 
+    fn aes128_circuit() -> BinaryCircuit {
+        prebuilt::decode(include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/circuits/aes128.bin"
+        )))
+    }
+
     #[test]
     fn test_garble_functionality() {
-        let circuit = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
+        let circuit = aes128_circuit();
 
         let mut setup = GarblerSetup {
             comm_crs: Block::default(),
