@@ -69,7 +69,7 @@ where
     .await?;
 
     let veradd: Vec<YaoShare> = circ
-        .output_gate_ids
+        .output_gate_ids()
         .iter()
         .map(|id| outp.remove(id).ok_or(HardDerivationError::Internal))
         .collect::<Result<_, _>>()?;

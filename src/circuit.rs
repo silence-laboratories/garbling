@@ -3,37 +3,95 @@
 
 //! Owned Boolean-circuit representation used by the garbling code.
 
-use std::collections::HashMap;
-
-use crate::circuitop::gate::{BinaryGate, ID};
 use crate::config::errors::FileParsingError;
+
+pub mod prebuilt;
+
+/// Identifier type used for wires and gate outputs inside a circuit.
+pub type ID = u32;
+
+/// Represents a binary gate in a Boolean circuit.
+///
+/// The circuit representation is wire-oriented: each variant stores the input
+/// wire IDs it reads from and the output wire ID it writes to.
+#[derive(Clone, Debug, PartialEq)]
+pub enum BinaryGate {
+    /// An input wire belonging to party/input group `no`.
+    ///
+    /// `id` is the position within that input group and `wire` is the global
+    /// wire ID used by subsequent gates.
+    Input { no: u32, id: u32, wire: u32 },
+
+    /// A constant-valued wire.
+    ///
+    /// # Fields
+    /// * `val` - Boolean value stored on the wire.
+    /// * `wire` - Global wire ID carrying that constant.
+    Constant { val: bool, wire: u32 },
+
+    /// A free XOR gate.
+    ///
+    /// # Fields
+    /// * `xid` - First input wire ID.
+    /// * `yid` - Second input wire ID.
+    /// * `out` - Output wire ID.
+    Xor { xid: u32, yid: u32, out: u32 },
+
+    /// An AND gate.
+    ///
+    /// # Fields
+    /// * `xid` - First input wire ID.
+    /// * `yid` - Second input wire ID.
+    /// * `id` - Sequential identifier of the non-free gate, used when
+    ///   indexing garbled tables/ciphertexts.
+    /// * `out` - Output wire ID.
+    And {
+        xid: u32,
+        yid: u32,
+        id: u32,
+        out: u32,
+    },
+
+    /// An inverter (NOT) gate.
+    ///
+    /// # Fields
+    /// * `xid` - Input wire ID.
+    /// * `out` - Output wire ID.
+    Inv { xid: u32, out: u32 },
+}
 
 /// Represents a Boolean circuit together with the metadata needed for
 /// evaluation and garbling.
-#[derive(Clone, Debug, Default, PartialEq)]
+///
+/// Construct circuits through [`CircuitBuilder::finish`] or
+/// [`BinaryCircuit::parse`].
+#[derive(Clone, Debug, PartialEq)]
 pub struct BinaryCircuit {
     /// Gates in topological order.
-    pub gates: Vec<BinaryGate>,
+    gates: Vec<BinaryGate>,
 
     /// Number of logical input groups/parties.
-    pub num_inputs: u32,
+    num_inputs: u32,
 
     /// For each input group, the local input IDs belonging to that group.
     ///
     /// The entries are local positions within each group, not global wire IDs.
-    pub input_gate_ids: Vec<Vec<ID>>,
+    input_gate_ids: Vec<Vec<ID>>,
 
     /// Global wire IDs exposed as circuit outputs.
-    pub output_gate_ids: Vec<ID>,
+    output_gate_ids: Vec<ID>,
 
-    /// Mapping from a Boolean constant value to the wire carrying it.
-    pub constant_map: HashMap<bool, ID>,
+    /// Wire carrying the `false` constant, if present.
+    false_wire: Option<ID>,
+
+    /// Wire carrying the `true` constant, if present.
+    true_wire: Option<ID>,
 
     /// Number of non-free gates, currently the number of `AND` gates.
-    pub num_nonfree_gates: usize,
+    num_nonfree_gates: usize,
 
     /// Total number of wires allocated by the circuit.
-    pub num_wires: u32,
+    num_wires: u32,
 }
 
 const COMPACT_MAGIC: [u8; 4] = *b"GCB1";
@@ -129,8 +187,6 @@ impl BinaryCircuit {
             })
             .ok_or(FileParsingError::InputNoParsingError)?;
 
-        let mut output_circuit = Self::new(num_gates);
-
         let input_sizes = reader
             .next()
             .map(|line| line.split_whitespace())
@@ -161,27 +217,29 @@ impl BinaryCircuit {
             })
             .ok_or(FileParsingError::InputNoParsingError)?;
 
-        output_circuit.num_wires = num_wires;
+        let mut gates = Vec::with_capacity(num_gates);
+        let num_inputs = input_sizes.len() as u32;
+        let mut input_gate_ids = Vec::with_capacity(input_sizes.len());
+        let output_gate_ids = (0..num_outputs)
+            .map(|i| num_wires - num_outputs + i)
+            .collect();
 
         let mut totalcount = 0;
-        for (ipcnt, &i) in input_sizes.iter().enumerate() {
-            output_circuit.new_input();
-            for j in 0..i {
-                output_circuit.push_gate(BinaryGate::Input {
+        for (ipcnt, &width) in input_sizes.iter().enumerate() {
+            let mut ids = Vec::with_capacity(width as usize);
+            for id in 0..width {
+                gates.push(BinaryGate::Input {
                     no: ipcnt as u32,
-                    id: j,
+                    id,
                     wire: totalcount,
                 });
-                output_circuit.push_nth_input(ipcnt as u32, j);
+                ids.push(id);
                 totalcount += 1;
             }
+            input_gate_ids.push(ids);
         }
 
-        for i in 0..num_outputs {
-            output_circuit.push_output_gate(num_wires - num_outputs + i)
-        }
-
-        let mut id: u32 = 0;
+        let mut num_nonfree_gates = 0usize;
 
         for i in 0..num_gates {
             let gate = reader
@@ -207,11 +265,10 @@ impl BinaryCircuit {
                             let gate = BinaryGate::And {
                                 xid: input0,
                                 yid: input1,
-                                id,
+                                id: num_nonfree_gates as u32,
                                 out: output,
                             };
-                            id += 1;
-                            output_circuit.increment_nonfree_gates();
+                            num_nonfree_gates += 1;
 
                             gate
                         }
@@ -232,10 +289,19 @@ impl BinaryCircuit {
                 })
                 .ok_or(FileParsingError::FileFormatError(i))?;
 
-            output_circuit.push_gate(gate);
+            gates.push(gate);
         }
 
-        Ok(output_circuit)
+        Ok(Self {
+            gates,
+            num_inputs,
+            input_gate_ids,
+            output_gate_ids,
+            false_wire: None,
+            true_wire: None,
+            num_nonfree_gates,
+            num_wires,
+        })
     }
 
     /// Decodes a trusted compact circuit artifact emitted at build time.
@@ -303,7 +369,8 @@ impl BinaryCircuit {
         );
 
         let mut gates = Vec::with_capacity(num_gates as usize);
-        let mut constant_map = HashMap::new();
+        let mut false_wire = None;
+        let mut true_wire = None;
         let mut and_count = 0u32;
 
         for _ in 0..num_gates {
@@ -330,7 +397,7 @@ impl BinaryCircuit {
                         wire < num_wires,
                         "invalid compact circuit: wire {wire} out of range 0..={max_wire}",
                     );
-                    constant_map.insert(false, wire);
+                    false_wire = Some(wire);
                     BinaryGate::Constant { val: false, wire }
                 }
 
@@ -340,7 +407,7 @@ impl BinaryCircuit {
                         wire < num_wires,
                         "invalid compact circuit: wire {wire} out of range 0..={max_wire}",
                     );
-                    constant_map.insert(true, wire);
+                    true_wire = Some(wire);
                     BinaryGate::Constant { val: true, wire }
                 }
 
@@ -419,63 +486,26 @@ impl BinaryCircuit {
             num_inputs,
             input_gate_ids,
             output_gate_ids,
-            constant_map,
+            false_wire,
+            true_wire,
             num_nonfree_gates: and_count as usize,
             num_wires,
         }
     }
 
-    /// Creates an empty circuit with capacity reserved for `ngates`.
-    ///
-    /// # Arguments
-    /// * `ngates` - Expected number of gates.
-    pub fn new(ngates: usize) -> Self {
-        let gates: Vec<BinaryGate> = Vec::with_capacity(ngates);
-        Self {
-            gates,
-            num_inputs: 0,
-            input_gate_ids: Vec::new(),
-            output_gate_ids: Vec::new(),
-            constant_map: HashMap::new(),
-            num_nonfree_gates: 0,
-            num_wires: 0,
-        }
+    /// Returns the gates in topological order.
+    pub fn gates(&self) -> &[BinaryGate] {
+        &self.gates
     }
 
-    /// Appends a gate to the circuit.
-    pub fn push_gate(&mut self, gate: BinaryGate) {
-        self.gates.push(gate);
-    }
-
-    /// Registers an output wire.
-    pub fn push_output_gate(&mut self, output_gate_id: u32) {
-        self.output_gate_ids.push(output_gate_id);
-    }
-
-    /// Records the wire used for a Boolean constant value.
-    pub fn push_constant_gate(&mut self, val: bool, constant_gate_id: u32) {
-        self.constant_map.insert(val, constant_gate_id);
-    }
-
-    /// Starts a new logical input group.
-    pub fn new_input(&mut self) {
-        self.input_gate_ids.push(vec![]);
-        self.num_inputs += 1
-    }
-
-    /// Appends a local input ID to the `n`th input group.
-    pub fn push_nth_input(&mut self, n: u32, input_id: u32) {
-        self.input_gate_ids[n as usize].push(input_id);
-    }
-
-    /// Appends several local input IDs to the `n`th input group.
-    pub fn push_nth_inputs(&mut self, n: usize, input_id: &[u32]) {
-        self.input_gate_ids[n].extend_from_slice(input_id);
+    /// Returns the circuit output wire IDs.
+    pub fn output_gate_ids(&self) -> &[ID] {
+        &self.output_gate_ids
     }
 
     /// Returns the circuit output wire IDs.
     pub fn get_output_gate_ids(&self) -> &[ID] {
-        &self.output_gate_ids
+        self.output_gate_ids()
     }
 
     /// Returns the local input IDs for the `n`th input group.
@@ -484,23 +514,34 @@ impl BinaryCircuit {
     }
 
     /// Returns the local input-ID lists for all input groups.
-    pub fn get_input_ids(&self) -> &[Vec<ID>] {
+    pub fn input_gate_ids(&self) -> &[Vec<ID>] {
         &self.input_gate_ids
     }
 
-    /// Increments the number of non-free gates.
-    pub fn increment_nonfree_gates(&mut self) {
-        self.num_nonfree_gates += 1;
+    /// Returns the local input-ID lists for all input groups.
+    pub fn get_input_ids(&self) -> &[Vec<ID>] {
+        self.input_gate_ids()
     }
 
-    /// Increments the wire count after allocating a new output wire.
-    pub fn increment_wires(&mut self) {
-        self.num_wires += 1;
+    /// Returns the total number of constant wires in the circuit.
+    pub fn num_constant_gates(&self) -> usize {
+        usize::from(self.false_wire.is_some())
+            + usize::from(self.true_wire.is_some())
+    }
+
+    /// Returns the number of non-free gates.
+    pub fn num_nonfree_gates(&self) -> usize {
+        self.num_nonfree_gates
     }
 
     /// Returns the number of non-free gates.
     pub fn get_num_nonfree_gates(&self) -> usize {
-        self.num_nonfree_gates
+        self.num_nonfree_gates()
+    }
+
+    /// Returns the total number of wires allocated by the circuit.
+    pub fn num_wires(&self) -> u32 {
+        self.num_wires
     }
 
     /// Returns the number of logical input groups.
@@ -550,16 +591,357 @@ impl BinaryCircuit {
     }
 }
 
+/// Builder used to allocate wires and append gates into a [`BinaryCircuit`].
+///
+/// The builder owns the circuit parts under construction and keeps track of the
+/// next wire ID, cached constant wires, and the numbering of non-free gates.
+#[derive(Default)]
+pub struct CircuitBuilder {
+    /// Next global wire ID to allocate.
+    next_ref_id: u32,
+
+    /// Cached wire for the `false` constant, if already emitted.
+    false_wire: Option<ID>,
+
+    /// Cached wire for the `true` constant, if already emitted.
+    true_wire: Option<ID>,
+
+    /// Gates accumulated in topological order.
+    gates: Vec<BinaryGate>,
+
+    /// Number of logical input groups/parties.
+    num_inputs: u32,
+
+    /// Local input IDs grouped by input party.
+    input_gate_ids: Vec<Vec<ID>>,
+
+    /// Output wire IDs.
+    output_gate_ids: Vec<ID>,
+
+    /// Number of non-free gates, currently the number of `AND` gates.
+    num_nonfree_gates: usize,
+}
+
+impl CircuitBuilder {
+    /// Creates an empty builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Consumes the builder and returns the constructed circuit.
+    pub fn finish(self) -> BinaryCircuit {
+        BinaryCircuit {
+            gates: self.gates,
+            num_inputs: self.num_inputs,
+            input_gate_ids: self.input_gate_ids,
+            output_gate_ids: self.output_gate_ids,
+            false_wire: self.false_wire,
+            true_wire: self.true_wire,
+            num_nonfree_gates: self.num_nonfree_gates,
+            num_wires: self.next_ref_id,
+        }
+    }
+
+    /// Returns the next local input index inside input group `n`.
+    fn get_next_nth_input_id(&mut self, n: u32) -> u32 {
+        self.input_gate_ids[n as usize].len() as u32
+    }
+
+    /// Allocates the next non-free-gate identifier.
+    fn get_next_ciphertext_id(&mut self) -> u32 {
+        let current = self.num_nonfree_gates;
+        self.num_nonfree_gates += 1;
+        current as u32
+    }
+
+    /// Allocates the next global wire ID.
+    fn get_next_ref_id(&mut self) -> u32 {
+        let current = self.next_ref_id;
+        self.next_ref_id += 1;
+        current
+    }
+
+    /// Adds a new input group containing a single input wire.
+    ///
+    /// Returns the global wire ID of that input.
+    pub fn new_input(&mut self) -> u32 {
+        let no = self.num_inputs;
+        self.input_gate_ids.push(Vec::with_capacity(1));
+        self.num_inputs += 1;
+
+        let id = self.get_next_nth_input_id(no);
+        let gate_id = self.get_next_ref_id();
+
+        self.gates.push(BinaryGate::Input {
+            no,
+            id,
+            wire: gate_id,
+        });
+        self.input_gate_ids[no as usize].push(id);
+
+        gate_id
+    }
+
+    /// Adds one input group containing `number_of_inputs` wires.
+    ///
+    /// Returns their global wire IDs in order.
+    pub fn new_inputs(&mut self, number_of_inputs: u16) -> Vec<u32> {
+        let mut output = Vec::new();
+        let no = self.num_inputs;
+        self.input_gate_ids
+            .push(Vec::with_capacity(number_of_inputs as usize));
+        self.num_inputs += 1;
+
+        for _ in 0..number_of_inputs {
+            let id = self.get_next_nth_input_id(no);
+            let gate_id = self.get_next_ref_id();
+            self.gates.push(BinaryGate::Input {
+                no,
+                id,
+                wire: gate_id,
+            });
+            output.push(gate_id);
+            self.input_gate_ids[no as usize].push(id);
+        }
+
+        output
+    }
+
+    /// Appends an XOR gate and returns its output wire ID.
+    pub fn xor(&mut self, xid: u32, yid: u32) -> u32 {
+        let out = self.get_next_ref_id();
+        self.gates.push(BinaryGate::Xor { xid, yid, out });
+        out
+    }
+
+    /// Appends an inverter gate and returns its output wire ID.
+    pub fn negate(&mut self, xid: u32) -> u32 {
+        let out = self.get_next_ref_id();
+        self.gates.push(BinaryGate::Inv { xid, out });
+        out
+    }
+
+    /// Appends an AND gate and returns its output wire ID.
+    pub fn and(&mut self, xid: u32, yid: u32) -> u32 {
+        let out = self.get_next_ref_id();
+        let id = self.get_next_ciphertext_id();
+        self.gates.push(BinaryGate::And { xid, yid, id, out });
+        out
+    }
+
+    /// Returns the wire ID for a Boolean constant value, creating the wire if
+    /// necessary.
+    pub fn constant(&mut self, val: bool) -> u32 {
+        let cached_wire = if val { self.true_wire } else { self.false_wire };
+
+        if let Some(wire) = cached_wire {
+            return wire;
+        }
+
+        let wire = self.get_next_ref_id();
+        self.gates.push(BinaryGate::Constant { val, wire });
+        if val {
+            self.true_wire = Some(wire);
+        } else {
+            self.false_wire = Some(wire);
+        }
+        wire
+    }
+
+    /// Marks an existing wire as a circuit output.
+    pub fn output(&mut self, id: u32) {
+        self.output_gate_ids.push(id);
+    }
+
+    /// Copies `other_circuit` into this builder with all wire references
+    /// remapped to the current circuit.
+    ///
+    /// `input_ids` supplies the concrete wires that should replace each input
+    /// group of `other_circuit`. The outer slice must have one entry per input
+    /// group, and each inner slice must match that group's width.
+    ///
+    /// The returned vector contains the remapped output wire IDs of the
+    /// embedded circuit.
+    pub fn add_circuit(
+        &mut self,
+        other_circuit: &BinaryCircuit,
+        input_ids: &[&[ID]],
+    ) -> Vec<ID> {
+        assert_eq!(input_ids.len(), other_circuit.num_inputs() as usize);
+        (0..input_ids.len()).for_each(|i| {
+            assert_eq!(
+                input_ids[i].len(),
+                other_circuit.get_nth_input_ids(i).len()
+            )
+        });
+
+        let mut old_to_new_map = vec![0; other_circuit.num_wires() as usize];
+
+        for gate in other_circuit.gates() {
+            match *gate {
+                BinaryGate::Xor { xid, yid, out } => {
+                    let newx = old_to_new_map[xid as usize];
+                    let newy = old_to_new_map[yid as usize];
+                    let newz = self.xor(newx, newy);
+                    old_to_new_map[out as usize] = newz;
+                }
+
+                BinaryGate::And {
+                    xid,
+                    yid,
+                    id: _,
+                    out,
+                } => {
+                    let newx = old_to_new_map[xid as usize];
+                    let newy = old_to_new_map[yid as usize];
+                    let newz = self.and(newx, newy);
+                    old_to_new_map[out as usize] = newz;
+                }
+
+                BinaryGate::Inv { xid, out } => {
+                    let newx = old_to_new_map[xid as usize];
+                    let newz = self.negate(newx);
+                    old_to_new_map[out as usize] = newz;
+                }
+
+                BinaryGate::Input { no, id, wire } => {
+                    old_to_new_map[wire as usize] =
+                        input_ids[no as usize][id as usize];
+                }
+
+                BinaryGate::Constant { val, wire } => {
+                    old_to_new_map[wire as usize] = self.constant(val);
+                }
+            }
+        }
+
+        other_circuit
+            .get_output_gate_ids()
+            .iter()
+            .map(|&out| old_to_new_map[out as usize])
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::{
+        BinaryCircuit, BinaryGate, COMPACT_MAGIC, COMPACT_VERSION, TAG_INPUT,
+    };
+    use crate::customcircuits::comparison::build_comparison_circuit;
 
-    use std::collections::HashMap;
-
-    use super::{BinaryCircuit, COMPACT_MAGIC, COMPACT_VERSION, TAG_INPUT};
-    use crate::circuitop::gate::BinaryGate;
-
-    const AES128_CIRCUIT: &str = include_str!("../../circuits/aes128.txt");
-    const BINMULT_CIRCUIT: &str = include_str!("../../circuits/binmult.txt");
+    const AES128_CIRCUIT: &str = include_str!("../circuits/aes128.txt");
+    const BINMULT_CIRCUIT: &str = include_str!("../circuits/binmult.txt");
+    const BINMULT_GATES: &[BinaryGate] = &[
+        BinaryGate::Input {
+            no: 0,
+            id: 0,
+            wire: 0,
+        },
+        BinaryGate::Input {
+            no: 0,
+            id: 1,
+            wire: 1,
+        },
+        BinaryGate::Input {
+            no: 1,
+            id: 0,
+            wire: 2,
+        },
+        BinaryGate::Input {
+            no: 1,
+            id: 1,
+            wire: 3,
+        },
+        BinaryGate::And {
+            xid: 0,
+            yid: 2,
+            id: 0,
+            out: 4,
+        },
+        BinaryGate::And {
+            xid: 0,
+            yid: 3,
+            id: 1,
+            out: 5,
+        },
+        BinaryGate::And {
+            xid: 1,
+            yid: 2,
+            id: 2,
+            out: 6,
+        },
+        BinaryGate::And {
+            xid: 1,
+            yid: 3,
+            id: 3,
+            out: 7,
+        },
+        BinaryGate::Xor {
+            xid: 5,
+            yid: 6,
+            out: 8,
+        },
+        BinaryGate::Xor {
+            xid: 8,
+            yid: 7,
+            out: 9,
+        },
+    ];
+    const COMPARISON_GATES: &[BinaryGate] = &[
+        BinaryGate::Input {
+            no: 0,
+            id: 0,
+            wire: 0,
+        },
+        BinaryGate::Input {
+            no: 0,
+            id: 1,
+            wire: 1,
+        },
+        BinaryGate::Input {
+            no: 1,
+            id: 0,
+            wire: 2,
+        },
+        BinaryGate::Input {
+            no: 1,
+            id: 1,
+            wire: 3,
+        },
+        BinaryGate::Xor {
+            xid: 2,
+            yid: 0,
+            out: 4,
+        },
+        BinaryGate::Xor {
+            xid: 3,
+            yid: 1,
+            out: 5,
+        },
+        BinaryGate::Constant { val: true, wire: 6 },
+        BinaryGate::And {
+            xid: 4,
+            yid: 5,
+            id: 0,
+            out: 7,
+        },
+        BinaryGate::Xor {
+            xid: 4,
+            yid: 5,
+            out: 8,
+        },
+        BinaryGate::Xor {
+            xid: 7,
+            yid: 8,
+            out: 9,
+        },
+        BinaryGate::Xor {
+            xid: 9,
+            yid: 6,
+            out: 10,
+        },
+    ];
 
     enum TestCompactGate {
         Input { no: u32, wire: u32 },
@@ -618,66 +1000,12 @@ mod tests {
         let circuit = BinaryCircuit::parse(BINMULT_CIRCUIT);
 
         let required_circuit = BinaryCircuit {
-            gates: vec![
-                BinaryGate::Input {
-                    no: 0,
-                    id: 0,
-                    wire: 0,
-                },
-                BinaryGate::Input {
-                    no: 0,
-                    id: 1,
-                    wire: 1,
-                },
-                BinaryGate::Input {
-                    no: 1,
-                    id: 0,
-                    wire: 2,
-                },
-                BinaryGate::Input {
-                    no: 1,
-                    id: 1,
-                    wire: 3,
-                },
-                BinaryGate::And {
-                    xid: 0,
-                    yid: 2,
-                    id: 0,
-                    out: 4,
-                },
-                BinaryGate::And {
-                    xid: 0,
-                    yid: 3,
-                    id: 1,
-                    out: 5,
-                },
-                BinaryGate::And {
-                    xid: 1,
-                    yid: 2,
-                    id: 2,
-                    out: 6,
-                },
-                BinaryGate::And {
-                    xid: 1,
-                    yid: 3,
-                    id: 3,
-                    out: 7,
-                },
-                BinaryGate::Xor {
-                    xid: 5,
-                    yid: 6,
-                    out: 8,
-                },
-                BinaryGate::Xor {
-                    xid: 8,
-                    yid: 7,
-                    out: 9,
-                },
-            ],
+            gates: BINMULT_GATES.to_vec(),
             num_inputs: 2,
             input_gate_ids: vec![vec![0, 1], vec![0, 1]],
             output_gate_ids: vec![8, 9],
-            constant_map: HashMap::new(),
+            false_wire: None,
+            true_wire: None,
             num_nonfree_gates: 4,
             num_wires: 10,
         };
@@ -685,24 +1013,22 @@ mod tests {
         assert_eq!(required_circuit, circuit.unwrap());
     }
 
-    #[test]
-    fn test_prebuilt_aes128() {
-        let bytes =
-            include_bytes!(concat!(env!("OUT_DIR"), "/circuits/aes128.bin"));
+    fn assert_prebuilt_matches_parse(bytes: &[u8], source: &str) {
         let circuit = BinaryCircuit::from_compact_bytes(bytes);
-        let parsed = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
+        let parsed = BinaryCircuit::parse(source).unwrap();
 
         assert_eq!(parsed, circuit);
     }
 
     #[test]
-    fn test_prebuilt_binmult() {
-        let bytes =
-            include_bytes!(concat!(env!("OUT_DIR"), "/circuits/binmult.bin"));
-        let circuit = BinaryCircuit::from_compact_bytes(bytes);
-        let parsed = BinaryCircuit::parse(BINMULT_CIRCUIT).unwrap();
+    fn test_prebuilt_circuits_match_parse() {
+        let aes128 =
+            include_bytes!(concat!(env!("OUT_DIR"), "/circuits/aes128.bin"));
+        assert_prebuilt_matches_parse(aes128, AES128_CIRCUIT);
 
-        assert_eq!(parsed, circuit);
+        let binmult =
+            include_bytes!(concat!(env!("OUT_DIR"), "/circuits/binmult.bin"));
+        assert_prebuilt_matches_parse(binmult, BINMULT_CIRCUIT);
     }
 
     #[test]
@@ -716,5 +1042,16 @@ mod tests {
         );
 
         BinaryCircuit::from_compact_bytes(&bytes);
+    }
+
+    #[test]
+    fn test_circuit_builder() {
+        let circuit = build_comparison_circuit();
+        assert_eq!(circuit.gates(), COMPARISON_GATES);
+        assert_eq!(circuit.get_input_ids(), &[vec![0, 1], vec![0, 1]]);
+        assert_eq!(circuit.get_output_gate_ids(), &[10]);
+        assert_eq!(circuit.num_constant_gates(), 1);
+        assert_eq!(circuit.get_num_nonfree_gates(), 1);
+        assert_eq!(circuit.num_wires(), 11);
     }
 }

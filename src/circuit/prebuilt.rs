@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use crate::circuitop::circuit::BinaryCircuit;
+use crate::circuit::BinaryCircuit;
 
 pub fn decode(bytes: &[u8]) -> BinaryCircuit {
     BinaryCircuit::from_compact_bytes(bytes)

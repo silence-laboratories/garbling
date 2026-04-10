@@ -57,7 +57,7 @@ where
     .await?;
 
     let hash_out: Vec<YaoShare> = circuit
-        .output_gate_ids
+        .output_gate_ids()
         .iter()
         .map(|val| hashed_vals.get(val).unwrap().clone())
         .collect();
@@ -143,7 +143,7 @@ where
 
     circuits.iter().enumerate().for_each(|(cnt, circuit)| {
         let hash_out: Vec<YaoShare> = circuit
-            .output_gate_ids
+            .output_gate_ids()
             .iter()
             .map(|val| hashed_vals[cnt].get(val).unwrap().clone())
             .collect();

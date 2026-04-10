@@ -97,8 +97,8 @@ where
     .await?;
 
     let mut ops = Vec::new();
-    for i in circ.output_gate_ids {
-        ops.push(output.get(&i).unwrap().to_owned());
+    for i in circ.output_gate_ids() {
+        ops.push(output.get(i).unwrap().to_owned());
     }
 
     let ver = &ops[0];

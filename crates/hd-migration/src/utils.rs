@@ -3,7 +3,7 @@
 
 use std::borrow::Borrow;
 
-#[cfg(any(test, feature = "test-support"))]
+#[cfg(test)]
 use garbled_circuit::functionality::utils::SetupMessage;
 
 use k256::{elliptic_curve::subtle::ConstantTimeEq, NonZeroScalar, Scalar};
@@ -103,7 +103,7 @@ pub(crate) fn get_evaluation(
         .fold(Scalar::ZERO, |acc, (ev, lc)| acc + *ev * lc)
 }
 
-#[cfg(any(test, feature = "test-support"))]
+#[cfg(test)]
 pub(crate) fn run_init(
     instance: Option<[u8; 32]>,
 ) -> Vec<(SetupMessage, [u8; 32])> {

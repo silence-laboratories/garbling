@@ -2,6 +2,26 @@
 
 All notable changes to this repository will be documented in this file.
 
+## [1.3.0-pre.2] - 2026-04-10
+
+### Added
+
+- Added compatibility re-exports for the previous `circuitop` public module
+  layout, including `circuitop::circuit_builder::CircuitBuilder`.
+
+### Changed
+
+- Merged the `circuitop` implementation into the new top-level `circuit`
+  module, with prebuilt circuit helpers living in `circuit::prebuilt`.
+- Made `BinaryCircuit` opaque by hiding its fields and removing its public
+  mutation-oriented construction path.
+- Consolidated circuit construction around `BinaryCircuit::parse()`,
+  embedded prebuilt assets, and `CircuitBuilder::finish()`.
+- Simplified `BinaryCircuit` constant tracking to dedicated `true` and `false`
+  wire slots instead of a map.
+- Updated internal callers, tests, and benchmarks to use the new `circuit`
+  module paths and `BinaryCircuit` accessor methods.
+
 ## [1.3.0-pre.1] - 2026-04-10
 
 ### Added

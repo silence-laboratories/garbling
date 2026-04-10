@@ -10,9 +10,7 @@ use k256::{
 
 use sl_compute_common::BinaryString;
 
-use garbled_circuit::circuitop::{
-    circuit::BinaryCircuit, circuit_builder::CircuitBuilder, prebuilt,
-};
+use garbled_circuit::circuit::{prebuilt, BinaryCircuit, CircuitBuilder};
 
 use crate::{constants::SECP256_K1_Q, utils::u8_vec_to_bool_vec};
 
@@ -20,7 +18,7 @@ pub fn build_child_key_der_hmac_round1_circuit(
     public_key_par: &ProjectivePoint,
     index_child: &ChildIndex,
     chain_code: [u8; 32],
-) -> garbled_circuit::circuitop::circuit::BinaryCircuit {
+) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
     let p1_next = builder.new_inputs(256);
@@ -126,7 +124,7 @@ pub fn build_child_key_der_hmac_circuit(
     public_key_par: &ProjectivePoint,
     index_child: &ChildIndex,
     chain_code: [u8; 32],
-) -> garbled_circuit::circuitop::circuit::BinaryCircuit {
+) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
     let key_par_ids = builder.new_inputs(256);
 

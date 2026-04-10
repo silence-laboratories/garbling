@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use garbled_circuit::{
-    circuitop::{circuit::BinaryCircuit, prebuilt},
+    circuit::{prebuilt, BinaryCircuit},
     functionality::{
         evaluate::evaluate_functionality, garble::garble_functionality,
     },

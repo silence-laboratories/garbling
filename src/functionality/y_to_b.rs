@@ -432,7 +432,7 @@ mod tests {
     use tokio::task::JoinSet;
 
     use crate::{
-        circuitop::{circuit::BinaryCircuit, prebuilt},
+        circuit::{prebuilt, BinaryCircuit},
         functionality::{
             circuit_eval::yao_circuit_eval_functionality,
             input::batch_input_yao_functionality,
@@ -543,7 +543,7 @@ mod tests {
                 .await?;
 
                 let mut out_yao = vec![];
-                for id in &circuit.output_gate_ids {
+                for id in circuit.output_gate_ids() {
                     out_yao.push(output.get(id).unwrap().clone());
                 }
 
@@ -715,7 +715,7 @@ mod tests {
                 .await?;
 
                 let mut out_yao = vec![];
-                for id in &circuit.output_gate_ids {
+                for id in circuit.output_gate_ids() {
                     out_yao.push(output.get(id).unwrap().clone());
                 }
 
