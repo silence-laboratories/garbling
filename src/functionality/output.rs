@@ -7,7 +7,7 @@ use sl_compute::{
         types::ProtocolError,
         utils::{receive_from_parties, send_to_party, TagOffsetCounter},
     },
-    types::BinaryString,
+    boolbit::types::BinaryString,
 };
 
 use crate::{

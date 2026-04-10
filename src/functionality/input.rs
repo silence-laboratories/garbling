@@ -2,13 +2,13 @@ use std::{collections::HashMap, vec};
 
 use rand::{CryptoRng, Rng, RngCore};
 use sl_compute::{
+    boolbit::types::BinaryString,
     transport::{
         proto::{FilteredMsgRelay, MessageTag, Relay, Wrap},
         setup::{common::MPCEncryption, CommonSetupMessage},
         types::ProtocolError,
         utils::{receive_from_parties, send_to_party, TagOffsetCounter},
     },
-    types::BinaryString,
 };
 
 use crate::{
@@ -191,7 +191,7 @@ where
     G: RngCore + CryptoRng,
     C: Commitment,
 {
-    let b = rng.next_u32() % 2 == 0;
+    let b = rng.next_u32().is_multiple_of(2);
     let mut w0 = Block::default();
     rng.fill_bytes(&mut w0);
 

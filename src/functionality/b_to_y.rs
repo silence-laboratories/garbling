@@ -2,13 +2,13 @@ use std::collections::HashMap;
 
 use rand::{CryptoRng, RngCore};
 use sl_compute::{
+    boolbit::types::BinaryShare,
     transport::{
         proto::{FilteredMsgRelay, FixedExternalSize, Wrap},
         setup::{common::MPCEncryption, CommonSetupMessage},
         types::ProtocolError,
         utils::{receive_from_parties, send_to_party, TagOffsetCounter},
     },
-    types::BinaryShare,
 };
 use sl_mpc_mate::{coord::Relay, message::MessageTag};
 
@@ -553,18 +553,20 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
     use sl_compute::{
-        mpc::{
-            circuit_eval::run_circuit_eval_file, common_randomness::run_common_randomness,
-            open_protocol::run_batch_open_binary_share, preprocess::Seed,
+        boolbit::{
+            open::run_batch_open_binary_share,
+            types::{BinaryShare, BinaryStringShare},
         },
+        mpc::circuit_eval::run_circuit_eval_file,
         transport::{
             init::run_init,
             proto::FilteredMsgRelay,
             setup::{common::SetupMessage, CommonSetupMessage},
             types::ProtocolError,
-            utils::TagOffsetCounter,
+            utils::{Seed, TagOffsetCounter},
         },
-        types::{BinaryShare, BinaryStringShare, ServerState},
+        types::ServerState,
+        utility::common_randomness::run_common_randomness,
     };
     use sl_mpc_mate::coord::{MessageRelayService, Relay, SimpleMessageRelay};
     use tokio::task::JoinSet;
@@ -637,8 +639,14 @@ mod tests {
                 let mut msg = BinaryStringShare::new();
 
                 for i in 0..128 {
-                    key.push(key_sh[i].value1, key_sh[i].value2 ^ (x != 0));
-                    msg.push(msg_sh[i].value1, msg_sh[i].value2 ^ (y != 0));
+                    key.push_binary_share(BinaryShare {
+                        value1: key_sh[i].value1,
+                        value2: key_sh[i].value2 ^ (x != 0),
+                    });
+                    msg.push_binary_share(BinaryShare {
+                        value1: msg_sh[i].value1,
+                        value2: msg_sh[i].value2 ^ (y != 0),
+                    });
                 }
 
                 let inputs = vec![key, msg];
@@ -771,8 +779,14 @@ mod tests {
                 let mut msg = BinaryStringShare::new();
 
                 for i in 0..128 {
-                    key.push(key_sh[i].value1, key_sh[i].value2 ^ (x != 0));
-                    msg.push(msg_sh[i].value1, msg_sh[i].value2 ^ (y != 0));
+                    key.push_binary_share(BinaryShare {
+                        value1: key_sh[i].value1,
+                        value2: key_sh[i].value2 ^ (x != 0),
+                    });
+                    msg.push_binary_share(BinaryShare {
+                        value1: msg_sh[i].value1,
+                        value2: msg_sh[i].value2 ^ (y != 0),
+                    });
                 }
 
                 let inputs = vec![key, msg];

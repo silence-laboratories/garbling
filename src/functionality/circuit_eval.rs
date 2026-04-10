@@ -807,15 +807,12 @@ mod tests {
     use merlin::Transcript;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
-    use sl_compute::{
-        mpc::preprocess::Seed,
-        transport::{
-            init::run_init,
-            proto::FilteredMsgRelay,
-            setup::{common::SetupMessage, CommonSetupMessage},
-            types::ProtocolError,
-            utils::TagOffsetCounter,
-        },
+    use sl_compute::transport::{
+        init::run_init,
+        proto::FilteredMsgRelay,
+        setup::{common::SetupMessage, CommonSetupMessage},
+        types::ProtocolError,
+        utils::{Seed, TagOffsetCounter},
     };
     use sl_mpc_mate::coord::{MessageRelayService, Relay, SimpleMessageRelay};
     use tokio::task::JoinSet;
