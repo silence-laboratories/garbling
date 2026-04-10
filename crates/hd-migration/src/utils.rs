@@ -11,7 +11,7 @@ use k256::{elliptic_curve::subtle::ConstantTimeEq, NonZeroScalar, Scalar};
 use crate::types::HardDerivationError;
 
 /// Converts `u8` values to an iterator of `bool` values.
-pub fn u8_vec_to_bool_vec<I, B>(bytes: I) -> impl Iterator<Item = bool>
+pub(crate) fn u8_vec_to_bool_vec<I, B>(bytes: I) -> impl Iterator<Item = bool>
 where
     I: IntoIterator<Item = B>,
     B: Borrow<u8>,
@@ -23,7 +23,7 @@ where
 }
 
 /// Converts `bool` values to a vector of `u8` values.
-pub fn bool_vec_to_u8_vec<I, B>(
+pub(crate) fn bool_vec_to_u8_vec<I, B>(
     bits: I,
 ) -> Result<Vec<u8>, HardDerivationError>
 where
@@ -54,7 +54,7 @@ where
 }
 
 /// Converts a vector of bytes to a vector of bool values in little endian
-pub fn bytes_to_bits_le(bytes: &[u8]) -> Vec<bool> {
+pub(crate) fn bytes_to_bits_le(bytes: &[u8]) -> Vec<bool> {
     let mut bits = Vec::with_capacity(bytes.len() * 8);
     // go from least significant byte to most significant
     for &byte in bytes.iter().rev() {
@@ -90,7 +90,7 @@ where
     })
 }
 
-pub fn get_evaluation(
+pub(crate) fn get_evaluation(
     party_points: &[NonZeroScalar],
     evals: &[Scalar],
     eval_point: &Scalar,
@@ -104,7 +104,9 @@ pub fn get_evaluation(
 }
 
 #[cfg(any(test, feature = "test-support"))]
-pub fn run_init(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
+pub(crate) fn run_init(
+    instance: Option<[u8; 32]>,
+) -> Vec<(SetupMessage, [u8; 32])> {
     use std::time::Duration;
 
     use garbled_circuit::functionality::utils::{
