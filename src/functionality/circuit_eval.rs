@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use sl_messages::{relay::Relay, setup::ProtocolParticipant};
 
 use crate::{
-    circuitop::circuit::BinaryCircuit,
+    circuit::BinaryCircuit,
     config::constants::{YAO_CIRC_EVAL_FUNC_MSG1, YAO_CIRC_EVAL_FUNC_MSG2},
     functionality::{
         evaluate::evaluate_functionality,
@@ -63,7 +63,7 @@ where
     if input.len() != circuit.num_inputs() as usize {
         return Err(ProtocolError::InvalidLength);
     }
-    for (i, c) in input.iter().zip(&circuit.input_gate_ids) {
+    for (i, c) in input.iter().zip(circuit.input_gate_ids()) {
         if i.len() != c.len() {
             return Err(ProtocolError::InvalidLength);
         }
@@ -173,8 +173,8 @@ where
                         return Err(ProtocolError::InconsistentMessage);
                     }
 
-                    let complen = 2 * circuit.num_nonfree_gates
-                        + circuit.constant_map.len();
+                    let complen = 2 * circuit.num_nonfree_gates()
+                        + circuit.num_constant_gates();
 
                     output = input
                         .iter()
@@ -210,8 +210,8 @@ where
                     output = circuits
                         .iter()
                         .map(|circuit| {
-                            let complen = 2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len();
+                            let complen = 2 * circuit.num_nonfree_gates()
+                                + circuit.num_constant_gates();
                             let f = &fs[len..len + complen];
                             let out = yao_circuit_eval_process_msg1_p2(
                                 input, f, circuit, hash,
@@ -249,8 +249,8 @@ where
                         .iter()
                         .zip(input)
                         .map(|(circuit, ip)| {
-                            let complen = 2 * circuit.num_nonfree_gates
-                                + circuit.constant_map.len();
+                            let complen = 2 * circuit.num_nonfree_gates()
+                                + circuit.num_constant_gates();
                             let f = &fs[len..len + complen];
                             let out = yao_circuit_eval_process_msg1_p2(
                                 ip, f, circuit, hash,
@@ -409,8 +409,7 @@ mod tests {
     use sl_messages::setup::ProtocolParticipant;
 
     use crate::{
-        circuitop::circuit::BinaryCircuit,
-        config::constants::AES128_CIRCUIT,
+        circuit::{prebuilt, BinaryCircuit},
         customcircuits::comparison::build_comparison_circuit,
         functionality::{
             circuit_eval::yao_map_circuit_eval_functionality,
@@ -438,6 +437,13 @@ mod tests {
     };
 
     use super::yao_circuit_eval_functionality;
+
+    fn aes128_circuit() -> BinaryCircuit {
+        prebuilt::decode(include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/circuits/aes128.bin"
+        )))
+    }
 
     async fn test_run_entire_flow<T, R>(
         setup: T,
@@ -483,7 +489,7 @@ mod tests {
         let mut inputs = [vec![], vec![]];
         let mut notinputs = [vec![], vec![]];
 
-        while count < 32 && count < circuit.input_gate_ids[0].len() {
+        while count < 32 && count < circuit.get_nth_input_ids(0).len() {
             let inp = garb_input[count];
             count += 1;
             let out = input_yao_functionality(
@@ -500,7 +506,7 @@ mod tests {
             inputs[0].push(out);
         }
 
-        while count < 2 * 32 && count < circuit.input_gate_ids[0].len() {
+        while count < 2 * 32 && count < circuit.get_nth_input_ids(0).len() {
             let inp = garb_input[count];
             count += 1;
             let out = if setup.participant_index() == 0 {
@@ -531,7 +537,7 @@ mod tests {
             inputs[0].push(out);
         }
 
-        while count < 3 * 32 && count < circuit.input_gate_ids[0].len() {
+        while count < 3 * 32 && count < circuit.get_nth_input_ids(0).len() {
             let inp = garb_input[count];
             count += 1;
             let out = if setup.participant_index() == 1 {
@@ -562,7 +568,7 @@ mod tests {
             inputs[0].push(out);
         }
 
-        while count < 4 * 32 && count < circuit.input_gate_ids[0].len() {
+        while count < 4 * 32 && count < circuit.get_nth_input_ids(0).len() {
             let inp = garb_input[count];
             count += 1;
             let out = if setup.participant_index() == 2 {
@@ -593,7 +599,8 @@ mod tests {
             inputs[0].push(out);
         }
 
-        for (_, &inp) in circuit.input_gate_ids[1].iter().zip(&eval_input) {
+        for (_, &inp) in circuit.get_nth_input_ids(1).iter().zip(&eval_input)
+        {
             let out = input_yao_functionality(
                 &setup,
                 &mut relay,
@@ -616,7 +623,7 @@ mod tests {
             notinputs[1].push(out);
         }
 
-        for (_, inp) in circuit.input_gate_ids[0].iter().zip(&garb_input) {
+        for (_, inp) in circuit.get_nth_input_ids(0).iter().zip(&garb_input) {
             let out = input_yao_functionality(
                 &setup,
                 &mut relay,
@@ -671,7 +678,7 @@ mod tests {
 
         let mut op = vec![];
 
-        for i in &circuit.output_gate_ids {
+        for i in circuit.output_gate_ids() {
             let cor: bool = validate_yao_share(
                 &setup,
                 &mut relay,
@@ -725,7 +732,7 @@ mod tests {
 
         for out_sh in outs_case1_sh {
             let mut opt = vec![];
-            for i in &circuit.output_gate_ids {
+            for i in circuit.output_gate_ids() {
                 let cor: bool = validate_yao_share(
                     &setup,
                     &mut relay,
@@ -751,7 +758,7 @@ mod tests {
 
         for out_sh in outs_case2_sh {
             let mut opt = vec![];
-            for i in &circuit.output_gate_ids {
+            for i in circuit.output_gate_ids() {
                 let cor: bool = validate_yao_share(
                     &setup,
                     &mut relay,
@@ -777,7 +784,7 @@ mod tests {
 
         for out_sh in outs_case3_sh {
             let mut opt = vec![];
-            for i in &circuit.output_gate_ids {
+            for i in circuit.output_gate_ids() {
                 let cor: bool = validate_yao_share(
                     &setup,
                     &mut relay,
@@ -847,8 +854,8 @@ mod tests {
 
         let mut ids = vec![];
         let mut inps = vec![];
-        while count < 32 && count < circuit.input_gate_ids[0].len() {
-            ids.push(circuit.input_gate_ids[0][count]);
+        while count < 32 && count < circuit.get_nth_input_ids(0).len() {
+            ids.push(circuit.get_nth_input_ids(0)[count]);
             inps.push(garb_input[count]);
             count += 1;
         }
@@ -865,8 +872,8 @@ mod tests {
 
         let mut ids = vec![];
         let mut inps = vec![];
-        while count < 2 * 32 && count < circuit.input_gate_ids[0].len() {
-            ids.push(circuit.input_gate_ids[0][count]);
+        while count < 2 * 32 && count < circuit.get_nth_input_ids(0).len() {
+            ids.push(circuit.get_nth_input_ids(0)[count]);
             inps.push(Some(garb_input[count]));
             count += 1;
         }
@@ -897,8 +904,8 @@ mod tests {
 
         let mut ids = vec![];
         let mut inps = vec![];
-        while count < 3 * 32 && count < circuit.input_gate_ids[0].len() {
-            ids.push(circuit.input_gate_ids[0][count]);
+        while count < 3 * 32 && count < circuit.get_nth_input_ids(0).len() {
+            ids.push(circuit.get_nth_input_ids(0)[count]);
             inps.push(Some(garb_input[count]));
             count += 1;
         }
@@ -929,8 +936,8 @@ mod tests {
 
         let mut ids = vec![];
         let mut inps = vec![];
-        while count < 4 * 32 && count < circuit.input_gate_ids[0].len() {
-            ids.push(circuit.input_gate_ids[0][count]);
+        while count < 4 * 32 && count < circuit.get_nth_input_ids(0).len() {
+            ids.push(circuit.get_nth_input_ids(0)[count]);
             inps.push(Some(garb_input[count]));
             count += 1;
         }
@@ -961,7 +968,7 @@ mod tests {
 
         let mut ids = vec![];
         let mut inps = vec![];
-        for (id, inp) in circuit.input_gate_ids[1].iter().zip(eval_input) {
+        for (id, inp) in circuit.get_nth_input_ids(1).iter().zip(eval_input) {
             ids.push(*id);
             inps.push(inp);
         }
@@ -988,7 +995,7 @@ mod tests {
 
         let mut shares = vec![];
 
-        for i in &circuit.output_gate_ids {
+        for i in circuit.output_gate_ids() {
             let cor: bool = validate_yao_share(
                 &setup,
                 &mut relay,
@@ -1152,7 +1159,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_entire_flow() {
-        let circuit = Arc::new(BinaryCircuit::parse(AES128_CIRCUIT).unwrap());
+        let circuit = Arc::new(aes128_circuit());
         let batched = false;
         for i in 0..2 {
             for j in 0..2 {

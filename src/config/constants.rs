@@ -1,24 +1,6 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use crate::utilities::types::{Block, BLOCK_SIZE};
-
-#[allow(dead_code)]
-/// A constant 128-bit AES key initialized with all zeros.
-///
-/// This can be used as a default or placeholder key in AES-based encryption.
-pub const AES_KEY: Block = [1u8; BLOCK_SIZE];
-
-/// A constant 128-bit AES key initialized with all zeros.
-///
-/// This can be used as a default or placeholder key in AES-based encryption.
-pub const AES_NONCE: [u8; 12] = [1u8; 12];
-
-/// A constant 128-bit hash key initialized with all bytes set to `1`.
-///
-/// This can be used as a default or placeholder key in cryptographic hash functions.
-pub const HASH_KEY: Block = [1u8; BLOCK_SIZE];
-
 pub const INPUT_YAO_FUNC_MSG1: u32 = 200;
 
 pub const INPUT_YAO_FROM_FUNC_MSG1: u32 = 201;
@@ -52,8 +34,5 @@ pub const Y2B_FUNC_MSG2: u32 = 213;
 pub const Y2B_FUNC_MSG3: u32 = 214;
 pub const Y2B_FUNC_MSG4: u32 = 215;
 
+#[cfg(test)]
 pub const AES128_CIRCUIT: &str = include_str!("../../circuits/aes128.txt");
-pub const AES256_CIRCUIT: &str = include_str!("../../circuits/aes256.txt");
-pub const BINMULT_CIRCUIT: &str = include_str!("../../circuits/binmult.txt");
-pub const SHA256_CIRCUIT: &str = include_str!("../../circuits/sha256.txt");
-pub const SHA512_CIRCUIT: &str = include_str!("../../circuits/sha512.txt");

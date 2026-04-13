@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use rand::RngCore;
 
 use crate::{
-    circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
+    circuit::{BinaryCircuit, BinaryGate},
     utilities::{
         hash_function::HashFunction,
         types::{Block, GarblerSetup, YaoGarblerShare, YaoShare, BLOCK_SIZE},
@@ -24,11 +24,11 @@ where
     H: HashFunction,
     T: From<YaoGarblerShare>,
 {
-    let mut w = vec![[0; BLOCK_SIZE]; circuit.gates.len()];
+    let mut w = vec![[0; BLOCK_SIZE]; circuit.num_wires() as usize];
 
     let mut f: Vec<Block> = vec![];
 
-    for (i, gate) in circuit.gates.iter().enumerate() {
+    for (i, gate) in circuit.gates().iter().enumerate() {
         let (out_gate, f_label) = match *gate {
             BinaryGate::Input { no, id, wire } => {
                 let share =
@@ -41,7 +41,7 @@ where
                 setup.prf.fill_bytes(&mut zerowire);
                 zerowire[0] |= 1;
                 let mut newwire = zerowire;
-                if val == 1 {
+                if val {
                     newwire = xor_blocks(&newwire, &setup.delta);
                 }
                 f.push(newwire);
@@ -126,25 +126,27 @@ where
 
 #[cfg(test)]
 mod tests {
-
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
     use crate::{
-        circuitop::circuit::BinaryCircuit,
-        config::constants::AES128_CIRCUIT,
+        circuit::prebuilt,
         customcircuits::comparison::build_comparison_circuit,
-        utilities::{
-            garble_hash::AesGarbleHash,
-            types::{Block, GarblerSetup, YaoGarblerShare, YaoShare},
-        },
+        utilities::garble_hash::AesGarbleHash,
     };
 
     use super::*;
 
+    fn aes128_circuit() -> BinaryCircuit {
+        prebuilt::decode(include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/circuits/aes128.bin"
+        )))
+    }
+
     #[test]
     fn test_garble_functionality() {
-        let circuit = BinaryCircuit::parse(AES128_CIRCUIT).unwrap();
+        let circuit = aes128_circuit();
 
         let mut setup = GarblerSetup {
             comm_crs: Block::default(),
@@ -156,7 +158,7 @@ mod tests {
         let hash = AesGarbleHash::new(Block::default());
 
         let gin: Vec<Vec<_>> = circuit
-            .input_gate_ids
+            .input_gate_ids()
             .iter()
             .map(|v| {
                 v.iter()
@@ -172,13 +174,13 @@ mod tests {
         let (f, _o): (_, HashMap<u32, YaoShare>) =
             garble_functionality(&circuit, &gin, &mut setup, &hash);
 
-        println!("cir: gates.len() {}", circuit.gates.len());
+        println!("cir: gates.len() {}", circuit.gates().len());
         let nonfree = circuit.get_num_nonfree_gates();
         println!("cir: num_nonfree_gates {nonfree}");
-        println!("cir: constant_map.len() {}", circuit.constant_map.len());
+        println!("cir: num_constant_gates {}", circuit.num_constant_gates());
         println!(
-            "cir: 2*constant_map.len() + num_nonfree_gates {}",
-            2 * nonfree + circuit.constant_map.len()
+            "cir: 2*num_constant_gates + num_nonfree_gates {}",
+            2 * nonfree + circuit.num_constant_gates()
         );
 
         println!("f {}\n\n\n\n\n\n\n", f.len());
@@ -195,7 +197,7 @@ mod tests {
         let hash = AesGarbleHash::new(Block::default());
 
         let gin: Vec<Vec<_>> = circuit
-            .input_gate_ids
+            .input_gate_ids()
             .iter()
             .map(|v| {
                 v.iter()
@@ -213,13 +215,13 @@ mod tests {
         let (f, _o): (_, HashMap<u32, YaoShare>) =
             garble_functionality(&circuit, &gin, &mut setup, &hash);
 
-        println!("cir: gates.len() {}", circuit.gates.len());
+        println!("cir: gates.len() {}", circuit.gates().len());
         let nonfree = circuit.get_num_nonfree_gates();
         println!("cir: num_nonfree_gates {nonfree}");
-        println!("cir: constant_map.len() {}", circuit.constant_map.len());
+        println!("cir: num_constant_gates {}", circuit.num_constant_gates());
         println!(
-            "cir: 2*constant_map.len() + num_nonfree_gates {}",
-            2 * nonfree as usize + circuit.constant_map.len()
+            "cir: 2*num_constant_gates + num_nonfree_gates {}",
+            2 * nonfree as usize + circuit.num_constant_gates()
         );
 
         println!("f {}", f.len());

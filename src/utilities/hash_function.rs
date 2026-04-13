@@ -149,7 +149,7 @@ impl HashFunction for AesHash {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::constants::AES_KEY;
+    use crate::utilities::types::BLOCK_SIZE;
 
     use super::{AesHash, HashFunction};
 
@@ -169,7 +169,7 @@ mod tests {
             177, 212, 138, 177, 90, 206, 173, 101, 196, 49, 31, 255, 235,
             142, 125, 195, 47, 206, 202, 123, 45, 1,
         ];
-        let function = AesHash::new(AES_KEY);
+        let function = AesHash::new([1; BLOCK_SIZE]);
 
         let output1 = function.get_hash(&input1);
         let output2 = function.get_hash(&input2);

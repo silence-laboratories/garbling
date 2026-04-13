@@ -97,8 +97,8 @@ where
     .await?;
 
     let mut ops = Vec::new();
-    for i in circ.output_gate_ids {
-        ops.push(output.get(&i).unwrap().to_owned());
+    for i in circ.output_gate_ids() {
+        ops.push(output.get(i).unwrap().to_owned());
     }
 
     let ver = &ops[0];
@@ -123,7 +123,7 @@ where
         batch_output_yao_functionality(setup, relay, &child_chain_yao)
             .await?;
 
-    let child_cc = bool_vec_to_u8_vec(child_cc_pub)?;
+    let child_cc = bool_vec_to_u8_vec(&child_cc_pub)?;
 
     child_sk_yao.reverse();
 

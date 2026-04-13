@@ -1,48 +1,60 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-#[cfg(any(test, feature = "test-support"))]
+use std::borrow::Borrow;
+
+#[cfg(test)]
 use garbled_circuit::functionality::utils::SetupMessage;
 
 use k256::{elliptic_curve::subtle::ConstantTimeEq, NonZeroScalar, Scalar};
 
 use crate::types::HardDerivationError;
 
-/// Converts a vector of `u8` values to a vector of `bool` values
-pub fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
-    let mut output = Vec::with_capacity(vec_u8.len() * 8);
-    for byte in vec_u8 {
-        for i in (0..8).rev() {
-            let bit = (byte >> i) & 1;
-            output.push(bit != 0);
-        }
-    }
-    output
+/// Converts `u8` values to an iterator of `bool` values.
+pub(crate) fn u8_vec_to_bool_vec<I, B>(bytes: I) -> impl Iterator<Item = bool>
+where
+    I: IntoIterator<Item = B>,
+    B: Borrow<u8>,
+{
+    bytes.into_iter().flat_map(|byte| {
+        let byte = *byte.borrow();
+        (0..8).rev().map(move |i| ((byte >> i) & 1) != 0)
+    })
 }
 
-/// Converts a vector of `bool` values to a vector of `u8` values
-pub fn bool_vec_to_u8_vec(
-    vec_bool: Vec<bool>,
-) -> Result<Vec<u8>, HardDerivationError> {
-    if vec_bool.len() % 8 != 0 {
+/// Converts `bool` values to a vector of `u8` values.
+pub(crate) fn bool_vec_to_u8_vec<I, B>(
+    bits: I,
+) -> Result<Vec<u8>, HardDerivationError>
+where
+    I: IntoIterator<Item = B>,
+    B: Borrow<bool>,
+{
+    let mut output = Vec::new();
+    let mut byte = 0u8;
+    let mut bit_count = 0usize;
+
+    for bit in bits {
+        if *bit.borrow() {
+            byte |= 1 << (7 - (bit_count % 8)); // MSB-first
+        }
+
+        bit_count += 1;
+        if bit_count % 8 == 0 {
+            output.push(byte);
+            byte = 0;
+        }
+    }
+
+    if bit_count % 8 != 0 {
         return Err(HardDerivationError::InvalidMessage);
     }
 
-    let mut output = Vec::with_capacity(vec_bool.len() / 8);
-    for chunk in vec_bool.chunks(8) {
-        let mut byte = 0u8;
-        for (i, &bit) in chunk.iter().enumerate() {
-            if bit {
-                byte |= 1 << (7 - i); // MSB-first
-            }
-        }
-        output.push(byte);
-    }
     Ok(output)
 }
 
 /// Converts a vector of bytes to a vector of bool values in little endian
-pub fn bytes_to_bits_le(bytes: &[u8]) -> Vec<bool> {
+pub(crate) fn bytes_to_bits_le(bytes: &[u8]) -> Vec<bool> {
     let mut bits = Vec::with_capacity(bytes.len() * 8);
     // go from least significant byte to most significant
     for &byte in bytes.iter().rev() {
@@ -50,6 +62,7 @@ pub fn bytes_to_bits_le(bytes: &[u8]) -> Vec<bool> {
             bits.push(((byte >> i) & 1) == 1);
         }
     }
+
     bits
 }
 
@@ -77,7 +90,7 @@ where
     })
 }
 
-pub fn get_evaluation(
+pub(crate) fn get_evaluation(
     party_points: &[NonZeroScalar],
     evals: &[Scalar],
     eval_point: &Scalar,
@@ -90,8 +103,10 @@ pub fn get_evaluation(
         .fold(Scalar::ZERO, |acc, (ev, lc)| acc + *ev * lc)
 }
 
-#[cfg(any(test, feature = "test-support"))]
-pub fn run_init(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
+#[cfg(test)]
+pub(crate) fn run_init(
+    instance: Option<[u8; 32]>,
+) -> Vec<(SetupMessage, [u8; 32])> {
     use std::time::Duration;
 
     use garbled_circuit::functionality::utils::{

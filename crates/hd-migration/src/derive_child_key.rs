@@ -57,7 +57,7 @@ where
     .await?;
 
     let hash_out: Vec<YaoShare> = circuit
-        .output_gate_ids
+        .output_gate_ids()
         .iter()
         .map(|val| hashed_vals.get(val).unwrap().clone())
         .collect();
@@ -75,7 +75,7 @@ where
         batch_output_yao_functionality(setup, relay, child_chain_code)
             .await?;
 
-    let child_cc = bool_vec_to_u8_vec(child_cc_pub)?;
+    let child_cc = bool_vec_to_u8_vec(&child_cc_pub)?;
 
     let out = PrivKeyShareBip {
         yao_share: child_yao_share.try_into().expect("Conversion failed"),
@@ -143,7 +143,7 @@ where
 
     circuits.iter().enumerate().for_each(|(cnt, circuit)| {
         let hash_out: Vec<YaoShare> = circuit
-            .output_gate_ids
+            .output_gate_ids()
             .iter()
             .map(|val| hashed_vals[cnt].get(val).unwrap().clone())
             .collect();
@@ -177,15 +177,11 @@ where
     let child_cc_pub_vals =
         batch_output_yao_functionality(setup, relay, &ccoutinput).await?;
 
-    let mut child_ccs = Vec::new();
     let ccsize = child_chain_codes[0].len();
-    for i in 0..batch_size {
-        let child_cc_pub =
-            child_cc_pub_vals[i * ccsize..(i + 1) * ccsize].to_vec();
-        let child_cc = bool_vec_to_u8_vec(child_cc_pub)?;
-
-        child_ccs.push(child_cc);
-    }
+    let child_ccs = child_cc_pub_vals
+        .chunks_exact(ccsize)
+        .map(bool_vec_to_u8_vec)
+        .collect::<Result<Vec<_>, _>>()?;
 
     let mut out: Vec<PrivKeyShareBip> = Vec::with_capacity(batch_size);
 
@@ -211,6 +207,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use derivation_path::ChildIndex;
     use garbled_circuit::{
         functionality::{
@@ -244,7 +242,7 @@ mod tests {
 
     async fn test_run_derive_child_key<S, R>(
         setup: S,
-        rpk_bool: Vec<bool>,
+        rpk_bool: Arc<[bool]>,
         rcc_bool: [u8; 32],
         public_key: ProjectivePoint,
         child_index: ChildIndex,
@@ -276,7 +274,7 @@ mod tests {
         let rpk_yao = batch_input_yao_functionality(
             &setup,
             &mut relay,
-            &rpk_bool,
+            rpk_bool.as_ref(),
             &mut yao_setup,
         )
         .await?;
@@ -303,7 +301,7 @@ mod tests {
 
     async fn test_run_batched_derive_child_key<S, R>(
         setup: S,
-        rpk_bool: Vec<bool>,
+        rpk_bool: Arc<[bool]>,
         rcc_bool: [u8; 32],
         public_key: ProjectivePoint,
         child_index: Vec<ChildIndex>,
@@ -335,7 +333,7 @@ mod tests {
         let rpk_yao = batch_input_yao_functionality(
             &setup,
             &mut relay,
-            &rpk_bool,
+            rpk_bool.as_ref(),
             &mut yao_setup,
         )
         .await?;
@@ -417,8 +415,10 @@ mod tests {
 
     async fn test_derive_child_key_util(child_index: ChildIndex) {
         let (root_public_key, root_private_key, root_chain_code) = setup();
-        let rpk_bool =
-            u8_vec_to_bool_vec(root_private_key.to_bytes().to_vec());
+        let rpk_bool: Arc<[bool]> =
+            u8_vec_to_bool_vec(&root_private_key.to_bytes())
+                .collect::<Vec<_>>()
+                .into();
 
         let mut parties = tokio::task::JoinSet::new();
         let coord = SimpleMessageRelay::new();
@@ -469,8 +469,10 @@ mod tests {
         child_index: Vec<ChildIndex>,
     ) {
         let (root_public_key, root_private_key, root_chain_code) = setup();
-        let rpk_bool =
-            u8_vec_to_bool_vec(root_private_key.to_bytes().to_vec());
+        let rpk_bool: Arc<[bool]> =
+            u8_vec_to_bool_vec(&root_private_key.to_bytes())
+                .collect::<Vec<_>>()
+                .into();
 
         let mut parties = tokio::task::JoinSet::new();
         let coord = SimpleMessageRelay::new();

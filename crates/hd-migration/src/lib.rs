@@ -11,7 +11,7 @@ pub mod reconstruct_shamir;
 
 pub mod rss_to_yao;
 
-pub mod utils;
+mod utils;
 
 pub mod circuits;
 

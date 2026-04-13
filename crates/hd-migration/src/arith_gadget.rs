@@ -268,7 +268,7 @@ mod tests {
         let ginu8 = binary_string_to_u8_vec(binstr);
         hasher.update(ginu8);
         let result: [u8; 64] = hasher.finalize().into();
-        let gin = u8_vec_to_bool_vec(result[..32].to_vec());
+        let gin = u8_vec_to_bool_vec(&result[..32]).collect::<Vec<_>>();
 
         let mut parties = tokio::task::JoinSet::new();
         let coord = SimpleMessageRelay::new();
@@ -293,6 +293,7 @@ mod tests {
         let mut sum = Scalar::ZERO;
         let two = Scalar::ONE + Scalar::ONE;
         let mut twopow = Scalar::ONE;
+
         for i in gin {
             if i {
                 sum += twopow;

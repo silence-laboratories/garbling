@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    circuitop::{circuit::BinaryCircuit, gate::BinaryGate},
+    circuit::{BinaryCircuit, BinaryGate},
     utilities::{
         hash_function::HashFunction,
         types::{Block, YaoEvaluatorShare, YaoShare, ZBLOCK},
@@ -23,9 +23,9 @@ where
     T: From<YaoEvaluatorShare>,
 {
     let mut f_index = 0;
-    let mut w = vec![ZBLOCK; circuit.gates.len()];
+    let mut w = vec![ZBLOCK; circuit.num_wires() as usize];
 
-    for (i, gate) in circuit.gates.iter().enumerate() {
+    for (i, gate) in circuit.gates().iter().enumerate() {
         let (out_gate, f_label) = match *gate {
             BinaryGate::Input { no, id, wire } => {
                 let share = input_encoding_shares[no as usize][id as usize]
