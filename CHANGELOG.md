@@ -2,6 +2,12 @@
 
 All notable changes to this repository will be documented in this file.
 
+## [1.3.0] - 2026-04-13
+
+### Changed
+
+- Released `garbled-circuit` and `hd-migration` as `1.3.0`.
+
 ## [1.3.0-pre.2] - 2026-04-10
 
 ### Added
