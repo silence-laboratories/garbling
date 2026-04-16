@@ -50,12 +50,31 @@ pub fn build_zcash_blake2b_circuit() -> BinaryCircuit {
 
 #[cfg(test)]
 mod tests {
+    use garbled_circuit::{
+        functionality::{
+            circuit_eval::yao_circuit_eval_functionality,
+            input::batch_input_yao_functionality,
+            output::batch_output_yao_functionality,
+            setup::setup_yao_functionality,
+            utils::FilteredMsgRelay,
+            utils_dep::{ProtocolError, ProtocolParticipant},
+        },
+        utilities::{
+            commitments::HashCommitment, hash_function::AesHash,
+            types::YaoSetup,
+        },
+    };
+    use multi_party_schnorr::{
+        common::{redpallas::RedPallasPoint, utils::support::run_keygen},
+        keygen::Keyshare,
+    };
     use pasta_curves::{
         group::ff::{Field, PrimeField},
         pallas::Scalar,
     };
     use rand::{SeedableRng, rngs::StdRng};
     use sl_compute_common::BinaryString;
+    use sl_messages::relay::{Relay, SimpleMessageRelay};
 
     use crate::eval::evaluate;
 
@@ -82,6 +101,334 @@ mod tests {
         for i in &out[1024..] {
             rivk_i.push(*i);
         }
+        println!("ask_i: {:?}", hex::encode(ask_i.value));
+        println!("nk_i: {:?}", hex::encode(nk_i.value));
+        println!("rivk_i: {:?}", hex::encode(rivk_i.value));
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    async fn test_run_zcash_blake2b_3pc<S, R>(
+        setup: S,
+        scalar_bool: Vec<bool>,
+        relay: R,
+    ) -> Result<(usize, Vec<bool>), ProtocolError>
+    where
+        S: ProtocolParticipant,
+        R: Relay,
+    {
+        let mut relay = FilteredMsgRelay::new(relay);
+
+        let mut yao_setup =
+            setup_yao_functionality(&setup, &mut relay).await?;
+
+        let (hash, _) = match &yao_setup {
+            YaoSetup::E(e) => {
+                let hash = AesHash::new(e.comm_crs);
+                let comm = HashCommitment::new(hash);
+                (hash, comm)
+            }
+            YaoSetup::G(g) => {
+                let hash = AesHash::new(g.comm_crs);
+                let comm = HashCommitment::new(hash);
+                (hash, comm)
+            }
+        };
+
+        let scalar_yao = batch_input_yao_functionality(
+            &setup,
+            &mut relay,
+            &scalar_bool,
+            &mut yao_setup,
+        )
+        .await?;
+
+        let circuit = build_zcash_blake2b_circuit();
+
+        let output = yao_circuit_eval_functionality(
+            &setup,
+            &mut relay,
+            &[scalar_yao],
+            &circuit,
+            &hash,
+            &mut yao_setup,
+        )
+        .await?;
+
+        let out_yao = circuit
+            .output_gate_ids
+            .iter()
+            .map(|id| output.get(id).unwrap().clone())
+            .collect::<Vec<_>>();
+
+        let out =
+            batch_output_yao_functionality(&setup, &mut relay, &out_yao)
+                .await?;
+
+        Ok((setup.participant_index(), out))
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    async fn test_zcash_blake2b_3pc_util(
+        scalar_bool: Vec<bool>,
+    ) -> Vec<bool> {
+        use crate::test_support::run_init;
+
+        let mut parties = tokio::task::JoinSet::new();
+        let coord = SimpleMessageRelay::new();
+        for (setup, _) in run_init(None) {
+            let relay = coord.connect();
+            parties.spawn(test_run_zcash_blake2b_3pc(
+                setup,
+                scalar_bool.clone(),
+                relay,
+            ));
+        }
+
+        let mut shares = vec![];
+
+        while let Some(fini) = parties.join_next().await {
+            if let Err(ref err) = fini {
+                println!("error {err:?}");
+            } else {
+                match fini.unwrap() {
+                    Err(err) => panic!("err {err:?}"),
+                    Ok(share) => shares.push(share),
+                }
+            }
+        }
+
+        assert_eq!(shares[0].1, shares[2].1);
+        assert_eq!(shares[0].1, shares[1].1);
+
+        shares[0].1.clone()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_zcash_blake2b_3pc() {
+        let rng = StdRng::from_entropy();
+
+        let scalar = Scalar::random(rng);
+        let scalar_bool = u8_vec_to_bool_vec(scalar.to_repr().to_vec());
+        let out = test_zcash_blake2b_3pc_util(scalar_bool).await;
+        let mut ask_i = BinaryString::new();
+        let mut nk_i = BinaryString::new();
+        let mut rivk_i = BinaryString::new();
+        for i in &out[..512] {
+            ask_i.push(*i);
+        }
+        for i in &out[512..1024] {
+            nk_i.push(*i);
+        }
+        for i in &out[1024..] {
+            rivk_i.push(*i);
+        }
+        println!("ask_i: {:?}", hex::encode(ask_i.value));
+        println!("nk_i: {:?}", hex::encode(nk_i.value));
+        println!("rivk_i: {:?}", hex::encode(rivk_i.value));
+
+        println!()
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    async fn test_run_zcash_dkg<S, R>(
+        setup: S,
+        shamir_share: Scalar,
+        relay: R,
+    ) -> Result<(usize, Vec<bool>), ProtocolError>
+    where
+        S: ProtocolParticipant,
+        R: Relay,
+    {
+        use garbled_circuit::functionality::{
+            input::run_batch_input_from_all_yao, utils::run_common_randomness,
+        };
+        use rand::RngCore;
+
+        use crate::test_support::{
+            build_zcash_import_function, bytes_to_bits_be,
+            run_shamir_to_scalar_rss_pallas,
+        };
+
+        let mut relay = FilteredMsgRelay::new(relay);
+        let mut rng = StdRng::from_entropy();
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+
+        let mut yao_setup =
+            setup_yao_functionality(&setup, &mut relay).await?;
+
+        let (hash, comm) = match &yao_setup {
+            YaoSetup::E(e) => {
+                let hash = AesHash::new(e.comm_crs);
+                let comm = HashCommitment::new(hash);
+                (hash, comm)
+            }
+            YaoSetup::G(g) => {
+                let hash = AesHash::new(g.comm_crs);
+                let comm = HashCommitment::new(hash);
+                (hash, comm)
+            }
+        };
+        // run setup for serverstate
+        let mut randomness =
+            run_common_randomness(&setup, &seed, &mut relay).await?;
+
+        let (rss_prev, rss_next) = run_shamir_to_scalar_rss_pallas(
+            &setup,
+            &mut relay,
+            &shamir_share,
+            &mut randomness,
+        )
+        .await?;
+
+        // let tag = MessageTag::tag(12389);
+
+        // let res_next = p2p_send_to_next_receive_from_prev(
+        //     &setup,
+        //     tag,
+        //     rss_prev.to_repr(),
+        //     &mut relay,
+        // )
+        // .await?;
+
+        // let res = Scalar::from_repr(res_next).unwrap();
+
+        // let s = rss_next + rss_prev + res;
+
+        // if setup.participant_index() == 0 {
+        //     println!("{rss_next:?} \n{rss_prev:?} \n{res:?}\n{s:?}");
+        // }
+
+        let prev = bytes_to_bits_be(&rss_prev.to_repr());
+        let next = bytes_to_bits_be(&rss_next.to_repr());
+
+        let mut all_ip = prev;
+        all_ip.extend_from_slice(&next);
+
+        let (i1_yao, i2_yao, i3_yao) = run_batch_input_from_all_yao(
+            &setup,
+            &mut relay,
+            &all_ip,
+            &mut yao_setup,
+            &comm,
+        )
+        .await?;
+
+        let mut inputs = [vec![], vec![], vec![], vec![], vec![], vec![]];
+
+        inputs[0].extend_from_slice(&i1_yao[256..]);
+        inputs[1].extend_from_slice(&i2_yao[256..]);
+        inputs[2].extend_from_slice(&i3_yao[256..]);
+
+        inputs[3].extend_from_slice(&i1_yao[..256]);
+        inputs[4].extend_from_slice(&i2_yao[..256]);
+        inputs[5].extend_from_slice(&i3_yao[..256]);
+
+        let circuit = build_zcash_import_function();
+
+        let output = yao_circuit_eval_functionality(
+            &setup,
+            &mut relay,
+            &inputs,
+            &circuit,
+            &hash,
+            &mut yao_setup,
+        )
+        .await?;
+
+        let out_yao = circuit
+            .output_gate_ids
+            .iter()
+            .map(|v| output.get(v).unwrap().clone())
+            .collect::<Vec<_>>();
+
+        let out =
+            batch_output_yao_functionality(&setup, &mut relay, &out_yao)
+                .await?;
+
+        Ok((setup.participant_index(), out))
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    async fn test_zcash_dkg_util(
+        shamir_share: [Keyshare<RedPallasPoint>; 3],
+    ) -> Vec<bool> {
+        use crate::test_support::run_init;
+
+        let mut parties = tokio::task::JoinSet::new();
+        let coord = SimpleMessageRelay::new();
+        for (setup, _) in run_init(None) {
+            let relay = coord.connect();
+            let pid = setup.participant_index();
+            parties.spawn(test_run_zcash_dkg(
+                setup,
+                *shamir_share[pid].shamir_share(),
+                relay,
+            ));
+        }
+
+        let mut shares = vec![];
+
+        while let Some(fini) = parties.join_next().await {
+            if let Err(ref err) = fini {
+                println!("error {err:?}");
+            } else {
+                match fini.unwrap() {
+                    Err(err) => panic!("err {err:?}"),
+                    Ok(share) => shares.push(share),
+                }
+            }
+        }
+
+        assert_eq!(shares[0].1, shares[2].1);
+        assert_eq!(shares[0].1, shares[1].1);
+
+        shares[0].1.clone()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_zcash_dkg() {
+        let out: [Keyshare<RedPallasPoint>; 3] =
+            run_keygen::<2, 3, RedPallasPoint>();
+
+        // let eval_points =
+        //     (0..2).map(|v| Scalar::from(v + 1)).collect::<Vec<_>>();
+        // let s3 = get_evaluation(
+        //     &eval_points,
+        //     &[*out[0].shamir_share(), *out[1].shamir_share()],
+        //     &Scalar::from(3),
+        // );
+        // let s = get_evaluation(
+        //     &eval_points,
+        //     &[*out[0].shamir_share(), *out[1].shamir_share()],
+        //     &Scalar::from(0),
+        // );
+
+        // println!(
+        //     "{:?} \n{:?}\n{:?} \n{:?} \n{} ",
+        //     s3,
+        //     out[2].shamir_share(),
+        //     (RedPallasPoint::generator() * s).0,
+        //     out[0].public_key(),
+        //     RedPallasPoint::generator() * s == *out[0].public_key(),
+        // );
+
+        // println!("{:?}", s);
+
+        let out = test_zcash_dkg_util(out).await;
+        let mut ask_i = BinaryString::new();
+        let mut nk_i = BinaryString::new();
+        let mut rivk_i = BinaryString::new();
+        for i in &out[1..513] {
+            ask_i.push(*i);
+        }
+        for i in &out[513..1025] {
+            nk_i.push(*i);
+        }
+        for i in &out[1025..] {
+            rivk_i.push(*i);
+        }
+        println!("ver: {:?}", out[0]);
         println!("ask_i: {:?}", hex::encode(ask_i.value));
         println!("nk_i: {:?}", hex::encode(nk_i.value));
         println!("rivk_i: {:?}", hex::encode(rivk_i.value));
