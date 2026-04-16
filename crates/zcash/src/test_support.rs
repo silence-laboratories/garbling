@@ -5,7 +5,7 @@ use garbled_circuit::circuitop::{
 use garbled_circuit::functionality::{
     utils::FilteredMsgRelay,
     utils::{NoSigningKey, NoVerifyingKey, SetupMessage},
-    utils_dep::{ProtocolError, ProtocolParticipant},
+    utils_dep::ProtocolError,
 };
 
 #[cfg(any(test, feature = "test-support"))]
@@ -17,17 +17,16 @@ use pasta_curves::{
 };
 
 #[cfg(any(test, feature = "test-support"))]
-use sl_compute_common::CommonRandomness;
+use sl_messages::{relay::Relay, setup::ProtocolParticipant};
 
 #[cfg(any(test, feature = "test-support"))]
-use sl_messages::relay::Relay;
+use sl_compute_common::CommonRandomness;
 
 /// Generate setup messages and seeds for parties.
 #[cfg(any(test, feature = "test-support"))]
 pub fn run_init(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
     use std::time::Duration;
 
-    use garbled_circuit::functionality::utils_dep::ProtocolParticipant;
     use sl_messages::message::InstanceId;
 
     let n = 3;
@@ -368,10 +367,7 @@ pub fn build_mod_add_circut(
 
     let ps = pbin
         .iter()
-        .map(|&v| {
-            let val = if v { 1 } else { 0 };
-            builder.constant(val)
-        })
+        .map(|&v| builder.constant(v))
         .collect::<Vec<_>>();
 
     let x = builder.new_inputs(size as u16);
@@ -463,7 +459,7 @@ pub fn build_subtract_order_circuit(
     let mut pt = Vec::new();
     #[allow(clippy::needless_range_loop)]
     for i in 0..pbin.len() as usize {
-        let id = builder.constant(if pbin[i] { 1 } else { 0 });
+        let id = builder.constant(pbin[i]);
         pt.push(pbin[i]);
         pbin_ids.push(id);
     }
@@ -540,7 +536,7 @@ pub fn build_ppa_circuit(size: usize) -> BinaryCircuit {
     }
 
     let g_size = g[size - 1];
-    let mut g_mul_two = vec![builder.constant(0)];
+    let mut g_mul_two = vec![builder.constant(false)];
     g_mul_two.extend_from_slice(&g[..size - 1]);
 
     let sum: Vec<u32> = pc

@@ -64,10 +64,7 @@ pub fn create_blake2b_circuit(input_len: usize) -> BinaryCircuit {
 
     let mut h_words = H_WORDS
         .iter()
-        .map(|&v| {
-            let val = if v { 1 } else { 0 };
-            builder.constant(val)
-        })
+        .map(|&v| builder.constant(v))
         .collect::<Vec<_>>();
 
     let num_of_blocks = blocks.len();
@@ -76,19 +73,25 @@ pub fn create_blake2b_circuit(input_len: usize) -> BinaryCircuit {
 
     let mut bytes_processed = 0;
     for (i, blk) in blocks.enumerate() {
-        let is_last_val = if i == (num_of_blocks - 1) { 1 } else { 0 };
+        let is_last_val = i == (num_of_blocks - 1);
         bytes_processed += blk.len() as u64 / 8;
         let mut in1 = Vec::with_capacity(1024);
         in1.extend_from_slice(&h_words);
         for j in 0..64 {
             let val = (bytes_processed >> j) & 1;
-            in1.push(builder.constant(val as u16));
+            in1.push(builder.constant(val != 0));
         }
         in1.extend_from_slice(&[builder.constant(is_last_val); 64]);
-        in1.extend_from_slice(&vec![builder.constant(0); 1024 - in1.len()]);
+        in1.extend_from_slice(&vec![
+            builder.constant(false);
+            1024 - in1.len()
+        ]);
 
         let mut in2 = blk.to_vec();
-        in2.extend_from_slice(&vec![builder.constant(0); 1024 - blk.len()]);
+        in2.extend_from_slice(&vec![
+            builder.constant(false);
+            1024 - blk.len()
+        ]);
 
         h_words = builder.add_circuit(&blake2b_circuit, &[&in1, &in2]);
     }

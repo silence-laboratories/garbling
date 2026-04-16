@@ -29,10 +29,7 @@ pub fn build_zcash_blake2b_circuit() -> BinaryCircuit {
         let index_bool = u8_vec_to_bool_vec(index_be.to_vec());
         let index_ids = index_bool
             .iter()
-            .map(|v| {
-                let val = if *v { 1 } else { 0 };
-                builder.constant(val)
-            })
+            .map(|v| builder.constant(*v))
             .collect::<Vec<_>>();
 
         let mut final_msg = msg_ids.clone();
@@ -55,9 +52,8 @@ mod tests {
             circuit_eval::yao_circuit_eval_functionality,
             input::batch_input_yao_functionality,
             output::batch_output_yao_functionality,
-            setup::setup_yao_functionality,
-            utils::FilteredMsgRelay,
-            utils_dep::{ProtocolError, ProtocolParticipant},
+            setup::setup_yao_functionality, utils::FilteredMsgRelay,
+            utils_dep::ProtocolError,
         },
         utilities::{
             commitments::HashCommitment, hash_function::AesHash,
@@ -74,7 +70,10 @@ mod tests {
     };
     use rand::{SeedableRng, rngs::StdRng};
     use sl_compute_common::BinaryString;
-    use sl_messages::relay::{Relay, SimpleMessageRelay};
+    use sl_messages::{
+        relay::{Relay, SimpleMessageRelay},
+        setup::ProtocolParticipant,
+    };
 
     use crate::eval::evaluate;
 
@@ -155,7 +154,7 @@ mod tests {
         .await?;
 
         let out_yao = circuit
-            .output_gate_ids
+            .output_gate_ids()
             .iter()
             .map(|id| output.get(id).unwrap().clone())
             .collect::<Vec<_>>();
@@ -337,7 +336,7 @@ mod tests {
         .await?;
 
         let out_yao = circuit
-            .output_gate_ids
+            .output_gate_ids()
             .iter()
             .map(|v| output.get(v).unwrap().clone())
             .collect::<Vec<_>>();

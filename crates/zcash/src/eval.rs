@@ -1,16 +1,16 @@
 use garbled_circuit::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
 
 pub fn evaluate(circuit: &BinaryCircuit, inputs: &[&[bool]]) -> Vec<bool> {
-    let mut w = vec![false; circuit.gates.len()];
+    let mut w = vec![false; circuit.gates().len()];
 
-    for gate in circuit.gates.iter() {
+    for gate in circuit.gates().iter() {
         let (out_gate, f_label) = match *gate {
             BinaryGate::Input { no, id, wire } => {
                 let share = inputs[no as usize][id as usize];
                 (wire, share)
             }
 
-            BinaryGate::Constant { val, wire } => (wire, val != 0),
+            BinaryGate::Constant { val, wire } => (wire, val),
 
             BinaryGate::Xor { xid, yid, out } => {
                 let x_label = &w[xid as usize];

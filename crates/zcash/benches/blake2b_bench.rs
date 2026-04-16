@@ -5,20 +5,21 @@ use std::collections::HashMap;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use garbled_circuit::{
-    config::constants::AES_KEY,
     functionality::{
         evaluate::evaluate_functionality, garble::garble_functionality,
     },
     utilities::{
         garble_hash::AesGarbleHash,
         types::{
-            Block, GarblerSetup, YaoEvaluatorShare, YaoGarblerShare, YaoShare,
+            BLOCK_SIZE, Block, GarblerSetup, YaoEvaluatorShare,
+            YaoGarblerShare, YaoShare,
         },
     },
 };
 use rand::{RngCore, SeedableRng, prelude::*};
 use rand_chacha::ChaCha8Rng;
 use zcash::blake2b::create_blake2b_circuit;
+pub const AES_KEY: Block = [1u8; BLOCK_SIZE];
 
 pub fn garb_blake2b_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Evaluate");
