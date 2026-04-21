@@ -1,8 +1,12 @@
 use garbled_circuit::circuitop::{
     circuit::BinaryCircuit, circuit_builder::CircuitBuilder,
 };
+use group::ff::PrimeField;
+use pasta_curves::pallas::Scalar;
 
-use crate::blake2b::create_blake2b_circuit;
+use crate::{
+    blake2b::create_blake2b_circuit, circuits::build_mod_add_circut,
+};
 
 /// Converts a vector of `u8` values to a vector of `bool` values
 pub fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
@@ -40,6 +44,49 @@ pub fn build_zcash_blake2b_circuit() -> BinaryCircuit {
         for i in hash_ids {
             builder.output(i);
         }
+    }
+
+    builder.finish()
+}
+
+pub fn build_zcash_import_function() -> BinaryCircuit {
+    use crate::{
+        circuits::build_compare_eq_circuit,
+        zcash::build_zcash_blake2b_circuit,
+    };
+
+    let mut builder = CircuitBuilder::new();
+
+    let p1_next = builder.new_inputs(256);
+    let p2_next = builder.new_inputs(256);
+    let p3_next = builder.new_inputs(256);
+    let p1_prev = builder.new_inputs(256);
+    let p2_prev = builder.new_inputs(256);
+    let p3_prev = builder.new_inputs(256);
+
+    let comp_eq_circ = build_compare_eq_circuit(256);
+    let op1 = builder.add_circuit(&comp_eq_circ, &[&p1_next, &p2_prev])[0];
+    let op2 = builder.add_circuit(&comp_eq_circ, &[&p2_next, &p3_prev])[0];
+    let op3 = builder.add_circuit(&comp_eq_circ, &[&p3_next, &p1_prev])[0];
+
+    let temp = builder.and(op1, op2);
+    let output = builder.and(temp, op3);
+
+    let mut prime_bytes = hex::decode(&Scalar::MODULUS[2..]).unwrap();
+    prime_bytes.reverse();
+
+    let circ =
+        build_mod_add_circut(p1_next.len(), prime_bytes.try_into().unwrap());
+
+    let temp = builder.add_circuit(&circ, &[&p1_next, &p2_next]);
+    let res3_ids = builder.add_circuit(&circ, &[&temp, &p3_next]);
+
+    let zcash_circuit = build_zcash_blake2b_circuit();
+    let op = builder.add_circuit(&zcash_circuit, &[&res3_ids]);
+
+    builder.output(output);
+    for i in &op {
+        builder.output(*i);
     }
 
     builder.finish()
@@ -243,9 +290,9 @@ mod tests {
         };
         use rand::RngCore;
 
-        use crate::test_support::{
-            build_zcash_import_function, bytes_to_bits_be,
-            run_shamir_to_scalar_rss_pallas,
+        use crate::{
+            shamir_to_rss::run_shamir_to_scalar_rss_pallas,
+            utils::bytes_to_bits_be,
         };
 
         let mut relay = FilteredMsgRelay::new(relay);

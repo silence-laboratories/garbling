@@ -1,6 +1,9 @@
 use garbled_circuit::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
 
-pub fn evaluate(circuit: &BinaryCircuit, inputs: &[&[bool]]) -> Vec<bool> {
+pub(crate) fn evaluate(
+    circuit: &BinaryCircuit,
+    inputs: &[&[bool]],
+) -> Vec<bool> {
     let mut w = vec![false; circuit.gates().len()];
 
     for gate in circuit.gates().iter() {

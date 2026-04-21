@@ -11,15 +11,16 @@ hmac = { workspace = true }
 sl-messages = { workspace = true }
 group = { workspace = true }
 hex = "0.4"
+multi-party-schnorr = {version = "1.2.0-pre.1", features = ["test-support", "redpallas"]}
+pasta_curves = "0.5.1"
+rand = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = "0.5.1"
 rand = { workspace = true }
 rand_chacha = "0.3"
-pasta_curves = "0.5.1"
 hex = "0.4"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-multi-party-schnorr = {version = "1.2.0-pre.1", features = ["test-support", "redpallas"]}
 
 [[bench]]
 name = "blake2b_bench"
