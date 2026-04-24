@@ -13,3 +13,5 @@ pub mod shamir_to_rss;
 pub(crate) mod resconstruct_shamir;
 
 pub mod utils;
+
+pub(crate) mod prf;

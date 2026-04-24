@@ -4,9 +4,7 @@ use garbled_circuit::circuitop::{
 use group::ff::PrimeField;
 use pasta_curves::pallas::Scalar;
 
-use crate::{
-    blake2b::create_blake2b_circuit, circuits::build_mod_add_circut,
-};
+use crate::{circuits::build_mod_add_circut, prf::build_prf_expand_circuit};
 
 /// Converts a vector of `u8` values to a vector of `bool` values
 pub fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
@@ -23,23 +21,12 @@ pub fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
 pub fn build_zcash_blake2b_circuit() -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
-    let msg_ids = builder.new_inputs(256);
+    let sk_ids = builder.new_inputs(256);
+    let ints = [6, 7, 8];
 
-    let ints = [6u32, 7, 8];
-
-    let hash_circuit = create_blake2b_circuit(256 + 32);
     for i in ints {
-        let index_be = i.to_be_bytes();
-        let index_bool = u8_vec_to_bool_vec(index_be.to_vec());
-        let index_ids = index_bool
-            .iter()
-            .map(|v| builder.constant(*v))
-            .collect::<Vec<_>>();
-
-        let mut final_msg = msg_ids.clone();
-        final_msg.extend_from_slice(&index_ids);
-
-        let hash_ids = builder.add_circuit(&hash_circuit, &[&final_msg]);
+        let hash_circuit = build_prf_expand_circuit(i);
+        let hash_ids = builder.add_circuit(&hash_circuit, &[&sk_ids]);
 
         for i in hash_ids {
             builder.output(i);

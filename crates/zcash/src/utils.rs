@@ -61,3 +61,33 @@ pub fn bytes_to_bits_le(bytes: &[u8]) -> Vec<bool> {
     }
     bits
 }
+
+pub fn bits_to_bytes_be(bits: &[bool]) -> Vec<u8> {
+    bits.chunks(8)
+        .map(|chunk| {
+            chunk.iter().enumerate().fold(0u8, |byte, (i, &bit)| {
+                if bit {
+                    // First bit is MSB (128), last bit is LSB (1)
+                    byte | (1 << (7 - i))
+                } else {
+                    byte
+                }
+            })
+        })
+        .collect()
+}
+
+pub fn bits_to_bytes_le(bits: &[bool]) -> Vec<u8> {
+    bits.chunks(8)
+        .map(|chunk| {
+            chunk.iter().enumerate().fold(0u8, |byte, (i, &bit)| {
+                if bit {
+                    // First bit is LSB (1), last bit is MSB (128)
+                    byte | (1 << i)
+                } else {
+                    byte
+                }
+            })
+        })
+        .collect()
+}

@@ -1,5 +1,7 @@
+#[cfg(any(test, feature = "test-support"))]
 use garbled_circuit::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
 
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) fn evaluate(
     circuit: &BinaryCircuit,
     inputs: &[&[bool]],

@@ -1502,6 +1502,7 @@ dependencies = [
 name = "zcash"
 version = "0.1.0"
 dependencies = [
+ "blake2b_simd",
  "criterion",
  "garbled-circuit",
  "group",

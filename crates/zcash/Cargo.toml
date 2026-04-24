@@ -20,6 +20,7 @@ criterion = "0.5.1"
 rand = { workspace = true }
 rand_chacha = "0.3"
 hex = "0.4"
+blake2b_simd = "1.0.4"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [[bench]]

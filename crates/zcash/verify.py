@@ -101,6 +101,10 @@ def bits_to_hex(bits):
 def verify_hash(message):
     circuit = generate_blake2b_512_bristol_modular()
     h_words = [0x6a09e667f3bcc908 ^ 0x01010040, 0xbb67ae8584caa73b, 0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1, 0x510e527fade682d1, 0x9b05688c2b3e6c1f, 0x1f83d9abfb41bd6b, 0x5be0cd19137e2179]
+    pers_0 = 0x78455f687361635a
+    pers_1 = 0x64656553646e6170
+    h_words[6] = h_words[6] ^ pers_0
+    h_words[7] = h_words[7] ^ pers_1
     blocks = [message[i:i+128] for i in range(0, len(message), 128)] or [b""]
     bytes_processed = 0
     final_bits = []
