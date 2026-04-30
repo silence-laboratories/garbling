@@ -8,6 +8,9 @@ use rand_chacha::ChaCha20Rng;
 use signature::{SignatureEncoding, Signer, Verifier};
 
 use sl_compute_common::{BinaryString, CommonRandomness};
+pub use sl_messages::setup::keys::{
+    NoSignature, NoSigningKey, NoVerifyingKey,
+};
 use sl_messages::{
     message::{InstanceId, MessageTag, MsgHdr},
     pairs::Pairs,
@@ -190,76 +193,6 @@ where
     relay.inner.send(buffer).await?;
 
     receive_from_one_party(setup, tag, prev_party_id, relay).await
-}
-
-/// Type of empty signature.
-#[derive(Clone)]
-pub struct NoSignature;
-
-impl SignatureEncoding for NoSignature {
-    type Repr = [u8; 0];
-}
-
-impl<'a> TryFrom<&'a [u8]> for NoSignature {
-    type Error = ();
-
-    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
-        if !value.is_empty() {
-            return Err(());
-        }
-        Ok(NoSignature)
-    }
-}
-
-impl TryInto<[u8; 0]> for NoSignature {
-    type Error = ();
-
-    fn try_into(self) -> Result<[u8; 0], Self::Error> {
-        Ok([0; 0])
-    }
-}
-
-pub struct NoSigningKey;
-
-impl Signer<NoSignature> for NoSigningKey {
-    fn try_sign(&self, _msg: &[u8]) -> Result<NoSignature, signature::Error> {
-        Ok(NoSignature)
-    }
-}
-
-/// A verifying key for NoSignature. Verification always succeeds. In
-/// this case verifying key used as an idenitity ID and communication
-/// uses a secure transport and there is no need to verify
-/// authenticity of the messages.
-#[derive(Clone)]
-pub struct NoVerifyingKey(Vec<u8>);
-
-impl NoVerifyingKey {
-    pub fn new(id: usize) -> Self {
-        NoVerifyingKey((id as u64).to_be_bytes().into())
-    }
-}
-
-impl<T: Into<Vec<u8>>> From<T> for NoVerifyingKey {
-    fn from(value: T) -> Self {
-        NoVerifyingKey(value.into())
-    }
-}
-
-impl AsRef<[u8]> for NoVerifyingKey {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl Verifier<NoSignature> for NoVerifyingKey {
-    fn verify(
-        &self,
-        _: &[u8],
-        _: &NoSignature,
-    ) -> Result<(), signature::Error> {
-        Ok(())
-    }
 }
 
 #[derive(Clone)]
