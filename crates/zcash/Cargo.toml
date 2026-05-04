@@ -1,0 +1,20 @@
+[package]
+name = "zcash"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+garbled-circuit = { workspace = true }
+sl-compute-common = { workspace = true }
+sha2 = { workspace = true }
+hmac = { workspace = true }
+hex = "0.4"
+
+[dev-dependencies]
+criterion = "0.5.1"
+rand = { workspace = true }
+rand_chacha = "0.3"
+
+[[bench]]
+name = "blake2b_bench"
+harness = false

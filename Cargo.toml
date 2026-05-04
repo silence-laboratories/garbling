@@ -68,5 +68,5 @@ sl-messages = { version = "1.2.0", features = ["setup"] }
 [workspace]
 members = [
     ".",
-    "crates/hd-migration",
+    "crates/hd-migration", "crates/zcash"
 ]
