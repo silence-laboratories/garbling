@@ -26,6 +26,7 @@ hex = "0.4"
 rand = { workspace = true }
 rand_chacha = "0.3"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+garbled-circuit = { workspace = true, features = ["test-support"] }
 
 [[bench]]
 name = "blake2b_bench"

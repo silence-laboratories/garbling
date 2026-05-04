@@ -5,13 +5,12 @@ use ff::FromUniformBytes;
 use group::{Group, GroupEncoding};
 use pasta_curves::pallas::{Point, Scalar};
 use sha2::{Digest, Sha512};
-use sl_compute_common::CommonRandomness;
-use sl_messages::relay::Relay;
-use sl_messages::setup::ProtocolParticipant;
 
 use garbled_circuit::functionality::{
     utils::FilteredMsgRelay, utils_dep::ProtocolError,
 };
+use sl_compute_common::CommonRandomness;
+use sl_messages::{relay::Relay, setup::ProtocolParticipant};
 
 use crate::resconstruct_shamir::run_reconstruct_pallas_shamir;
 

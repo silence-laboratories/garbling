@@ -4,11 +4,12 @@
 use ff::PrimeField;
 use pasta_curves::pallas::Scalar;
 
-use garbled_circuit::circuitop::{
-    circuit::BinaryCircuit, circuit_builder::CircuitBuilder,
+use garbled_circuit::{
+    arithmetic::{build_compare_eq_circuit, build_mod_add_circut},
+    circuit::{BinaryCircuit, CircuitBuilder},
 };
 
-use crate::{circuits::build_mod_add_circut, prf::build_prf_expand_circuit};
+use crate::prf::build_prf_expand_circuit;
 
 /// Converts a vector of `u8` values to a vector of `bool` values
 pub fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
@@ -41,10 +42,7 @@ pub fn build_zcash_blake2b_circuit() -> BinaryCircuit {
 }
 
 pub fn build_zcash_import_function() -> BinaryCircuit {
-    use crate::{
-        circuits::build_compare_eq_circuit,
-        zcash::build_zcash_blake2b_circuit,
-    };
+    use crate::zcash::build_zcash_blake2b_circuit;
 
     let mut builder = CircuitBuilder::new();
 
@@ -66,8 +64,7 @@ pub fn build_zcash_import_function() -> BinaryCircuit {
     let mut prime_bytes = hex::decode(&Scalar::MODULUS[2..]).unwrap();
     prime_bytes.reverse();
 
-    let circ =
-        build_mod_add_circut(p1_next.len(), prime_bytes.try_into().unwrap());
+    let circ = build_mod_add_circut(p1_next.len(), &prime_bytes);
 
     let temp = builder.add_circuit(&circ, &[&p1_next, &p2_next]);
     let res3_ids = builder.add_circuit(&circ, &[&temp, &p3_next]);
@@ -85,6 +82,8 @@ pub fn build_zcash_import_function() -> BinaryCircuit {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use ff::{Field, PrimeField};
     use garbled_circuit::{
         functionality::{
@@ -92,7 +91,7 @@ mod tests {
             input::batch_input_yao_functionality,
             output::batch_output_yao_functionality,
             setup::setup_yao_functionality, utils::FilteredMsgRelay,
-            utils_dep::ProtocolError,
+            utils::SetupMessage, utils_dep::ProtocolError,
         },
         utilities::{
             commitments::HashCommitment, hash_function::AesHash,
@@ -101,15 +100,61 @@ mod tests {
     };
     use pasta_curves::pallas::Scalar;
     use rand::{SeedableRng, rngs::StdRng};
+    use sha2::{Digest, Sha256};
     use sl_compute_common::BinaryString;
     use sl_messages::{
+        message::InstanceId,
         relay::{Relay, SimpleMessageRelay},
-        setup::ProtocolParticipant,
+        setup::{
+            ProtocolParticipant,
+            keys::{NoSigningKey, NoVerifyingKey},
+        },
     };
 
-    use crate::eval::evaluate;
-
     use super::*;
+
+    fn run_init(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
+        let n = 3;
+        let instance = instance.unwrap_or_else(rand::random);
+
+        let party_sk: Vec<NoSigningKey> =
+            std::iter::repeat_with(|| NoSigningKey)
+                .take(n as usize)
+                .collect();
+
+        let party_vk: Vec<NoVerifyingKey> = party_sk
+            .iter()
+            .enumerate()
+            .map(|(party_id, _)| NoVerifyingKey::new(party_id))
+            .collect();
+
+        party_sk
+            .into_iter()
+            .enumerate()
+            .map(|(party_id, sk)| {
+                SetupMessage::new(
+                    InstanceId::new(instance),
+                    sk,
+                    party_id,
+                    party_vk.clone(),
+                )
+                .with_ttl(Duration::from_secs(1000))
+            })
+            .map(|setup| {
+                let mixin = [setup.participant_index() as u8 + 1];
+
+                (
+                    setup,
+                    Sha256::new()
+                        .chain_update(instance)
+                        .chain_update(b"party-seed")
+                        .chain_update(mixin)
+                        .finalize()
+                        .into(),
+                )
+            })
+            .collect()
+    }
 
     fn generate_shamir_shares(rng: &mut StdRng) -> [Scalar; 3] {
         let secret = Scalar::random(&mut *rng);
@@ -129,7 +174,7 @@ mod tests {
         let scalar = Scalar::random(rng);
         let scalar_bool = u8_vec_to_bool_vec(scalar.to_repr().to_vec());
 
-        let out = evaluate(&circ, &[&scalar_bool]);
+        let out = circ.evaluate(&[&scalar_bool]);
         let mut ask_i = BinaryString::new();
         let mut nk_i = BinaryString::new();
         let mut rivk_i = BinaryString::new();
@@ -212,8 +257,6 @@ mod tests {
     async fn test_zcash_blake2b_3pc_util(
         scalar_bool: Vec<bool>,
     ) -> Vec<bool> {
-        use crate::test_support::run_init;
-
         let mut parties = tokio::task::JoinSet::new();
         let coord = SimpleMessageRelay::new();
         for (setup, _) in run_init(None) {
@@ -392,8 +435,6 @@ mod tests {
 
     #[cfg(any(test, feature = "test-support"))]
     async fn test_zcash_dkg_util(shamir_shares: [Scalar; 3]) -> Vec<bool> {
-        use crate::test_support::run_init;
-
         let mut parties = tokio::task::JoinSet::new();
         let coord = SimpleMessageRelay::new();
         for (setup, _) in run_init(None) {

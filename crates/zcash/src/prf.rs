@@ -32,7 +32,6 @@ pub fn build_prf_expand_circuit(t: u8) -> BinaryCircuit {
 #[cfg(test)]
 mod tests {
     use crate::{
-        eval::evaluate,
         prf::build_prf_expand_circuit,
         utils::{bits_to_bytes_le, bytes_to_bits_be},
     };
@@ -61,7 +60,7 @@ mod tests {
         let t = 6;
         let circ = build_prf_expand_circuit(t);
         let bits = bytes_to_bits_be(&sk);
-        let out = evaluate(&circ, &[&bits]);
+        let out = circ.evaluate(&[&bits]);
 
         assert_eq!(bits_to_bytes_le(&out), prf_expand(&sk, t).to_vec());
     }

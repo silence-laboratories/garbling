@@ -3,6 +3,10 @@
 
 pub mod circuit;
 
+pub mod arithmetic;
+
+pub mod comparison;
+
 /// Compatibility shim for the previous `circuitop` module layout.
 pub mod circuitop {
     pub mod circuit {
@@ -26,6 +30,9 @@ pub mod config;
 
 pub mod utilities;
 
-pub mod customcircuits;
+pub mod customcircuits {
+    pub use crate::arithmetic;
+    pub use crate::comparison;
+}
 
 pub mod functionality;

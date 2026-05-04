@@ -13,16 +13,6 @@ include = [
   "/build.rs",
 ]
 
-[dev-dependencies]
-criterion = "0.5.1"
-tokio = { workspace = true, features = [
-    "rt",
-    "sync",
-    "macros",
-    "rt-multi-thread",
-] }
-merlin = "3.0.0"
-
 [features]
 test-support = []
 circuit-blake2b = []
@@ -47,6 +37,12 @@ generic-array = { workspace = true }
 sha2 = { workspace = true }
 signature = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+criterion = "0.5.1"
+merlin = "3.0.0"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
 
 [workspace.dependencies]
 aes = "0.8.4"

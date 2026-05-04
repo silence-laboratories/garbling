@@ -1,6 +1,11 @@
 # Garbling Library
 
-This library implements the garbler and evaluator for two-party semi-honest and three-party malicious garbled-circuit protocols, based on [[ZRE15]](https://eprint.iacr.org/2014/756.pdf) and [[MRZ15]](https://eprint.iacr.org/2015/931.pdf). It does **not** include the oblivious transfer protocols required for input label sharing in the two-party semi-honest case.
+This library implements the garbler and evaluator for two-party
+semi-honest and three-party malicious garbled-circuit protocols, based
+on [[ZRE15]](https://eprint.iacr.org/2014/756.pdf) and
+[[MRZ15]](https://eprint.iacr.org/2015/931.pdf). It does **not**
+include the oblivious transfer protocols required for input label
+sharing in the two-party semi-honest case.
 
 ### Crate Layout
 
@@ -10,8 +15,18 @@ The public modules exposed by `src/lib.rs` are:
   - Defines `BinaryCircuit`, `BinaryGate`, and `CircuitBuilder`.
   - Supports parsing Bristol Fashion circuits from text.
   - Includes `circuit::prebuilt` for build-time embedded circuit artifacts.
+- **`arithmetic`**: Programmatically built arithmetic circuits.
+  - Provides reusable circuit builders such as modular addition, subtraction,
+    comparisons, and batched conditional selection.
+- **`comparison`**: Comparison-related circuit helpers exposed at the crate
+  root.
 - **`circuitop`**: Compatibility shim for the older module layout.
-  - Re-exports the circuit types under the previous paths (`circuitop::circuit`, `circuitop::circuit_builder`, `circuitop::gate`, `circuitop::prebuilt`).
+  - Re-exports the circuit types under the previous paths
+    (`circuitop::circuit`, `circuitop::circuit_builder`,
+    `circuitop::gate`, `circuitop::prebuilt`).
+- **`customcircuits`**: Compatibility shim for the previous custom-circuit
+  layout.
+  - Re-exports `arithmetic` and `comparison` under their legacy paths.
 - **`config`**: Protocol constants and error types.
   - `constants`: message tags and test circuit constants.
   - `errors`: circuit parsing errors.
@@ -23,8 +38,6 @@ The public modules exposed by `src/lib.rs` are:
   - `commitments`: commitment trait and hash-based commitment scheme.
   - `types`: core Yao share/setup/block types.
   - `utils`: low-level block helpers.
-- **`customcircuits`**: Programmatically built circuits.
-  - Currently contains `comparison`, built with `CircuitBuilder`.
 - **`functionality`**: Protocol building blocks and higher-level Yao/garbling flows.
   - `setup`: setup for garbler/evaluator roles.
   - `input` / `output`: encode inputs and decode outputs.
@@ -35,15 +48,21 @@ The public modules exposed by `src/lib.rs` are:
 
 ### Repository Layout
 
-- **`circuits/`**: Checked-in Bristol Fashion circuit files (`aes128`, `aes256`, `binmult`, `sha256`, `sha512`).
-- **`build.rs`**: Converts `circuits/*.txt` into a compact private binary format embedded at build time and decoded by `BinaryCircuit::from_compact_bytes`.
+- **`circuits/`**: Checked-in Bristol Fashion circuit files (`aes128`,
+  `aes256`, `binmult`, `blake2b`, `sha256`, `sha512`).
+- **`build.rs`**: Converts `circuits/*.txt` into a compact private
+  binary format embedded at build time and decoded by
+  `BinaryCircuit::from_compact_bytes`.
 - **`benches/`**: Criterion benchmarks for garbling and evaluation.
-- **`crates/hd-migration/`**: Separate workspace crate built on top of `garbled-circuit` for HD-migration-related protocols.
 
 ### Notes
 
-- The old `circuitop` layout is still available only as a **compatibility re-export**; the main implementation lives in **`circuit`**.
-- Hashing utilities follow the design used by [`fancy-garbling`](https://github.com/GaloisInc/swanky/tree/dev/edge/fancy-garbling) and the commitment implementation is a simple hash-based commitment.
+- The old `circuitop` and `customcircuits` layouts are still available only as
+  **compatibility re-exports**; the main implementations now live in
+  **`circuit`**, **`arithmetic`**, and **`comparison`**.
+- Hashing utilities follow the design used by
+  [`fancy-garbling`](https://github.com/GaloisInc/swanky/tree/dev/edge/fancy-garbling)
+  and the commitment implementation is a simple hash-based commitment.
 
 ### References
 

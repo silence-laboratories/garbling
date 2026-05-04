@@ -1,26 +1,30 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use garbled_circuit::circuit::{BinaryCircuit, CircuitBuilder};
+use crate::circuit::{BinaryCircuit, CircuitBuilder};
 
-use crate::utils::bytes_to_bits_be;
+fn bytes_to_bits_le_from_le_bytes(bytes: &[u8]) -> Vec<bool> {
+    let mut bits = Vec::with_capacity(bytes.len() * 8);
+    for &byte in bytes {
+        for i in 0..8 {
+            bits.push(((byte >> i) & 1) == 1);
+        }
+    }
+    bits
+}
 
-/// Returns the `BinaryCircuit` which implements addition modulo a constant `prime` of two
-///  binary values of bit length `size`
+/// Returns the `BinaryCircuit` which implements addition modulo a constant
+/// `prime` of two binary values of bit length `size`.
 ///
-/// The first input is set as the gabler's input and the next input is
-/// set as the evaluator's input
+/// `prime_bytes_le` must encode the modulus in little-endian byte order.
 pub fn build_mod_add_circut(
     size: usize,
-    prime_bytes: [u8; 32],
+    prime_bytes_le: &[u8],
 ) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
-    let mut pbin = bytes_to_bits_be(&prime_bytes);
-
-    if size + 1 > pbin.len() {
-        pbin.extend_from_slice(&vec![false; (size + 1) - pbin.len()]);
-    }
+    let mut pbin = bytes_to_bits_le_from_le_bytes(prime_bytes_le);
+    pbin.resize(size + 1, false);
 
     let ps = pbin
         .iter()
@@ -31,13 +35,12 @@ pub fn build_mod_add_circut(
     let y = builder.new_inputs(size as u16);
 
     let add_circuit = build_ppa_circuit(size);
-
     let add = builder.add_circuit(&add_circuit, &[&x, &y]);
 
     let comp_circ = build_compare_ge_circuit(size + 1);
     let comp = builder.add_circuit(&comp_circ, &[&add, &ps]);
 
-    let sub_circ = build_subtract_order_circuit(size + 1, prime_bytes);
+    let sub_circ = build_subtract_order_circuit(size + 1, prime_bytes_le);
     let sub = builder.add_circuit(&sub_circ, &[&add]);
 
     let comps = vec![comp[0]; size];
@@ -79,46 +82,36 @@ pub fn build_compare_eq_circuit(input_len: usize) -> BinaryCircuit {
     builder.finish()
 }
 
-/// Returns the `BinaryCircuit` which implements subtraction of a binary value of
-/// bit length `size` by a constant `prime`.
+/// Returns the `BinaryCircuit` which implements subtraction of a binary value
+/// of bit length `size` by a constant `prime`.
 ///
-/// The input is set as the garbler's input
+/// `prime_bytes_le` must encode the modulus in little-endian byte order.
 pub fn build_subtract_order_circuit(
     size: usize,
-    prime_bytes: [u8; 32],
+    prime_bytes_le: &[u8],
 ) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
     let gin = builder.new_inputs(size as u16);
 
-    let mut pbin = bytes_to_bits_be(&prime_bytes);
+    let mut pbin = bytes_to_bits_le_from_le_bytes(prime_bytes_le);
+    pbin.resize(size, false);
+    pbin.iter_mut().for_each(|bit| *bit = !*bit);
 
-    if size > pbin.len() {
-        pbin.extend_from_slice(&vec![false; size - pbin.len()]);
-    }
-
-    pbin = pbin.iter().map(|v| !*v).collect();
-
-    let mut value = true;
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..pbin.len() {
-        let bit = pbin[i];
-        let sum = bit ^ value;
-        value &= bit;
-        pbin[i] = sum;
-        if !value {
+    let mut carry = true;
+    for bit in &mut pbin {
+        let sum = *bit ^ carry;
+        carry &= *bit;
+        *bit = sum;
+        if !carry {
             break;
         }
     }
 
-    let mut pbin_ids = Vec::new();
-    let mut pt = Vec::new();
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..pbin.len() as usize {
-        let id = builder.constant(pbin[i]);
-        pt.push(pbin[i]);
-        pbin_ids.push(id);
-    }
+    let pbin_ids = pbin
+        .iter()
+        .map(|&bit| builder.constant(bit))
+        .collect::<Vec<_>>();
 
     let ppa_circuit = build_ppa_circuit(size);
     let ppaout = builder.add_circuit(&ppa_circuit, &[&gin, &pbin_ids]);
@@ -132,9 +125,6 @@ pub fn build_subtract_order_circuit(
 
 /// Returns the `BinaryCircuit` which implements parallel prefix adder, which
 /// adds two binary values of bit length `size`.
-///
-/// The first input is set as the gabler's input and the next input is set as the
-/// evaluator's input
 pub fn build_ppa_circuit(size: usize) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
@@ -211,10 +201,7 @@ pub fn build_ppa_circuit(size: usize) -> BinaryCircuit {
 }
 
 /// Returns the `BinaryCircuit` which implements compare ge protocol, which
-/// compares two binary values of `size` bit length
-///
-/// If the garbler's input is `x` and the evaluator's input is `y`, the
-/// circuit returns `x >= y`
+/// compares two binary values of `size` bit length.
 pub fn build_compare_ge_circuit(size: usize) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
@@ -222,7 +209,6 @@ pub fn build_compare_ge_circuit(size: usize) -> BinaryCircuit {
     let y = builder.new_inputs(size as u16);
 
     let rec_circ = build_compare_ge_rec_circuit(size, 0, size - 1);
-
     let ops = builder.add_circuit(&rec_circ, &[&x, &y]);
 
     builder.output(ops[0]);
@@ -230,9 +216,7 @@ pub fn build_compare_ge_circuit(size: usize) -> BinaryCircuit {
     builder.finish()
 }
 
-/// Returns the `BinaryCircuit` which implements the recursion for
-/// compare ge protocol, which compares two binary values of `size`
-/// bit length
+/// Returns the `BinaryCircuit` which implements the recursion for compare ge.
 pub fn build_compare_ge_rec_circuit(
     size: usize,
     lo: usize,
@@ -278,10 +262,8 @@ pub fn build_compare_ge_rec_circuit(
     builder.finish()
 }
 
-/// Returns a `BinaryCircuit` which implements a batched version of `if then else`.
-/// The garbler inputs contains `choice + input1`.
-/// The evaluator inputs contains `input2`.
-/// If choice is true, then `input1` is the output. Else, the output is `input2`.
+/// Returns a `BinaryCircuit` which implements a batched version of
+/// `if then else`.
 pub fn build_if_then_else_circuit(size: usize) -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
@@ -309,62 +291,35 @@ pub fn build_if_then_else_circuit(size: usize) -> BinaryCircuit {
 
 #[cfg(test)]
 mod tests {
-    use ff::{Field, PrimeField};
-    use pasta_curves::pallas::Scalar;
-    use rand::{SeedableRng, rngs::StdRng};
+    use super::build_mod_add_circut;
 
-    use crate::{
-        circuits::{build_mod_add_circut, bytes_to_bits_be},
-        eval::evaluate,
-    };
+    fn int_to_bits_le(value: u64, size: usize) -> Vec<bool> {
+        (0..size).map(|i| ((value >> i) & 1) == 1).collect()
+    }
+
+    fn bits_to_u64_le(bits: &[bool]) -> u64 {
+        bits.iter().enumerate().fold(0u64, |acc, (i, bit)| {
+            if *bit {
+                acc | (1 << i)
+            } else {
+                acc
+            }
+        })
+    }
 
     #[test]
     fn test_mod_add() {
-        let mut rng = StdRng::from_entropy();
+        let modulus = 13u8;
+        let circuit = build_mod_add_circut(4, &[modulus]);
 
-        let s1 = Scalar::random(&mut rng);
-        let s2 = Scalar::random(&mut rng);
-
-        let s1_bits = bytes_to_bits_be(&s1.to_repr());
-        let s2_bits = bytes_to_bits_be(&s2.to_repr());
-
-        // let mut outval = Scalar::ZERO;
-        // let two = Scalar::ONE + Scalar::ONE;
-        // let mut twomul = Scalar::ONE;
-
-        // for &i in &s1_bits {
-        //     if i {
-        //         outval += twomul;
-        //     }
-        //     twomul *= two;
-        // }
-
-        // println!("s1: {:?}", outval);
-
-        let mut prime_bytes = hex::decode(&Scalar::MODULUS[2..]).unwrap();
-        prime_bytes.reverse();
-
-        let circuit = build_mod_add_circut(
-            s1_bits.len(),
-            prime_bytes.try_into().unwrap(),
-        );
-
-        let out = evaluate(&circuit, &[&s1_bits, &s2_bits]);
-
-        let mut outval = Scalar::ZERO;
-        let two = Scalar::ONE + Scalar::ONE;
-        let mut twomul = Scalar::ONE;
-
-        for i in out {
-            if i {
-                outval += twomul;
-            }
-            twomul *= two;
+        for (lhs, rhs) in [(0, 0), (1, 2), (5, 8), (12, 12)] {
+            let lhs_bits = int_to_bits_le(lhs, 4);
+            let rhs_bits = int_to_bits_le(rhs, 4);
+            let out = circuit.evaluate(&[&lhs_bits, &rhs_bits]);
+            assert_eq!(
+                bits_to_u64_le(&out),
+                (lhs + rhs) % u64::from(modulus)
+            );
         }
-
-        println!("a : {s1:?}");
-        println!("b : {s2:?}");
-        println!("id: {:?}", s1 + s2);
-        println!("re: {outval:?}");
     }
 }

@@ -10,7 +10,10 @@ use k256::{
 
 use sl_compute_common::BinaryString;
 
-use garbled_circuit::circuit::{prebuilt, BinaryCircuit, CircuitBuilder};
+use garbled_circuit::{
+    arithmetic,
+    circuit::{prebuilt, BinaryCircuit, CircuitBuilder},
+};
 
 use crate::{constants::SECP256_K1_Q, utils::u8_vec_to_bool_vec};
 
@@ -385,31 +388,11 @@ pub fn build_scalar_rss_to_y_circuit() -> BinaryCircuit {
     builder.finish()
 }
 
-fn build_compare_eq_circuit(input_len: usize) -> BinaryCircuit {
-    let mut builder = CircuitBuilder::new();
-
-    let input1 = builder.new_inputs(input_len as u16);
-    let input2 = builder.new_inputs(input_len as u16);
-
-    let xors: Vec<u32> = input1
-        .iter()
-        .zip(&input2)
-        .map(|(i1, i2)| builder.xor(*i1, *i2))
-        .collect();
-
-    let mut output = xors[0];
-
-    (1..xors.len()).for_each(|i| {
-        let temp1 = builder.xor(output, xors[i]);
-        let temp2 = builder.and(output, xors[i]);
-        output = builder.xor(temp1, temp2);
-    });
-
-    let op = builder.negate(output);
-    builder.output(op);
-
-    builder.finish()
-}
+pub use garbled_circuit::arithmetic::build_compare_eq_circuit;
+pub use garbled_circuit::arithmetic::build_compare_ge_circuit;
+pub use garbled_circuit::arithmetic::build_compare_ge_rec_circuit;
+pub use garbled_circuit::arithmetic::build_if_then_else_circuit;
+pub use garbled_circuit::arithmetic::build_ppa_circuit;
 
 pub fn build_verify_sharings_circuit() -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
@@ -438,49 +421,8 @@ pub fn build_verify_sharings_circuit() -> BinaryCircuit {
 ///
 /// The first input is set as the gabler's input and the next input is
 /// set as the evaluator's input
-fn build_mod_add_circut(size: usize, prime: U256) -> BinaryCircuit {
-    let mut builder = CircuitBuilder::new();
-
-    let mut pbin = BinaryString {
-        length: size as u64,
-        value: prime.to_le_bytes().to_vec(),
-    };
-
-    if size + 1 > pbin.length as usize {
-        for _ in pbin.length as usize..(size + 1) {
-            pbin.push(false);
-        }
-    }
-
-    let mut ps = Vec::new();
-    for i in 0..pbin.length as usize {
-        ps.push(builder.constant(pbin.get(i)));
-    }
-
-    let x = builder.new_inputs(size as u16);
-    let y = builder.new_inputs(size as u16);
-
-    let add_circuit = build_ppa_circuit(size);
-
-    let add = builder.add_circuit(&add_circuit, &[&x, &y]);
-
-    let comp_circ = build_compare_ge_circuit(size + 1);
-    let comp = builder.add_circuit(&comp_circ, &[&add, &ps]);
-
-    let sub_circ = build_subtract_order_circuit(size + 1, prime);
-    let sub = builder.add_circuit(&sub_circ, &[&add]);
-
-    let comps = vec![comp[0]; size];
-
-    let ifthenelse_circ = build_if_then_else_circuit(size);
-    let out = builder
-        .add_circuit(&ifthenelse_circ, &[&comps, &sub[..size], &add[..size]]);
-
-    for i in out {
-        builder.output(i);
-    }
-
-    builder.finish()
+pub fn build_mod_add_circut(size: usize, prime: U256) -> BinaryCircuit {
+    arithmetic::build_mod_add_circut(size, &prime.to_le_bytes())
 }
 
 /// Returns the `BinaryCircuit` which implements subtraction of a binary value of
@@ -491,230 +433,5 @@ pub fn build_subtract_order_circuit(
     size: usize,
     prime: U256,
 ) -> BinaryCircuit {
-    let mut builder = CircuitBuilder::new();
-
-    let gin = builder.new_inputs(size as u16);
-
-    let mut pbin = BinaryString {
-        length: prime.to_le_bytes().len() as u64,
-        value: prime.to_le_bytes().to_vec(),
-    };
-
-    if size > pbin.length as usize {
-        for _ in pbin.length as usize..size {
-            pbin.push(false);
-        }
-    }
-
-    // pbin.not();
-    let mut negate = BinaryString::with_capacity(size);
-    for i in 0..size {
-        negate.push(!pbin.get(i));
-    }
-    pbin = negate;
-    // pbin.add_one();
-    let mut value = true;
-    for i in 0..pbin.length as usize {
-        let bit = pbin.get(i);
-        let sum = bit ^ value;
-        value &= bit;
-        pbin.set(i, sum);
-        if !value {
-            break;
-        }
-    }
-
-    let mut pbin_ids = Vec::new();
-    let mut pt = Vec::new();
-    for i in 0..pbin.length as usize {
-        let id = builder.constant(pbin.get(i));
-        pt.push(pbin.get(i));
-        pbin_ids.push(id);
-    }
-
-    let ppa_circuit = build_ppa_circuit(size);
-    let ppaout = builder.add_circuit(&ppa_circuit, &[&gin, &pbin_ids]);
-
-    (0..size).for_each(|i| {
-        builder.output(ppaout[i]);
-    });
-
-    builder.finish()
-}
-
-/// Returns the `BinaryCircuit` which implements parallel prefix adder, which
-/// adds two binary values of bit length `size`.
-///
-/// The first input is set as the gabler's input and the next input is set as the
-/// evaluator's input
-pub fn build_ppa_circuit(size: usize) -> BinaryCircuit {
-    let mut builder = CircuitBuilder::new();
-
-    let inp1 = builder.new_inputs(size as u16);
-    let inp2 = builder.new_inputs(size as u16);
-
-    let mut g = Vec::new();
-    let mut p = Vec::new();
-
-    let mut size_log2 = size.ilog2() as usize;
-    let size_diff = size - (1 << size_log2);
-    if size_diff != 0 {
-        size_log2 += 1;
-    }
-
-    for i in 0..size {
-        p.push(builder.xor(inp1[i], inp2[i]));
-        g.push(builder.and(inp1[i], inp2[i]));
-    }
-
-    let pc = p.clone();
-
-    for step in 0..size_log2 {
-        let g_to_and_1 = &g[0..size - (1usize << step)];
-        let p_to_and_2 = &p[0..size - (1usize << step)];
-        let p_to_and_1_2 = &p[1usize << step..size];
-        let g_to_or = &g[1usize << step..size];
-
-        let gc_to_or: Vec<u32> = g_to_and_1
-            .iter()
-            .zip(p_to_and_1_2)
-            .map(|(x, y)| builder.and(*x, *y))
-            .collect();
-
-        let pc_after_and: Vec<u32> = p_to_and_2
-            .iter()
-            .zip(p_to_and_1_2)
-            .map(|(x, y)| builder.and(*x, *y))
-            .collect();
-
-        let gc_after_or: Vec<u32> = g_to_or
-            .iter()
-            .zip(&gc_to_or)
-            .map(|(x, y)| {
-                let l = builder.and(*x, *y);
-                let m = builder.xor(*x, *y);
-                builder.xor(l, m)
-            })
-            .collect();
-
-        for i in (1usize << step)..size {
-            p[i] = pc_after_and[i - (1usize << step)];
-            g[i] = gc_after_or[i - (1usize << step)];
-        }
-    }
-
-    let g_size = g[size - 1];
-    let mut g_mul_two = vec![builder.constant(false)];
-    g_mul_two.extend_from_slice(&g[..size - 1]);
-
-    let sum: Vec<u32> = pc
-        .iter()
-        .zip(&g_mul_two)
-        .map(|(x, y)| builder.xor(*x, *y))
-        .collect();
-
-    for i in sum {
-        builder.output(i);
-    }
-
-    builder.output(g_size);
-
-    builder.finish()
-}
-
-/// Returns the `BinaryCircuit` which implements compare ge protocol, which
-/// compares two binary values of `size` bit length
-///
-/// If the garbler's input is `x` and the evaluator's input is `y`, the
-/// circuit returns `x >= y`
-pub fn build_compare_ge_circuit(size: usize) -> BinaryCircuit {
-    let mut builder = CircuitBuilder::new();
-
-    let x = builder.new_inputs(size as u16);
-    let y = builder.new_inputs(size as u16);
-
-    let rec_circ = build_compare_ge_rec_circuit(size, 0, size - 1);
-
-    let ops = builder.add_circuit(&rec_circ, &[&x, &y]);
-
-    builder.output(ops[0]);
-
-    builder.finish()
-}
-
-/// Returns the `BinaryCircuit` which implements the recursion for
-/// compare ge protocol, which compares two binary values of `size`
-/// bit length
-pub fn build_compare_ge_rec_circuit(
-    size: usize,
-    lo: usize,
-    hi: usize,
-) -> BinaryCircuit {
-    let mut builder = CircuitBuilder::new();
-
-    let xvals = builder.new_inputs(size as u16);
-    let yvals = builder.new_inputs(size as u16);
-
-    assert!(lo <= hi, "impossible {lo} {hi}");
-
-    if lo == hi {
-        let a = builder.xor(xvals[lo], yvals[lo]);
-        let temp = builder.and(a, yvals[lo]);
-        let t = builder.negate(temp);
-        builder.output(t);
-        builder.output(a);
-        return builder.finish();
-    }
-
-    let m = lo + (hi - lo) / 2;
-    let circ_low = build_compare_ge_rec_circuit(size, lo, m);
-    let circ_high = build_compare_ge_rec_circuit(size, m + 1, hi);
-
-    let lowout = builder.add_circuit(&circ_low, &[&xvals, &yvals]);
-    let highout = builder.add_circuit(&circ_high, &[&xvals, &yvals]);
-
-    let (subres_l, diff_l) = (lowout[0], lowout[1]);
-    let (subres_h, diff_h) = (highout[0], highout[1]);
-
-    let ifelse_circ = build_if_then_else_circuit(1);
-    let subres = builder
-        .add_circuit(&ifelse_circ, &[&[diff_h], &[subres_h], &[subres_l]]);
-
-    let mut diff = builder.xor(diff_h, diff_l);
-    let temp = builder.and(diff_h, diff_l);
-    diff = builder.xor(temp, diff);
-
-    builder.output(subres[0]);
-    builder.output(diff);
-
-    builder.finish()
-}
-
-/// Returns a `BinaryCircuit` which implements a batched version of `if then else`.
-/// The garbler inputs contains `choice + input1`.
-/// The evaluator inputs contains `input2`.
-/// If choice is true, then `input1` is the output. Else, the output is `input2`.
-pub fn build_if_then_else_circuit(size: usize) -> BinaryCircuit {
-    let mut builder = CircuitBuilder::new();
-
-    let choice = builder.new_inputs(size as u16);
-    let gin = builder.new_inputs(size as u16);
-    let ein = builder.new_inputs(size as u16);
-
-    let r: Vec<u32> = gin
-        .iter()
-        .zip(&ein)
-        .zip(&choice)
-        .map(|((x, y), c)| {
-            let z = builder.xor(*x, *y);
-            let d = builder.and(z, *c);
-            builder.xor(d, *y)
-        })
-        .collect();
-
-    for i in r {
-        builder.output(i);
-    }
-
-    builder.finish()
+    arithmetic::build_subtract_order_circuit(size, &prime.to_le_bytes())
 }

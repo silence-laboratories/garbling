@@ -1,12 +1,35 @@
 # Changelog
 
-All notable changes to this repository will be documented in this file.
+All notable changes to the `garbled-circuit` crate will be documented in this
+file.
+
+## [Unreleased]
+
+## [1.3.1-pre.1] - 2026-05-04
+
+### Added
+
+- Added the new public `garbled_circuit::arithmetic` module for shared
+  arithmetic circuit builders.
+- Added the new public `garbled_circuit::comparison` module at the crate root.
+- Added a test-only `BinaryCircuit::evaluate()` helper behind the `test` and
+  `test-support` cfgs for plain Boolean circuit evaluation.
+
+### Changed
+
+- Moved shared arithmetic circuit builders from downstream crates into
+  `garbled-circuit`, with `customcircuits` retained as a compatibility shim.
+- Moved the generic modular-addition test into `garbled-circuit` so the shared
+  arithmetic builders are tested at their implementation point.
+- Stopped re-exporting `NoSignature`, `NoSigningKey`, and `NoVerifyingKey`
+  from `functionality::utils`; callers now import those no-op key types from
+  `sl-messages` directly.
 
 ## [1.3.0] - 2026-04-13
 
 ### Changed
 
-- Released `garbled-circuit` and `hd-migration` as `1.3.0`.
+- Released `garbled-circuit` as `1.3.0`.
 
 ## [1.3.0-pre.2] - 2026-04-10
 
@@ -43,10 +66,11 @@ All notable changes to this repository will be documented in this file.
 
 - Switched large circuit consumers in tests and benchmarks from reparsing text
   circuits at runtime to loading generated compact assets with `include_bytes!`.
-- Switched `hd-migration` SHA-512 circuit loading to use prebuilt compact
-  assets.
 - Simplified circuit constant handling from integer sentinels to `bool` in
   `BinaryGate`, `BinaryCircuit`, and `CircuitBuilder`.
-- Generalized `hd-migration` bit and byte conversion helpers to accept
-  borrowed and iterator-based inputs.
-- Made `hd-migration::utils` internal to the crate.
+
+[Unreleased]: https://github.com/silence-laboratories/garbling/compare/garbled-circuit/v1.3.1-pre.1...HEAD
+[1.3.1-pre.1]: https://github.com/silence-laboratories/garbling/compare/garbled-circuit/v1.3.0...garbled-circuit/v1.3.1-pre.1
+[1.3.0]: https://github.com/silence-laboratories/garbling/compare/garbled-circuit/v1.3.0-pre.2...garbled-circuit/v1.3.0
+[1.3.0-pre.2]: https://github.com/silence-laboratories/garbling/compare/garbled-circuit/v1.3.0-pre.1...garbled-circuit/v1.3.0-pre.2
+[1.3.0-pre.1]: https://github.com/silence-laboratories/garbling/compare/garbled-circuit/v1.2.0...garbled-circuit/v1.3.0-pre.1

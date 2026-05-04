@@ -5,8 +5,6 @@ pub mod blake2b;
 
 pub mod zcash;
 
-pub(crate) mod circuits;
-
 pub mod shamir_to_rss;
 
 pub(crate) mod resconstruct_shamir;
@@ -14,9 +12,3 @@ pub(crate) mod resconstruct_shamir;
 pub mod utils;
 
 pub(crate) mod prf;
-
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) mod eval;
-
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) mod test_support;

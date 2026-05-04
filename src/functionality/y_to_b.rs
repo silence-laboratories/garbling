@@ -423,13 +423,18 @@ where
 mod tests {
     /// OPEN_MSG
     pub const OPEN_MSG: u32 = 3;
+
     use merlin::Transcript;
+    use tokio::task::JoinSet;
 
     use sl_compute_common::{Binary, BinaryShare, ServerState};
-    use sl_messages::relay::{
-        MessageRelayService, Relay, SimpleMessageRelay,
+    use sl_messages::{
+        relay::{MessageRelayService, Relay, SimpleMessageRelay},
+        setup::{
+            keys::{NoSigningKey, NoVerifyingKey},
+            ProtocolParticipant,
+        },
     };
-    use tokio::task::JoinSet;
 
     use crate::{
         circuit::{prebuilt, BinaryCircuit},
@@ -449,7 +454,6 @@ mod tests {
             shahash::Sha512Hash, types::YaoSetup, utils::bool_vec_to_hex,
         },
     };
-    use sl_messages::setup::ProtocolParticipant;
 
     use super::{
         batch_yao_to_binary_functionality, yao_to_binary_functionality,
@@ -773,8 +777,6 @@ mod tests {
         use sha2::{Digest, Sha256};
         use sl_messages::message::InstanceId;
         use std::time::Duration;
-
-        use crate::functionality::utils::{NoSigningKey, NoVerifyingKey};
 
         let instance = instance.unwrap_or_else(rand::random);
 

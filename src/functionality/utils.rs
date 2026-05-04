@@ -8,14 +8,12 @@ use rand_chacha::ChaCha20Rng;
 use signature::{SignatureEncoding, Signer, Verifier};
 
 use sl_compute_common::{BinaryString, CommonRandomness};
-pub use sl_messages::setup::keys::{
-    NoSignature, NoSigningKey, NoVerifyingKey,
-};
 use sl_messages::{
     message::{InstanceId, MessageTag, MsgHdr},
     pairs::Pairs,
     relay::{BufferedError, BufferedMsgRelay, MessageSendError, Relay},
     setup::{
+        keys::{NoSignature, NoSigningKey, NoVerifyingKey},
         MessageRound, ProtocolParticipant, RoundMode, ABORT_MESSAGE_TAG,
     },
     signed::SignedMessage,

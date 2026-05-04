@@ -109,10 +109,10 @@ pub(crate) fn run_init(
 ) -> Vec<(SetupMessage, [u8; 32])> {
     use std::time::Duration;
 
-    use garbled_circuit::functionality::utils::{
-        NoSigningKey, NoVerifyingKey,
+    use sl_messages::{
+        message::InstanceId,
+        setup::keys::{NoSigningKey, NoVerifyingKey},
     };
-    use sl_messages::message::InstanceId;
 
     let n = 3;
 

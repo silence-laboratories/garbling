@@ -205,7 +205,6 @@ pub fn create_blake2b_zcash_circuit(input_len: usize) -> BinaryCircuit {
 mod tests {
     use crate::{
         blake2b::{create_blake2b_circuit, create_blake2b_zcash_circuit},
-        eval::evaluate,
         utils::{bits_to_bytes_le, bytes_to_bits_be},
     };
     use blake2b_simd::{Params, blake2b};
@@ -218,7 +217,7 @@ mod tests {
         rng.fill_bytes(&mut bytes);
         let circ = create_blake2b_circuit(bytes.len() * 8);
         let bits = bytes_to_bits_be(&bytes);
-        let out = evaluate(&circ, &[&bits]);
+        let out = circ.evaluate(&[&bits]);
 
         assert_eq!(
             bits_to_bytes_le(&out),
@@ -233,7 +232,7 @@ mod tests {
         rng.fill_bytes(&mut bytes);
         let circ = create_blake2b_zcash_circuit(bytes.len() * 8);
         let bits = bytes_to_bits_be(&bytes);
-        let out = evaluate(&circ, &[&bits]);
+        let out = circ.evaluate(&[&bits]);
 
         let mut hasher = Params::new()
             .hash_length(64)

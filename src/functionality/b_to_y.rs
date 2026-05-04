@@ -643,7 +643,7 @@ mod tests {
         use sha2::{Digest, Sha256};
         use std::time::Duration;
 
-        use crate::functionality::utils::{NoSigningKey, NoVerifyingKey};
+        use sl_messages::setup::keys::{NoSigningKey, NoVerifyingKey};
 
         let instance = instance.unwrap_or_else(rand::random);
 
