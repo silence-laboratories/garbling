@@ -1,9 +1,7 @@
-use garbled_circuit::circuitop::{
-    circuit::BinaryCircuit, circuit_builder::CircuitBuilder,
-};
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
 
-pub const BLAKE2B_CIRCUIT: &str =
-    include_str!("../../../circuits/blake2b.txt");
+use garbled_circuit::circuit::{BinaryCircuit, CircuitBuilder, prebuilt};
 
 pub const H_WORDS: [bool; 512] = [
     false, false, false, true, false, false, true, false, true, false, false,
@@ -119,18 +117,20 @@ pub fn create_blake2b_circuit(input_len: usize) -> BinaryCircuit {
 
     let num_of_blocks = blocks.len();
 
-    let blake2b_circuit = BinaryCircuit::parse(BLAKE2B_CIRCUIT).unwrap();
+    let blake2b_circuit = prebuilt::blake2b();
 
     let mut bytes_processed = 0;
     for (i, blk) in blocks.enumerate() {
         let is_last_val = i == (num_of_blocks - 1);
         bytes_processed += blk.len() as u64 / 8;
+
         let mut in1 = Vec::with_capacity(1024);
         in1.extend_from_slice(&h_words);
         for j in 0..64 {
             let val = (bytes_processed >> j) & 1;
             in1.push(builder.constant(val != 0));
         }
+
         in1.extend_from_slice(&[builder.constant(is_last_val); 64]);
         in1.extend_from_slice(&vec![
             builder.constant(false);
@@ -143,8 +143,9 @@ pub fn create_blake2b_circuit(input_len: usize) -> BinaryCircuit {
             1024 - blk.len()
         ]);
 
-        h_words = builder.add_circuit(&blake2b_circuit, &[&in1, &in2]);
+        h_words = builder.add_circuit(blake2b_circuit, &[&in1, &in2]);
     }
+
     for i in &h_words {
         builder.output(*i);
     }
@@ -166,7 +167,7 @@ pub fn create_blake2b_zcash_circuit(input_len: usize) -> BinaryCircuit {
 
     let num_of_blocks = blocks.len();
 
-    let blake2b_circuit = BinaryCircuit::parse(BLAKE2B_CIRCUIT).unwrap();
+    let blake2b_circuit = prebuilt::blake2b();
 
     let mut bytes_processed = 0;
     for (i, blk) in blocks.enumerate() {
@@ -190,8 +191,9 @@ pub fn create_blake2b_zcash_circuit(input_len: usize) -> BinaryCircuit {
             1024 - blk.len()
         ]);
 
-        h_words = builder.add_circuit(&blake2b_circuit, &[&in1, &in2]);
+        h_words = builder.add_circuit(blake2b_circuit, &[&in1, &in2]);
     }
+
     for i in &h_words {
         builder.output(*i);
     }

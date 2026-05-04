@@ -1,26 +1,30 @@
 [package]
 name = "zcash"
-version = "0.1.0"
+version = "0.1.0-pre.1"
 edition = "2024"
+license-file = "../../LICENSE"
+rust-version = "1.88"
+publish = [ "sl" ]
+
 
 [dependencies]
-garbled-circuit = { workspace = true }
-sl-compute-common = { workspace = true }
-sha2 = { workspace = true }
-hmac = { workspace = true }
-sl-messages = { workspace = true }
+ff = { workspace = true }
+garbled-circuit = { workspace = true, features = ["circuit-blake2b"] }
 group = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+sl-compute-common = { workspace = true }
+sl-messages = { workspace = true }
+
 hex = "0.4"
-multi-party-schnorr = {version = "1.2.0-pre.1", features = ["test-support", "redpallas"]}
 pasta_curves = "0.5.1"
-rand = { workspace = true, optional = true }
 
 [dev-dependencies]
+blake2b_simd = "1.0.4"
 criterion = "0.5.1"
+hex = "0.4"
 rand = { workspace = true }
 rand_chacha = "0.3"
-hex = "0.4"
-blake2b_simd = "1.0.4"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [[bench]]

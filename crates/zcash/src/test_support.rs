@@ -1,7 +1,8 @@
-#[cfg(test)]
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use garbled_circuit::functionality::utils::SetupMessage;
 
-#[cfg(test)]
 /// Generate setup messages and seeds for parties.
 pub fn run_init(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
     use std::time::Duration;

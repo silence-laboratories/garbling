@@ -1,6 +1,6 @@
 [package]
 name = "garbled-circuit"
-version = "1.3.0"
+version = "1.3.1-pre.1"
 edition = "2021"
 license-file = "LICENSE"
 rust-version = "1.88"
@@ -25,6 +25,8 @@ merlin = "3.0.0"
 
 [features]
 test-support = []
+circuit-blake2b = []
+circuit-sha512  = []
 
 [[bench]]
 name = "gc_garble_bench"
@@ -49,6 +51,7 @@ thiserror = { workspace = true }
 [workspace.dependencies]
 aes = "0.8.4"
 derivation-path = "0.2.0"
+ff = "0.13.0"
 generic-array = { version = "=0.14.7" }
 group = "0.13.0"
 hmac = { version = "0.12.1" }
@@ -60,7 +63,7 @@ signature = { version = "2.2.0" }
 thiserror = "1.0"
 tokio = "1.43.0"
 
-garbled-circuit = { path = "./", version = "1.3.0", registry = "sl" }
+garbled-circuit = { path = "./", version = "1.3.1-pre.1", registry = "sl" }
 
 sl-compute-common = { version = "1.1.0" }
 sl-messages = { version = "1.2.0", features = ["setup"] }
@@ -68,5 +71,6 @@ sl-messages = { version = "1.2.0", features = ["setup"] }
 [workspace]
 members = [
     ".",
-    "crates/hd-migration", "crates/zcash"
+    "crates/hd-migration",
+    "crates/zcash",
 ]

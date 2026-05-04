@@ -1,15 +1,17 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
+use ff::{Field, PrimeField};
+use pasta_curves::pallas::Scalar;
+use sl_messages::relay::Relay;
+use sl_messages::setup::ProtocolParticipant;
+
 use garbled_circuit::functionality::{
     utils::FilteredMsgRelay, utils_dep::ProtocolError,
 };
 
-use pasta_curves::{
-    group::ff::{Field, PrimeField},
-    pallas::Scalar,
-};
-use sl_messages::relay::Relay;
-use sl_messages::setup::ProtocolParticipant;
-
 use crate::utils::get_evaluation;
+
 fn reconstruct_shamir_process_msg1(
     share: &Scalar,
     share_next: &Scalar,

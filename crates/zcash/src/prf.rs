@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use garbled_circuit::circuit::{BinaryCircuit, CircuitBuilder};
 
 use crate::{blake2b::create_blake2b_zcash_circuit, utils::bytes_to_bits_be};

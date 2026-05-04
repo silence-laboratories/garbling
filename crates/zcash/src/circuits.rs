@@ -1,3 +1,6 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use garbled_circuit::circuit::{BinaryCircuit, CircuitBuilder};
 
 use crate::utils::bytes_to_bits_be;
@@ -306,7 +309,7 @@ pub fn build_if_then_else_circuit(size: usize) -> BinaryCircuit {
 
 #[cfg(test)]
 mod tests {
-    use group::ff::{Field, PrimeField};
+    use ff::{Field, PrimeField};
     use pasta_curves::pallas::Scalar;
     use rand::{SeedableRng, rngs::StdRng};
 

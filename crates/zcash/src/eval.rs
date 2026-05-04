@@ -1,7 +1,8 @@
-#[cfg(any(test, feature = "test-support"))]
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
 use garbled_circuit::circuitop::{circuit::BinaryCircuit, gate::BinaryGate};
 
-#[cfg(any(test, feature = "test-support"))]
 pub(crate) fn evaluate(
     circuit: &BinaryCircuit,
     inputs: &[&[bool]],

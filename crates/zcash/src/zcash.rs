@@ -1,8 +1,12 @@
+// Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
+// This software is licensed under the Silence Laboratories License Agreement.
+
+use ff::PrimeField;
+use pasta_curves::pallas::Scalar;
+
 use garbled_circuit::circuitop::{
     circuit::BinaryCircuit, circuit_builder::CircuitBuilder,
 };
-use group::ff::PrimeField;
-use pasta_curves::pallas::Scalar;
 
 use crate::{circuits::build_mod_add_circut, prf::build_prf_expand_circuit};
 
@@ -81,6 +85,7 @@ pub fn build_zcash_import_function() -> BinaryCircuit {
 
 #[cfg(test)]
 mod tests {
+    use ff::{Field, PrimeField};
     use garbled_circuit::{
         functionality::{
             circuit_eval::yao_circuit_eval_functionality,
@@ -94,14 +99,7 @@ mod tests {
             types::YaoSetup,
         },
     };
-    use multi_party_schnorr::{
-        common::{redpallas::RedPallasPoint, utils::support::run_keygen},
-        keygen::Keyshare,
-    };
-    use pasta_curves::{
-        group::ff::{Field, PrimeField},
-        pallas::Scalar,
-    };
+    use pasta_curves::pallas::Scalar;
     use rand::{SeedableRng, rngs::StdRng};
     use sl_compute_common::BinaryString;
     use sl_messages::{
@@ -112,6 +110,16 @@ mod tests {
     use crate::eval::evaluate;
 
     use super::*;
+
+    fn generate_shamir_shares(rng: &mut StdRng) -> [Scalar; 3] {
+        let secret = Scalar::random(&mut *rng);
+        let coeff = Scalar::random(&mut *rng);
+
+        core::array::from_fn(|idx| {
+            let point = Scalar::from((idx + 1) as u64);
+            secret + coeff * point
+        })
+    }
 
     #[test]
     fn test_zcash_blake2b_circuit() {
@@ -383,9 +391,7 @@ mod tests {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    async fn test_zcash_dkg_util(
-        shamir_share: [Keyshare<RedPallasPoint>; 3],
-    ) -> Vec<bool> {
+    async fn test_zcash_dkg_util(shamir_shares: [Scalar; 3]) -> Vec<bool> {
         use crate::test_support::run_init;
 
         let mut parties = tokio::task::JoinSet::new();
@@ -395,7 +401,7 @@ mod tests {
             let pid = setup.participant_index();
             parties.spawn(test_run_zcash_dkg(
                 setup,
-                *shamir_share[pid].shamir_share(),
+                shamir_shares[pid],
                 relay,
             ));
         }
@@ -421,34 +427,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_zcash_dkg() {
-        let out: [Keyshare<RedPallasPoint>; 3] =
-            run_keygen::<2, 3, RedPallasPoint>();
-
-        // let eval_points =
-        //     (0..2).map(|v| Scalar::from(v + 1)).collect::<Vec<_>>();
-        // let s3 = get_evaluation(
-        //     &eval_points,
-        //     &[*out[0].shamir_share(), *out[1].shamir_share()],
-        //     &Scalar::from(3),
-        // );
-        // let s = get_evaluation(
-        //     &eval_points,
-        //     &[*out[0].shamir_share(), *out[1].shamir_share()],
-        //     &Scalar::from(0),
-        // );
-
-        // println!(
-        //     "{:?} \n{:?}\n{:?} \n{:?} \n{} ",
-        //     s3,
-        //     out[2].shamir_share(),
-        //     (RedPallasPoint::generator() * s).0,
-        //     out[0].public_key(),
-        //     RedPallasPoint::generator() * s == *out[0].public_key(),
-        // );
-
-        // println!("{:?}", s);
-
-        let out = test_zcash_dkg_util(out).await;
+        let mut rng = StdRng::from_entropy();
+        let out = test_zcash_dkg_util(generate_shamir_shares(&mut rng)).await;
         let mut ask_i = BinaryString::new();
         let mut nk_i = BinaryString::new();
         let mut rivk_i = BinaryString::new();
