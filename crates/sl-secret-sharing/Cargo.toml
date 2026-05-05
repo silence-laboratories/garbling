@@ -1,0 +1,13 @@
+[package]
+name = "sl-secret-sharing"
+version = "0.1.0-pre.1"
+edition = "2021"
+rust-version = "1.88"
+license-file = "../../LICENSE"
+publish = [ "sl" ]
+
+[dependencies]
+ff = { workspace = true }
+
+[dev-dependencies]
+k256 = { workspace = true, features = ["arithmetic"] }

@@ -82,79 +82,24 @@ pub fn build_zcash_import_function() -> BinaryCircuit {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use ff::{Field, PrimeField};
-    use garbled_circuit::{
-        functionality::{
-            circuit_eval::yao_circuit_eval_functionality,
-            input::batch_input_yao_functionality,
-            output::batch_output_yao_functionality,
-            setup::setup_yao_functionality, utils::FilteredMsgRelay,
-            utils::SetupMessage, utils_dep::ProtocolError,
-        },
-        utilities::{
-            commitments::HashCommitment, hash_function::AesHash,
-            types::YaoSetup,
-        },
+    use garbled_circuit::functionality::{
+        circuit_eval::yao_circuit_eval_functionality,
+        input::batch_input_yao_functionality,
+        output::batch_output_yao_functionality,
+        setup::setup_aes_yao_functionality,
+        utils::{FilteredMsgRelay, run_init},
+        utils_dep::ProtocolError,
     };
     use pasta_curves::pallas::Scalar;
     use rand::{SeedableRng, rngs::StdRng};
-    use sha2::{Digest, Sha256};
     use sl_compute_common::BinaryString;
     use sl_messages::{
-        message::InstanceId,
         relay::{Relay, SimpleMessageRelay},
-        setup::{
-            ProtocolParticipant,
-            keys::{NoSigningKey, NoVerifyingKey},
-        },
+        setup::ProtocolParticipant,
     };
 
     use super::*;
-
-    fn run_init(instance: Option<[u8; 32]>) -> Vec<(SetupMessage, [u8; 32])> {
-        let n = 3;
-        let instance = instance.unwrap_or_else(rand::random);
-
-        let party_sk: Vec<NoSigningKey> =
-            std::iter::repeat_with(|| NoSigningKey)
-                .take(n as usize)
-                .collect();
-
-        let party_vk: Vec<NoVerifyingKey> = party_sk
-            .iter()
-            .enumerate()
-            .map(|(party_id, _)| NoVerifyingKey::new(party_id))
-            .collect();
-
-        party_sk
-            .into_iter()
-            .enumerate()
-            .map(|(party_id, sk)| {
-                SetupMessage::new(
-                    InstanceId::new(instance),
-                    sk,
-                    party_id,
-                    party_vk.clone(),
-                )
-                .with_ttl(Duration::from_secs(1000))
-            })
-            .map(|setup| {
-                let mixin = [setup.participant_index() as u8 + 1];
-
-                (
-                    setup,
-                    Sha256::new()
-                        .chain_update(instance)
-                        .chain_update(b"party-seed")
-                        .chain_update(mixin)
-                        .finalize()
-                        .into(),
-                )
-            })
-            .collect()
-    }
 
     fn generate_shamir_shares(rng: &mut StdRng) -> [Scalar; 3] {
         let secret = Scalar::random(&mut *rng);
@@ -204,21 +149,8 @@ mod tests {
     {
         let mut relay = FilteredMsgRelay::new(relay);
 
-        let mut yao_setup =
-            setup_yao_functionality(&setup, &mut relay).await?;
-
-        let (hash, _) = match &yao_setup {
-            YaoSetup::E(e) => {
-                let hash = AesHash::new(e.comm_crs);
-                let comm = HashCommitment::new(hash);
-                (hash, comm)
-            }
-            YaoSetup::G(g) => {
-                let hash = AesHash::new(g.comm_crs);
-                let comm = HashCommitment::new(hash);
-                (hash, comm)
-            }
-        };
+        let (mut yao_setup, hash, _) =
+            setup_aes_yao_functionality(&setup, &mut relay).await?;
 
         let scalar_yao = batch_input_yao_functionality(
             &setup,
@@ -338,21 +270,8 @@ mod tests {
         let mut seed = [0u8; 32];
         rng.fill_bytes(&mut seed);
 
-        let mut yao_setup =
-            setup_yao_functionality(&setup, &mut relay).await?;
-
-        let (hash, comm) = match &yao_setup {
-            YaoSetup::E(e) => {
-                let hash = AesHash::new(e.comm_crs);
-                let comm = HashCommitment::new(hash);
-                (hash, comm)
-            }
-            YaoSetup::G(g) => {
-                let hash = AesHash::new(g.comm_crs);
-                let comm = HashCommitment::new(hash);
-                (hash, comm)
-            }
-        };
+        let (mut yao_setup, hash, comm) =
+            setup_aes_yao_functionality(&setup, &mut relay).await?;
         // run setup for serverstate
         let mut randomness =
             run_common_randomness(&setup, &seed, &mut relay).await?;

@@ -18,9 +18,11 @@ sha2 = { workspace = true }
 signature = { workspace = true }
 sl-compute-common = { workspace = true }
 sl-messages = { workspace = true }
+sl-secret-sharing = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+garbled-circuit = { workspace = true, features = ["test-support"] }
 hex = "0.4"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 

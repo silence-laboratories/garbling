@@ -4,11 +4,12 @@
 use std::borrow::Borrow;
 
 #[cfg(test)]
-use garbled_circuit::functionality::utils::SetupMessage;
-
 use k256::{elliptic_curve::subtle::ConstantTimeEq, NonZeroScalar, Scalar};
 
 use crate::types::HardDerivationError;
+
+#[cfg(test)]
+pub(crate) use garbled_circuit::functionality::utils::run_init;
 
 /// Converts `u8` values to an iterator of `bool` values.
 pub(crate) fn u8_vec_to_bool_vec<I, B>(bytes: I) -> impl Iterator<Item = bool>
@@ -66,6 +67,7 @@ pub(crate) fn bytes_to_bits_le(bytes: &[u8]) -> Vec<bool> {
     bits
 }
 
+#[cfg(test)]
 pub(crate) fn get_lagrange_coeff_list<'a, K, T>(
     party_points: &'a [T],
     eval_point: &'a Scalar,
@@ -90,6 +92,7 @@ where
     })
 }
 
+#[cfg(test)]
 pub(crate) fn get_evaluation(
     party_points: &[NonZeroScalar],
     evals: &[Scalar],
@@ -101,61 +104,4 @@ pub(crate) fn get_evaluation(
         .iter()
         .zip(lcoeff)
         .fold(Scalar::ZERO, |acc, (ev, lc)| acc + *ev * lc)
-}
-
-#[cfg(test)]
-pub(crate) fn run_init(
-    instance: Option<[u8; 32]>,
-) -> Vec<(SetupMessage, [u8; 32])> {
-    use std::time::Duration;
-
-    use sl_messages::{
-        message::InstanceId,
-        setup::keys::{NoSigningKey, NoVerifyingKey},
-    };
-
-    let n = 3;
-
-    let instance = instance.unwrap_or_else(rand::random);
-
-    // a signing key for each party.
-    let party_sk: Vec<NoSigningKey> = std::iter::repeat_with(|| NoSigningKey)
-        .take(n as usize)
-        .collect();
-
-    let party_vk: Vec<NoVerifyingKey> = party_sk
-        .iter()
-        .enumerate()
-        .map(|(party_id, _)| NoVerifyingKey::new(party_id))
-        .collect();
-
-    party_sk
-        .into_iter()
-        .enumerate()
-        .map(|(party_id, sk)| {
-            SetupMessage::new(
-                InstanceId::new(instance),
-                sk,
-                party_id,
-                party_vk.clone(),
-            )
-            .with_ttl(Duration::from_secs(1000))
-        })
-        .map(|setup| {
-            use sha2::{Digest, Sha256};
-            use sl_messages::setup::ProtocolParticipant;
-
-            let mixin = [setup.participant_index() as u8 + 1];
-
-            (
-                setup,
-                Sha256::new()
-                    .chain_update(instance)
-                    .chain_update(b"party-seed")
-                    .chain_update(mixin)
-                    .finalize()
-                    .into(),
-            )
-        })
-        .collect::<Vec<_>>()
 }

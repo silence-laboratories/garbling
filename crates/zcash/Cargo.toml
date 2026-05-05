@@ -15,6 +15,7 @@ hmac = { workspace = true }
 sha2 = { workspace = true }
 sl-compute-common = { workspace = true }
 sl-messages = { workspace = true }
+sl-secret-sharing = { workspace = true }
 
 hex = "0.4"
 pasta_curves = "0.5.1"

@@ -2,6 +2,7 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use k256::{NonZeroScalar, Scalar};
+use sl_secret_sharing::shamir::reconstruct_shamir_share;
 
 use sl_messages::relay::Relay;
 
@@ -12,32 +13,7 @@ use garbled_circuit::functionality::utils::{
 use crate::{
     constants::RECONSTRUCT_SHAMIR_MSG1,
     types::{HardDerivationError, ProtocolParticipant, ScalarVal},
-    utils::get_evaluation,
 };
-
-fn reconstruct_shamir_process_msg1(
-    share: &Scalar,
-    share_next: &Scalar,
-    share_prev: &Scalar,
-    party_points: &[NonZeroScalar],
-    party_id: usize,
-) -> Result<Scalar, HardDerivationError> {
-    let evals = [*share, *share_prev];
-    let (ppts, next_eval) = match party_id {
-        0 => ([party_points[0], party_points[2]], &party_points[1]),
-        1 => ([party_points[1], party_points[0]], &party_points[2]),
-        2 => ([party_points[2], party_points[1]], &party_points[0]),
-        _ => return Err(HardDerivationError::Internal),
-    };
-
-    let next_val = get_evaluation(&ppts, &evals, next_eval);
-
-    if *share_next != next_val {
-        return Err(HardDerivationError::Internal);
-    }
-
-    Ok(get_evaluation(&ppts, &evals, &Scalar::ZERO))
-}
 
 /// Function to reconstruct a shamir shared Scalar value to all parties
 pub async fn run_reconstruct_shamir<R: Relay, S: ProtocolParticipant>(
@@ -63,14 +39,20 @@ pub async fn run_reconstruct_shamir<R: Relay, S: ProtocolParticipant>(
 
     let share_prev = &shares_recv_p.0;
     let share_next = &shares_recv_n.0;
+    let eval_points = [
+        *evaluation_points[0].as_ref(),
+        *evaluation_points[1].as_ref(),
+        *evaluation_points[2].as_ref(),
+    ];
 
-    reconstruct_shamir_process_msg1(
-        share,
-        share_next,
-        share_prev,
-        evaluation_points,
+    reconstruct_shamir_share(
+        *share,
+        *share_next,
+        *share_prev,
+        eval_points,
         my_party_id,
     )
+    .ok_or(HardDerivationError::Internal)
 }
 
 #[cfg(test)]

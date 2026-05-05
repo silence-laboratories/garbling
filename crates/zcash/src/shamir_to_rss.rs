@@ -6,13 +6,15 @@ use group::{Group, GroupEncoding};
 use pasta_curves::pallas::{Point, Scalar};
 use sha2::{Digest, Sha512};
 
-use garbled_circuit::functionality::{
-    utils::FilteredMsgRelay, utils_dep::ProtocolError,
-};
 use sl_compute_common::CommonRandomness;
 use sl_messages::{relay::Relay, setup::ProtocolParticipant};
 
-use crate::resconstruct_shamir::run_reconstruct_pallas_shamir;
+use garbled_circuit::functionality::{
+    utils::FilteredMsgRelay, utils_dep::ProtocolError,
+};
+use sl_secret_sharing::shamir::{finalize_shamir_to_rss, rss_pair_to_shamir};
+
+use crate::reconstruct_shamir::run_reconstruct_pallas_shamir;
 
 /// Converts an RSS-shared Scalar value (`PrivKeyShare`) to a shamir shared value
 /// for party with id `party_id` for a set of evaluation points.
@@ -26,43 +28,12 @@ where
 {
     // helper closure f_A(j) = (j - m)/(-m)
 
-    use std::ops::Sub;
-
     use ff::Field;
 
-    let eval_points =
-        (0..3).map(|v| G::Scalar::from(v + 1)).collect::<Vec<_>>();
+    let one = G::Scalar::ONE;
+    let eval_points = [one, one + one, one + one + one];
 
-    let f = |j: G::Scalar, m: G::Scalar| -> G::Scalar {
-        let num = j.sub(&m);
-        let denom = -m;
-        num * denom.invert().unwrap()
-    };
-
-    match party_id {
-        0 => {
-            // subsets containing 1: {1,2} (next_share), {1,3} (prev_share)
-            let term12 = next_share * f(eval_points[0], eval_points[2]);
-            let term13 = prev_share * f(eval_points[0], eval_points[1]);
-            term12 + term13
-        }
-
-        1 => {
-            // subsets containing 2: {1,2} (prev_share), {2,3} (next_share)
-            let term12 = prev_share * f(eval_points[1], eval_points[2]);
-            let term23 = next_share * f(eval_points[1], eval_points[0]);
-            term12 + term23
-        }
-
-        2 => {
-            // subsets containing 3: {1,3} (next_share), {2,3} (prev_share)
-            let term13 = next_share * f(eval_points[2], eval_points[1]);
-            let term23 = prev_share * f(eval_points[2], eval_points[0]);
-            term13 + term23
-        }
-
-        _ => unreachable!(),
-    }
+    rss_pair_to_shamir(prev_share, next_share, party_id, eval_points)
 }
 
 fn get_random_pallas_scalar_share(
@@ -121,13 +92,7 @@ pub async fn run_shamir_to_scalar_rss_pallas<
     let padded =
         run_reconstruct_pallas_shamir(setup, relay, &padded_shamir).await?;
 
-    let out_rss = if my_party_id == 0 {
-        (padded - r_prev, -r_next)
-    } else if my_party_id == 1 {
-        (-r_prev, -r_next)
-    } else {
-        (-r_prev, padded - r_next)
-    };
+    let out_rss = finalize_shamir_to_rss(padded, r_prev, r_next, my_party_id);
 
     Ok(out_rss)
 }

@@ -5,6 +5,7 @@ use k256::{NonZeroScalar, ProjectivePoint, Scalar};
 
 use sl_compute_common::CommonRandomness;
 use sl_messages::relay::Relay;
+use sl_secret_sharing::shamir::{finalize_shamir_to_rss, rss_pair_to_shamir};
 
 use garbled_circuit::functionality::utils::FilteredMsgRelay;
 
@@ -20,43 +21,13 @@ pub fn scalar_rss_to_shamir(
     party_id: usize,
     evaluation_points: &[NonZeroScalar],
 ) -> Scalar {
-    // helper closure f_A(j) = (j - m)/(-m)
-    let f = |j: NonZeroScalar, m: NonZeroScalar| -> Scalar {
-        let num = j.sub(&m);
-        let denom = -m;
-        num * denom.invert().unwrap()
-    };
+    let eval_points = [
+        *evaluation_points[0].as_ref(),
+        *evaluation_points[1].as_ref(),
+        *evaluation_points[2].as_ref(),
+    ];
 
-    match party_id {
-        0 => {
-            // subsets containing 1: {1,2} (next_share), {1,3} (prev_share)
-            let term12 = inp.next_share
-                * f(evaluation_points[0], evaluation_points[2]);
-            let term13 = inp.prev_share
-                * f(evaluation_points[0], evaluation_points[1]);
-            term12 + term13
-        }
-
-        1 => {
-            // subsets containing 2: {1,2} (prev_share), {2,3} (next_share)
-            let term12 = inp.prev_share
-                * f(evaluation_points[1], evaluation_points[2]);
-            let term23 = inp.next_share
-                * f(evaluation_points[1], evaluation_points[0]);
-            term12 + term23
-        }
-
-        2 => {
-            // subsets containing 3: {1,3} (next_share), {2,3} (prev_share)
-            let term13 = inp.next_share
-                * f(evaluation_points[2], evaluation_points[1]);
-            let term23 = inp.prev_share
-                * f(evaluation_points[2], evaluation_points[0]);
-            term13 + term23
-        }
-
-        _ => unreachable!(),
-    }
+    rss_pair_to_shamir(inp.prev_share, inp.next_share, party_id, eval_points)
 }
 
 /// Converts a Shamir-shared Scalar valueto an RSS-shared Scalar value (`PrivKeyShare`)
@@ -85,21 +56,16 @@ pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
     )
     .await?;
 
-    let out_rss = if my_party_id == 0 {
-        PrivKeyShare::<ProjectivePoint> {
-            prev_share: padded - r_scalar_rss.prev_share,
-            next_share: -r_scalar_rss.next_share,
-        }
-    } else if my_party_id == 1 {
-        PrivKeyShare::<ProjectivePoint> {
-            prev_share: -r_scalar_rss.prev_share,
-            next_share: -r_scalar_rss.next_share,
-        }
-    } else {
-        PrivKeyShare::<ProjectivePoint> {
-            prev_share: -r_scalar_rss.prev_share,
-            next_share: padded - r_scalar_rss.next_share,
-        }
+    let (prev_share, next_share) = finalize_shamir_to_rss(
+        padded,
+        r_scalar_rss.prev_share,
+        r_scalar_rss.next_share,
+        my_party_id,
+    );
+
+    let out_rss = PrivKeyShare::<ProjectivePoint> {
+        prev_share,
+        next_share,
     };
 
     Ok(out_rss)

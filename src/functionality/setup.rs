@@ -13,7 +13,11 @@ use crate::{
         utils::{receive_from_one_party, send_to_party, FilteredMsgRelay},
         utils_dep::ProtocolError,
     },
-    utilities::types::{Block, EvaluatorSetup, GarblerSetup, YaoSetup},
+    utilities::{
+        commitments::HashCommitment,
+        hash_function::AesHash,
+        types::{Block, EvaluatorSetup, GarblerSetup, YaoSetup},
+    },
 };
 
 pub async fn setup_yao_functionality<T, R>(
@@ -61,4 +65,23 @@ where
             party_id,
         }))
     }
+}
+
+pub async fn setup_aes_yao_functionality<T, R>(
+    setup: &T,
+    relay: &mut FilteredMsgRelay<R>,
+) -> Result<(YaoSetup, AesHash, HashCommitment<AesHash>), ProtocolError>
+where
+    T: ProtocolParticipant,
+    R: Relay,
+{
+    let yao_setup = setup_yao_functionality(setup, relay).await?;
+    let comm_crs = match &yao_setup {
+        YaoSetup::E(e) => e.comm_crs,
+        YaoSetup::G(g) => g.comm_crs,
+    };
+    let hash = AesHash::new(comm_crs);
+    let comm = HashCommitment::new(hash);
+
+    Ok((yao_setup, hash, comm))
 }

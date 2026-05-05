@@ -526,6 +526,7 @@ dependencies = [
  "signature",
  "sl-compute-common",
  "sl-messages",
+ "sl-secret-sharing",
  "thiserror",
  "tokio",
 ]
@@ -995,6 +996,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sl-secret-sharing"
+version = "0.1.0-pre.1"
+dependencies = [
+ "ff",
+ "k256",
+]
+
+[[package]]
 name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1241,6 +1250,7 @@ dependencies = [
  "sha2",
  "sl-compute-common",
  "sl-messages",
+ "sl-secret-sharing",
  "tokio",
 ]
 
