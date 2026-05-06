@@ -3,6 +3,8 @@
 
 pub mod blake2b;
 
+pub mod derivation;
+
 pub mod zcash;
 
 pub mod shamir_to_rss;
