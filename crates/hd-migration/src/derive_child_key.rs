@@ -210,15 +210,9 @@ mod tests {
     use std::sync::Arc;
 
     use derivation_path::ChildIndex;
-    use garbled_circuit::{
-        functionality::{
-            input::batch_input_yao_functionality,
-            setup::setup_yao_functionality, utils::FilteredMsgRelay,
-        },
-        utilities::{
-            commitments::HashCommitment, hash_function::AesHash,
-            types::YaoSetup,
-        },
+    use garbled_circuit::functionality::{
+        input::batch_input_yao_functionality,
+        setup::setup_aes_yao_functionality, utils::FilteredMsgRelay,
     };
     use hmac::{Hmac, Mac};
     use k256::{
@@ -255,21 +249,8 @@ mod tests {
         let mut relay = FilteredMsgRelay::new(relay);
         relay.init_abort(&setup).await?;
 
-        let mut yao_setup =
-            setup_yao_functionality(&setup, &mut relay).await?;
-
-        let (hash, _) = match &yao_setup {
-            YaoSetup::E(e) => {
-                let hash = AesHash::new(e.comm_crs);
-                let comm = HashCommitment::new(hash);
-                (hash, comm)
-            }
-            YaoSetup::G(g) => {
-                let hash = AesHash::new(g.comm_crs);
-                let comm = HashCommitment::new(hash);
-                (hash, comm)
-            }
-        };
+        let (mut yao_setup, hash, _) =
+            setup_aes_yao_functionality(&setup, &mut relay).await?;
 
         let rpk_yao = batch_input_yao_functionality(
             &setup,
@@ -314,21 +295,8 @@ mod tests {
         let mut relay = FilteredMsgRelay::new(relay);
         relay.init_abort(&setup).await?;
 
-        let mut yao_setup =
-            setup_yao_functionality(&setup, &mut relay).await?;
-
-        let (hash, _) = match &yao_setup {
-            YaoSetup::E(e) => {
-                let hash = AesHash::new(e.comm_crs);
-                let comm = HashCommitment::new(hash);
-                (hash, comm)
-            }
-            YaoSetup::G(g) => {
-                let hash = AesHash::new(g.comm_crs);
-                let comm = HashCommitment::new(hash);
-                (hash, comm)
-            }
-        };
+        let (mut yao_setup, hash, _) =
+            setup_aes_yao_functionality(&setup, &mut relay).await?;
 
         let rpk_yao = batch_input_yao_functionality(
             &setup,

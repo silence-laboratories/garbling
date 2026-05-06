@@ -403,10 +403,13 @@ mod tests {
     use merlin::Transcript;
     use tokio::task::JoinSet;
 
-    use sl_messages::relay::{
-        MessageRelayService, Relay, SimpleMessageRelay,
+    use sl_messages::{
+        relay::{MessageRelayService, Relay, SimpleMessageRelay},
+        setup::{
+            keys::{NoSigningKey, NoVerifyingKey},
+            ProtocolParticipant,
+        },
     };
-    use sl_messages::setup::ProtocolParticipant;
 
     use crate::{
         circuit::{prebuilt, BinaryCircuit},
@@ -1036,14 +1039,11 @@ mod tests {
         Ok((setup.participant_index(), op))
     }
 
-    #[cfg(any(test, feature = "test-support"))]
     fn setup_entire_flow(
         instance: Option<[u8; 32]>,
     ) -> Vec<(SetupMessage, [u8; 32])> {
         use sha2::{Digest, Sha256};
         use std::time::Duration;
-
-        use crate::functionality::utils::{NoSigningKey, NoVerifyingKey};
 
         let instance = instance.unwrap_or_else(rand::random);
 

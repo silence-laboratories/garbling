@@ -13,13 +13,11 @@ use garbled_circuit::{
         circuit_eval::yao_circuit_eval_functionality,
         input::run_batch_input_from_all_yao,
         output::{batch_output_yao_functionality, output_yao_functionality},
-        setup::setup_yao_functionality,
+        setup::setup_aes_yao_functionality,
         utils::{run_common_randomness, FilteredMsgRelay},
     },
     utilities::{
-        commitments::{Commitment, HashCommitment},
-        hash_function::{AesHash, HashFunction},
-        types::YaoSetup,
+        commitments::Commitment, hash_function::HashFunction, types::YaoSetup,
     },
 };
 
@@ -170,21 +168,8 @@ where
         run_common_randomness(&setup, &seed, &mut relay).await?;
 
     // run setup for yao protocols
-    let mut yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
-
-    let (hash, comm) = match &yao_setup {
-        YaoSetup::E(e) => {
-            let hash = AesHash::new(e.comm_crs);
-            let comm = HashCommitment::new(hash);
-            (hash, comm)
-        }
-
-        YaoSetup::G(g) => {
-            let hash = AesHash::new(g.comm_crs);
-            let comm = HashCommitment::new(hash);
-            (hash, comm)
-        }
-    };
+    let (mut yao_setup, hash, comm) =
+        setup_aes_yao_functionality(&setup, &mut relay).await?;
 
     let (_, ch) = run_extended_key_derivation_round1(
         &setup,
@@ -247,21 +232,8 @@ where
         run_common_randomness(&setup, &seed, &mut relay).await?;
 
     // run setup for yao protocols
-    let mut yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
-
-    let (hash, comm) = match &yao_setup {
-        YaoSetup::E(e) => {
-            let hash = AesHash::new(e.comm_crs);
-            let comm = HashCommitment::new(hash);
-            (hash, comm)
-        }
-
-        YaoSetup::G(g) => {
-            let hash = AesHash::new(g.comm_crs);
-            let comm = HashCommitment::new(hash);
-            (hash, comm)
-        }
-    };
+    let (mut yao_setup, hash, comm) =
+        setup_aes_yao_functionality(&setup, &mut relay).await?;
 
     let (_, ch) = run_extended_key_derivation_round1(
         &setup,

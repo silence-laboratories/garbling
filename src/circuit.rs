@@ -589,6 +589,38 @@ impl BinaryCircuit {
             println!("output_gates: {}", *i);
         }
     }
+
+    /// Evaluates the Boolean circuit on plain `bool` inputs.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn evaluate(&self, inputs: &[&[bool]]) -> Vec<bool> {
+        let mut wires = vec![false; self.num_wires() as usize];
+
+        for gate in self.gates() {
+            let (out_wire, value) = match *gate {
+                BinaryGate::Input { no, id, wire } => {
+                    (wire, inputs[no as usize][id as usize])
+                }
+                BinaryGate::Constant { val, wire } => (wire, val),
+                BinaryGate::Xor { xid, yid, out } => {
+                    (out, wires[xid as usize] ^ wires[yid as usize])
+                }
+                BinaryGate::And {
+                    xid,
+                    yid,
+                    id: _,
+                    out,
+                } => (out, wires[xid as usize] & wires[yid as usize]),
+                BinaryGate::Inv { xid, out } => (out, !wires[xid as usize]),
+            };
+
+            wires[out_wire as usize] = value;
+        }
+
+        self.get_output_gate_ids()
+            .iter()
+            .map(|&wire| wires[wire as usize])
+            .collect()
+    }
 }
 
 /// Builder used to allocate wires and append gates into a [`BinaryCircuit`].

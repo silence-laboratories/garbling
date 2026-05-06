@@ -88,15 +88,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use garbled_circuit::{
-        functionality::{
-            output::batch_output_yao_functionality,
-            setup::setup_yao_functionality, utils::FilteredMsgRelay,
-        },
-        utilities::{
-            commitments::HashCommitment, hash_function::AesHash,
-            types::YaoSetup,
-        },
+    use garbled_circuit::functionality::{
+        output::batch_output_yao_functionality,
+        setup::setup_aes_yao_functionality, utils::FilteredMsgRelay,
     };
     use k256::{ProjectivePoint, Scalar};
     use rand::{rngs, RngCore, SeedableRng};
@@ -124,21 +118,8 @@ mod tests {
         let mut relay = FilteredMsgRelay::new(relay);
         relay.init_abort(&setup).await?;
 
-        let mut yao_setup =
-            setup_yao_functionality(&setup, &mut relay).await?;
-
-        let (hash, comm) = match &yao_setup {
-            YaoSetup::E(e) => {
-                let hash = AesHash::new(e.comm_crs);
-                let comm = HashCommitment::new(hash);
-                (hash, comm)
-            }
-            YaoSetup::G(g) => {
-                let hash = AesHash::new(g.comm_crs);
-                let comm = HashCommitment::new(hash);
-                (hash, comm)
-            }
-        };
+        let (mut yao_setup, hash, comm) =
+            setup_aes_yao_functionality(&setup, &mut relay).await?;
 
         let output = run_scalar_rss_to_yao(
             &setup,
