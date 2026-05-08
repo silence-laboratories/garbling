@@ -1046,6 +1046,7 @@ checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
 dependencies = [
  "ppv-lite86",
  "rand_core",
+ "serde",
 ]
 
 [[package]]
@@ -1576,9 +1577,10 @@ dependencies = [
 
 [[package]]
 name = "zcash"
-version = "0.1.0-pre.2"
+version = "0.1.0-pre.3"
 dependencies = [
  "blake2b_simd",
+ "ciborium",
  "criterion",
  "ff",
  "garbled-circuit",
@@ -1589,6 +1591,7 @@ dependencies = [
  "pasta_curves",
  "rand",
  "rand_chacha",
+ "serde",
  "sha2",
  "sl-compute-common",
  "sl-messages",

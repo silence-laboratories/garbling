@@ -31,7 +31,10 @@ use crate::{
     zcash::build_zcash_import_function,
 };
 
-pub async fn run_orchard_key_components<S, R, H, C>(
+const SHARE_BITS: usize = 256;
+const COMPONENT_BITS: usize = 512;
+
+async fn run_orchard_key_components<S, R, H, C>(
     setup: &S,
     relay: &mut FilteredMsgRelay<R>,
     shamir_share: &Scalar,
@@ -64,15 +67,17 @@ where
         run_batch_input_from_all_yao(setup, relay, &all_ip, yao_setup, comm)
             .await?;
 
-    let mut inputs = [vec![], vec![], vec![], vec![], vec![], vec![]];
-
-    inputs[0].extend_from_slice(&i1_yao[256..]);
-    inputs[1].extend_from_slice(&i2_yao[256..]);
-    inputs[2].extend_from_slice(&i3_yao[256..]);
-
-    inputs[3].extend_from_slice(&i1_yao[..256]);
-    inputs[4].extend_from_slice(&i2_yao[..256]);
-    inputs[5].extend_from_slice(&i3_yao[..256]);
+    let (i1_prev, i1_next) = i1_yao.split_at(SHARE_BITS);
+    let (i2_prev, i2_next) = i2_yao.split_at(SHARE_BITS);
+    let (i3_prev, i3_next) = i3_yao.split_at(SHARE_BITS);
+    let inputs = [
+        i1_next.to_vec(),
+        i2_next.to_vec(),
+        i3_next.to_vec(),
+        i1_prev.to_vec(),
+        i2_prev.to_vec(),
+        i3_prev.to_vec(),
+    ];
 
     let circuit = build_zcash_import_function();
 
@@ -87,29 +92,18 @@ where
         .map(|v| output.get(v).unwrap().clone())
         .collect::<Vec<_>>();
 
-    let ver = &out_yao[0];
+    let (ver, component_bits) = out_yao
+        .split_first()
+        .expect("zcash import circuit should produce a verification bit");
     let verification = output_yao_functionality(setup, relay, ver).await?;
     if !verification {
         return Err(ProtocolError::VerificationError);
     }
 
-    let mut ask_i = Vec::new();
-    let mut nk_i = Vec::new();
-    let mut rivk_i = Vec::new();
+    let (ask_i, rem) = component_bits.split_at(COMPONENT_BITS);
+    let (nk_i, rivk_i) = rem.split_at(COMPONENT_BITS);
 
-    for i in &out_yao[1..513] {
-        ask_i.push(i.clone());
-    }
-
-    for i in &out_yao[513..1025] {
-        nk_i.push(i.clone());
-    }
-
-    for i in &out_yao[1025..] {
-        rivk_i.push(i.clone());
-    }
-
-    Ok((ask_i, nk_i, rivk_i))
+    Ok((ask_i.to_vec(), nk_i.to_vec(), rivk_i.to_vec()))
 }
 
 pub async fn run_derivation<S, R>(
@@ -121,25 +115,33 @@ where
     S: ProtocolParticipant,
     R: Relay,
 {
-    let mut relay = FilteredMsgRelay::new(relay);
     let mut rng = StdRng::from_entropy();
     let mut seed = [0u8; 32];
     rng.fill_bytes(&mut seed);
 
+    run_derivation_with_seed(setup, shamir_share, relay, seed).await
+}
+
+pub async fn run_derivation_with_seed<S, R>(
+    setup: S,
+    shamir_share: Scalar,
+    relay: R,
+    seed: [u8; 32],
+) -> Result<(Scalar, Base, Scalar), ProtocolError>
+where
+    S: ProtocolParticipant,
+    R: Relay,
+{
+    let mut relay = FilteredMsgRelay::new(relay);
+
     let mut yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
-    let (hash, comm) = match &yao_setup {
-        YaoSetup::E(e) => {
-            let hash = AesHash::new(e.comm_crs);
-            let comm = HashCommitment::new(hash);
-            (hash, comm)
-        }
-        YaoSetup::G(g) => {
-            let hash = AesHash::new(g.comm_crs);
-            let comm = HashCommitment::new(hash);
-            (hash, comm)
-        }
+    let comm_crs = match &yao_setup {
+        YaoSetup::E(e) => e.comm_crs,
+        YaoSetup::G(g) => g.comm_crs,
     };
+    let hash = AesHash::new(comm_crs);
+    let comm = HashCommitment::new(hash);
 
     let mut randomness =
         run_common_randomness(&setup, &seed, &mut relay).await?;
@@ -162,9 +164,11 @@ where
     )
     .await?;
 
-    let ask_i = bits_to_bytes_le(&out[0..512]);
-    let nk_i = bits_to_bytes_le(&out[512..1024]);
-    let rivk_i = bits_to_bytes_le(&out[1024..]);
+    let (ask_bits, rem) = out.split_at(COMPONENT_BITS);
+    let (nk_bits, rivk_bits) = rem.split_at(COMPONENT_BITS);
+    let ask_i = bits_to_bytes_le(ask_bits);
+    let nk_i = bits_to_bytes_le(nk_bits);
+    let rivk_i = bits_to_bytes_le(rivk_bits);
 
     let ask = Scalar::from_uniform_bytes(&ask_i.try_into().unwrap());
     let nk = Base::from_uniform_bytes(&nk_i.try_into().unwrap());
