@@ -3,6 +3,8 @@
 
 use ff::FromUniformBytes;
 use pasta_curves::pallas::{Point, Scalar};
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use sha2::{Digest, Sha512};
 
 use garbled_circuit::functionality::utils_dep::ProtocolError;
@@ -40,12 +42,17 @@ impl ShamirToRssState {
         ctx: &mut Context,
         outgoing: &mut Vec<Message>,
         share: Scalar,
+        key_prev: [u8; 32],
+        key_next: [u8; 32],
     ) -> Result<Phase, ProtocolError> {
-        let randomness = ctx
-            .common_randomness
-            .as_mut()
-            .ok_or(ProtocolError::MissingMessage)?;
-        let (r_prev_bytes, r_next_bytes) = randomness.random_32_bytes();
+        let mut f_prev = ChaCha20Rng::from_seed(key_prev);
+        let mut f_next = ChaCha20Rng::from_seed(key_next);
+
+        let mut r_prev_bytes = [0u8; 32];
+        let mut r_next_bytes = [0u8; 32];
+        f_prev.fill_bytes(&mut r_prev_bytes);
+        f_next.fill_bytes(&mut r_next_bytes);
+
         let r_prev = scalar_from_random_bytes(r_prev_bytes);
         let r_next = scalar_from_random_bytes(r_next_bytes);
         let r_shamir = scalar_rss_to_shamir::<Point>(

@@ -82,7 +82,6 @@ impl Session {
             shamir_share: shamir_share.into(),
             seed,
             yao_setup: None,
-            common_randomness: None,
         };
         let mut outgoing = Vec::new();
         let phase = SetupYaoState::start(&mut context, &mut outgoing)?;

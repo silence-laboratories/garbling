@@ -10,7 +10,6 @@ use crate::derivation_session::{
     phase::{Phase, PhaseHandleResult},
     phases::shamir_to_rss::ShamirToRssState,
     prev_party,
-    serde_types::SerializableCommonRandomness,
 };
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
@@ -65,10 +64,8 @@ impl CommonRandomnessState {
         if key_prev == self.key_next {
             return Err(ProtocolError::VerificationError);
         }
-        ctx.common_randomness =
-            Some(SerializableCommonRandomness::new(key_prev, self.key_next));
         let share = ctx.shamir_share().to_scalar()?;
-        ShamirToRssState::start(ctx, outgoing, share)
+        ShamirToRssState::start(ctx, outgoing, share, key_prev, self.key_next)
             .map(|phase| PhaseHandleResult::Consumed(Some(phase)))
     }
 }
@@ -85,7 +82,6 @@ mod tests {
             shamir_share: Scalar::from(1u64).into(),
             seed: [9u8; 32],
             yao_setup: None,
-            common_randomness: None,
         }
     }
 

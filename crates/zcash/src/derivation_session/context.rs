@@ -8,8 +8,7 @@ use sha2::{Digest, Sha256};
 use garbled_circuit::functionality::utils_dep::ProtocolError;
 
 use super::serde_types::{
-    SerializableBlock, SerializableCommonRandomness, SerializableScalar,
-    SerializableYaoSetup,
+    SerializableBlock, SerializableScalar, SerializableYaoSetup,
 };
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
@@ -19,7 +18,6 @@ pub(crate) struct Context {
     pub(crate) shamir_share: SerializableScalar,
     pub(crate) seed: [u8; 32],
     pub(crate) yao_setup: Option<SerializableYaoSetup>,
-    pub(crate) common_randomness: Option<SerializableCommonRandomness>,
 }
 
 impl Context {

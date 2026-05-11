@@ -3,8 +3,7 @@
 
 use ff::PrimeField;
 use pasta_curves::pallas::Scalar;
-use rand::{RngCore, SeedableRng};
-use rand_chacha::{ChaCha8Rng, ChaCha20Rng};
+use rand_chacha::ChaCha8Rng;
 
 use garbled_circuit::{
     functionality::utils_dep::ProtocolError,
@@ -35,38 +34,6 @@ impl From<Scalar> for SerializableScalar {
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SerializableBlock(pub [u8; 16]);
-
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SerializableCommonRandomness {
-    pub key_prev: [u8; 32],
-    pub key_next: [u8; 32],
-    pub position: u64,
-}
-
-impl SerializableCommonRandomness {
-    pub fn new(key_prev: [u8; 32], key_next: [u8; 32]) -> Self {
-        Self {
-            key_prev,
-            key_next,
-            position: 0,
-        }
-    }
-
-    pub fn random_32_bytes(&mut self) -> ([u8; 32], [u8; 32]) {
-        let mut f1 = ChaCha20Rng::from_seed(self.key_prev);
-        let mut f2 = ChaCha20Rng::from_seed(self.key_next);
-
-        let mut prev = [0u8; 32];
-        let mut next = [0u8; 32];
-        for _ in 0..=self.position {
-            f1.fill_bytes(&mut prev);
-            f2.fill_bytes(&mut next);
-        }
-        self.position = self.position.wrapping_add(1);
-        (prev, next)
-    }
-}
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -145,7 +145,6 @@ mod tests {
             shamir_share: Scalar::from(1u64).into(),
             seed: [7u8; 32],
             yao_setup: None,
-            common_randomness: None,
         }
     }
 
