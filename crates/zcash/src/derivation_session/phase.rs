@@ -4,7 +4,7 @@
 use garbled_circuit::functionality::utils_dep::ProtocolError;
 
 use super::{
-    Context, Message,
+    Context, DerivedOrchardKeys, Message,
     phases::{
         batch_input_yao::BatchInputYaoState,
         circuit_eval::CircuitEvalState,
@@ -15,7 +15,6 @@ use super::{
         setup_yao::SetupYaoState,
         shamir_to_rss::ShamirToRssState,
     },
-    serde_types::DerivedOrchardKeys,
 };
 
 #[allow(clippy::large_enum_variant)]
@@ -27,7 +26,7 @@ pub(crate) enum PhaseHandleResult {
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub enum Phase {
+pub(crate) enum Phase {
     SetupYao(SetupYaoState),
     CommonRandomness(CommonRandomnessState),
     ShamirToRss(ShamirToRssState),
@@ -37,6 +36,7 @@ pub enum Phase {
     BatchOutput(BatchOutputYaoState),
     DecodeOutput(DecodeOutputState),
     Done(DerivedOrchardKeys),
+    Aborted(u8),
 }
 
 impl Phase {
@@ -72,6 +72,7 @@ impl Phase {
                 Some(Phase::Done(state.decode()?)),
             )),
             Phase::Done(_) => Ok(PhaseHandleResult::Consumed(None)),
+            Phase::Aborted(_) => Ok(PhaseHandleResult::Consumed(None)),
         }?;
 
         Ok(match result {

@@ -6,14 +6,42 @@ use super::serde_types::{SerializableBlock, SerializableScalar};
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Message {
-    pub from: u8,
-    pub to: u8,
-    pub body: MessageBody,
+    pub(crate) from: u8,
+    pub(crate) to: u8,
+    pub(crate) body: MessageBody,
+}
+
+impl Message {
+    /// Creates an abort message.
+    ///
+    /// Abort is broadcast message, the `to` field is intentionally
+    /// ignored by the transport and session logic.
+    pub fn abort(from: u8) -> Self {
+        Self {
+            from,
+            to: 0,
+            body: MessageBody::Abort,
+        }
+    }
+
+    /// Returns message sender
+    pub fn sender(&self) -> u8 {
+        self.from
+    }
+
+    /// Returns the receiver, or `None` for broadcast `Abort`
+    /// messages.
+    pub fn receiver(&self) -> Option<u8> {
+        match self.body {
+            MessageBody::Abort => None,
+            _ => Some(self.to),
+        }
+    }
 }
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub enum MessageBody {
+pub(crate) enum MessageBody {
     SetupYao(SetupYaoMessage),
     CommonRandomness(CommonRandomnessMessage),
     ShamirToRss(ShamirToRssMessage),
@@ -21,29 +49,29 @@ pub enum MessageBody {
     CircuitEval(CircuitEvalMessage),
     OutputVerification(OutputYaoMessage),
     BatchOutput(OutputYaoMessage),
-    Abort(AbortMessage),
+    Abort,
 }
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub enum SetupYaoMessage {
+pub(crate) enum SetupYaoMessage {
     CommCrs(SerializableBlock),
     PrfSeed([u8; 32]),
 }
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub enum CommonRandomnessMessage {
+pub(crate) enum CommonRandomnessMessage {
     KeyNext([u8; 32]),
 }
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub struct ShamirToRssMessage(pub SerializableScalar);
+pub(crate) struct ShamirToRssMessage(pub SerializableScalar);
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub enum BatchInputYaoMessage {
+pub(crate) enum BatchInputYaoMessage {
     EvaluatorBits(Vec<u8>),
     GarblerInputCommit(InputYaoAllMsg1),
     GarblerI3Commit(InputYaoAllMsg2),
@@ -51,14 +79,14 @@ pub enum BatchInputYaoMessage {
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub enum CircuitEvalMessage {
+pub(crate) enum CircuitEvalMessage {
     Hash([u8; 32]),
     GarbledTables(Vec<SerializableBlock>),
 }
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub enum OutputYaoMessage {
+pub(crate) enum OutputYaoMessage {
     Label(SerializableBlock),
     Labels(Vec<SerializableBlock>),
     Bit(bool),
@@ -66,12 +94,8 @@ pub enum OutputYaoMessage {
 }
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct AbortMessage;
-
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub struct InputYaoAllMsg1 {
+pub(crate) struct InputYaoAllMsg1 {
     pub com_i1_0: Vec<SerializableBlock>,
     pub com_i2_0: Vec<SerializableBlock>,
     pub com_i1_1: Vec<SerializableBlock>,
@@ -82,7 +106,7 @@ pub struct InputYaoAllMsg1 {
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub struct InputYaoAllMsg2 {
+pub(crate) struct InputYaoAllMsg2 {
     pub comm_1f: Vec<SerializableBlock>,
     pub comm_1t: Vec<SerializableBlock>,
     pub comm_2f: Vec<SerializableBlock>,

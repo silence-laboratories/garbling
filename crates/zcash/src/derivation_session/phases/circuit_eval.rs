@@ -26,7 +26,7 @@ use crate::{
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub struct CircuitEvalState {
+pub(crate) struct CircuitEvalState {
     inputs: [Vec<SerializableYaoShare>; 6],
     hash_from_p0: Option<CircuitEvalMessage>,
     tables_from_p1: Option<CircuitEvalMessage>,

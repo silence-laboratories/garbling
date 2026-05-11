@@ -4,9 +4,8 @@
 mod context;
 mod message;
 mod phase;
+mod phases;
 mod serde_types;
-
-pub mod phases;
 
 use pasta_curves::pallas::Scalar;
 use rand::{RngCore, SeedableRng};
@@ -16,13 +15,23 @@ use garbled_circuit::functionality::utils_dep::ProtocolError;
 
 use self::{
     context::Context,
-    message::Message,
+    message::MessageBody,
     phase::{Phase, PhaseHandleResult},
     phases::setup_yao::SetupYaoState,
-    serde_types::{DerivedOrchardKeys, SerializableBlock},
+    serde_types::SerializableBlock,
 };
 
+pub use message::Message;
+
 pub const DERIVATION_PARTIES: u8 = 3;
+
+#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DerivedOrchardKeys {
+    pub ask: [u8; 32],
+    pub nk: [u8; 32],
+    pub rivk: [u8; 32],
+}
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
@@ -52,6 +61,7 @@ pub(crate) fn next_party(party_id: u8) -> u8 {
 pub enum DerivationStatus {
     Waiting,
     Complete,
+    Aborted(u8),
 }
 
 impl Session {
@@ -91,14 +101,26 @@ impl Session {
         messages: Vec<Message>,
         outgoing: &mut Vec<Message>,
     ) -> Result<DerivationStatus, ProtocolError> {
-        if let Phase::Done(_) = &self.phase {
-            return Ok(DerivationStatus::Complete);
+        match &self.phase {
+            Phase::Done(_) => return Ok(DerivationStatus::Complete),
+            Phase::Aborted(f) => return Ok(DerivationStatus::Aborted(*f)),
+            _ => {}
         }
 
-        for message in messages {
+        for message in &messages {
+            if matches!(message.body, MessageBody::Abort) {
+                // Abort is broadcast; the `to` field is ignored.
+                self.pending.clear();
+                self.phase = Phase::Aborted(message.from);
+                return Ok(DerivationStatus::Aborted(message.from));
+            }
+
             if message.to != self.context.party_id() {
                 return Err(ProtocolError::InvalidMessage);
             }
+        }
+
+        for message in messages {
             self.pending.push(message);
         }
 
@@ -158,10 +180,11 @@ mod tests {
         relay::SimpleMessageRelay, setup::ProtocolParticipant,
     };
 
-    use crate::derivation::run_derivation_with_seed;
-    use crate::derivation_session::message::{
-        AbortMessage, CommonRandomnessMessage, Message, MessageBody,
-        SetupYaoMessage,
+    use crate::{
+        derivation::run_derivation_with_seed,
+        derivation_session::message::{
+            CommonRandomnessMessage, Message, MessageBody, SetupYaoMessage,
+        },
     };
 
     use super::*;
@@ -474,19 +497,18 @@ mod tests {
     }
 
     #[test]
-    fn rejects_abort_messages() {
+    fn handles_abort_messages() {
         let (mut p0, _outgoing) =
             Session::new(0, Scalar::ONE, [10; 32]).unwrap();
 
-        let message = Message {
-            from: 2,
-            to: 0,
-            body: MessageBody::Abort(AbortMessage),
-        };
+        let message = Message::abort(2);
         let mut outgoing = Vec::new();
-        let err = p0
-            .handle_messages(vec![message], &mut outgoing)
-            .unwrap_err();
-        assert!(matches!(err, ProtocolError::InvalidMessage));
+        let status =
+            p0.handle_messages(vec![message], &mut outgoing).unwrap();
+        assert!(matches!(status, DerivationStatus::Aborted(2)));
+        assert!(outgoing.is_empty());
+
+        let status = p0.handle_messages(Vec::new(), &mut outgoing).unwrap();
+        assert!(matches!(status, DerivationStatus::Aborted(2)));
     }
 }

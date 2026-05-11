@@ -14,12 +14,10 @@ use garbled_circuit::{
 
 use crate::{
     derivation_session::{
-        Context,
+        Context, DerivedOrchardKeys,
         message::{Message, MessageBody, OutputYaoMessage},
         phase::{Phase, PhaseHandleResult},
-        serde_types::{
-            DerivedOrchardKeys, SerializableBlock, SerializableYaoShare,
-        },
+        serde_types::{SerializableBlock, SerializableYaoShare},
     },
     utils::bits_to_bytes_le,
 };
@@ -29,7 +27,7 @@ const OUTPUT_BITS: usize = COMPONENT_BITS * 3;
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub enum OutputVerificationState {
+pub(crate) enum OutputVerificationState {
     GarblerWaitLabel {
         verification: SerializableYaoShare,
         component_bits: Vec<SerializableYaoShare>,
@@ -43,7 +41,7 @@ pub enum OutputVerificationState {
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub enum BatchOutputYaoState {
+pub(crate) enum BatchOutputYaoState {
     GarblerWaitLabels {
         component_bits: Vec<SerializableYaoShare>,
     },
@@ -55,7 +53,7 @@ pub enum BatchOutputYaoState {
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub struct DecodeOutputState {
+pub(crate) struct DecodeOutputState {
     bits: Vec<bool>,
 }
 

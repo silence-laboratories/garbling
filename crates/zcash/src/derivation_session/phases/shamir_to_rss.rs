@@ -25,7 +25,7 @@ use crate::{
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub struct ShamirToRssState {
+pub(crate) struct ShamirToRssState {
     r_prev: SerializableScalar,
     r_next: SerializableScalar,
     padded_shamir: SerializableScalar,

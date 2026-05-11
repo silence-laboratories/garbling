@@ -13,7 +13,7 @@ use crate::derivation_session::{
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub enum SetupYaoState {
+pub(crate) enum SetupYaoState {
     WaitCrs,
     WaitPrf { comm_crs: SerializableBlock },
 }

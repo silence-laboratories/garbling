@@ -15,7 +15,7 @@ use crate::derivation_session::{
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub struct CommonRandomnessState {
+pub(crate) struct CommonRandomnessState {
     key_next: [u8; 32],
     from: u8,
 }

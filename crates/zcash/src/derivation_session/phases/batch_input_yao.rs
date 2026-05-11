@@ -38,7 +38,7 @@ const INPUT_BITS: usize = SHARE_BITS * 2;
 
 #[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub enum BatchInputYaoState {
+pub(crate) enum BatchInputYaoState {
     GarblerWaitEvalBits {
         all_ip: Vec<bool>,
         i1: Vec<SerializableYaoShare>,

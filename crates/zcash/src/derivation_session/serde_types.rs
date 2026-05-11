@@ -162,11 +162,3 @@ impl From<SerializableYaoShare> for YaoShare {
         }
     }
 }
-
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DerivedOrchardKeys {
-    pub ask: [u8; 32],
-    pub nk: [u8; 32],
-    pub rivk: [u8; 32],
-}
