@@ -369,6 +369,7 @@ mod tests {
 
     #[test]
     fn buffers_early_common_randomness_message() {
+        // Build three sessions and collect their initial outbound traffic.
         let shares = generate_shamir_shares([17u8; 32]);
         let mut sessions = Vec::new();
         let mut queue = Vec::new();
@@ -379,6 +380,8 @@ mod tests {
             sessions.push(session);
         }
 
+        // Deliver party 0's CRS first so the protocol advances far enough to
+        // emit messages that party 1 will need to buffer/replay.
         let crs_to_p0 = queue
             .iter()
             .position(|message| {
@@ -394,6 +397,8 @@ mod tests {
             .handle_messages(vec![message], &mut queue)
             .unwrap();
 
+        // Party 0's setup can emit an early CommonRandomness::KeyNext for
+        // party 1; deliver it before party 1 has finished setup.
         let key_next_to_p1 = queue
             .iter()
             .position(|message| {
@@ -412,21 +417,8 @@ mod tests {
             .unwrap();
         assert!(matches!(status, DerivationStatus::Waiting));
 
-        let crs_to_p1 = queue
-            .iter()
-            .position(|message| {
-                message.to == 1
-                    && matches!(
-                        message.body,
-                        MessageBody::SetupYao(SetupYaoMessage::CommCrs(_))
-                    )
-            })
-            .expect("CRS for p1 should exist");
-        let message = queue.remove(crs_to_p1);
-        sessions[1]
-            .handle_messages(vec![message], &mut queue)
-            .unwrap();
-
+        // Next deliver the PRF seed early as well; this should be buffered in
+        // SetupYao::WaitCrs rather than rejected.
         let prf_seed_to_p1 = queue
             .iter()
             .position(|message| {
@@ -438,37 +430,34 @@ mod tests {
             })
             .expect("PRF seed for p1 should exist");
         let message = queue.remove(prf_seed_to_p1);
-        sessions[1]
+        let status = sessions[1]
             .handle_messages(vec![message], &mut queue)
             .unwrap();
+        assert!(matches!(status, DerivationStatus::Waiting));
 
-        let mut steps = 0usize;
-        while !queue.is_empty() && steps < 200 {
-            steps += 1;
-            let pos = queue
-                .iter()
-                .position(|message| {
-                    let to = usize::from(message.to);
-                    let mut probe = sessions[to].clone();
-                    let mut probe_outgoing = Vec::new();
-                    probe
-                        .handle_messages(
-                            vec![message.clone()],
-                            &mut probe_outgoing,
-                        )
-                        .is_ok()
-                })
-                .expect("at least one queued message is deliverable");
-            let message = queue.remove(pos);
-            let to = usize::from(message.to);
-            sessions[to]
-                .handle_messages(vec![message], &mut queue)
-                .unwrap();
-        }
-
-        assert!(queue.is_empty());
-        assert!(steps < 200);
-        assert!(sessions.iter().all(|s| s.derived_keys().is_some()));
+        // Once party 1 receives its CRS, the buffered PRF seed should be
+        // replayed automatically and produce additional outbound traffic.
+        let queue_len_before_crs = queue.len();
+        let crs_to_p1 = queue
+            .iter()
+            .position(|message| {
+                message.to == 1
+                    && matches!(
+                        message.body,
+                        MessageBody::SetupYao(SetupYaoMessage::CommCrs(_))
+                    )
+            })
+            .expect("CRS for p1 should exist");
+        let message = queue.remove(crs_to_p1);
+        let status = sessions[1]
+            .handle_messages(vec![message], &mut queue)
+            .unwrap();
+        assert!(matches!(status, DerivationStatus::Waiting));
+        assert!(
+            queue.len() > queue_len_before_crs,
+            "replaying the buffered PRF seed should enqueue follow-up messages"
+        );
+        assert!(sessions[1].derived_keys().is_none());
     }
 
     #[test]

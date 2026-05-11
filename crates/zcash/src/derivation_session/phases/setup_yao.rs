@@ -61,15 +61,28 @@ impl SetupYaoState {
                     };
                     self.after_crs(ctx, outgoing, comm_crs)
                         .map(|phase| PhaseHandleResult::Consumed(Some(phase)))
-                } else if matches!(
-                    message.body,
-                    MessageBody::CommonRandomness(_)
-                ) && matches!(ctx.party_id(), 0 | 1)
-                    && message.from == if ctx.party_id() == 0 { 2 } else { 0 }
-                {
-                    Ok(PhaseHandleResult::NotReady(message))
                 } else {
-                    Err(ProtocolError::InvalidMessage)
+                    let party_id = ctx.party_id();
+
+                    // matches!() will make code much harder to understand
+                    #[allow(clippy::match_like_matches_macro)]
+                    #[rustfmt::skip]
+                    let is_early_message = match (
+                        party_id,
+                        message.from,
+                        &message.body,
+                    ) {
+                        (0, 2, MessageBody::CommonRandomness(_)) => true,
+                        (1, 0, MessageBody::CommonRandomness(_)) => true,
+                        (1, 0, MessageBody::SetupYao(SetupYaoMessage::PrfSeed(_))) => true,
+                        _ => false,
+                    };
+
+                    if is_early_message {
+                        Ok(PhaseHandleResult::NotReady(message))
+                    } else {
+                        Err(ProtocolError::InvalidMessage)
+                    }
                 }
             }
             SetupYaoState::WaitPrf { comm_crs } => {
@@ -176,6 +189,27 @@ mod tests {
             )
             .unwrap_err();
         assert!(matches!(err, ProtocolError::InvalidMessage));
+    }
+
+    #[test]
+    fn buffers_wait_crs_early_prf_for_party_one() {
+        let mut ctx = test_context(1);
+        let mut state = SetupYaoState::WaitCrs;
+        let mut outgoing = Vec::new();
+        let message = Message {
+            from: 0,
+            to: 1,
+            body: MessageBody::SetupYao(SetupYaoMessage::PrfSeed([0; 32])),
+        };
+
+        let result = state
+            .handle_message(&mut ctx, &mut outgoing, message.clone())
+            .unwrap();
+
+        assert!(
+            matches!(result, PhaseHandleResult::NotReady(m) if m == message)
+        );
+        assert!(outgoing.is_empty());
     }
 
     #[test]
