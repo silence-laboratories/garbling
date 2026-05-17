@@ -2,7 +2,7 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use ff::FromUniformBytes;
-use group::{Group, GroupEncoding};
+use group::Group;
 use pasta_curves::pallas::{Point, Scalar};
 use sha2::{Digest, Sha512};
 
@@ -24,14 +24,12 @@ pub fn scalar_rss_to_shamir<G>(
     party_id: usize,
 ) -> G::Scalar
 where
-    G: Group + GroupEncoding,
+    G: Group,
 {
     // helper closure f_A(j) = (j - m)/(-m)
 
-    use ff::Field;
-
-    let one = G::Scalar::ONE;
-    let eval_points = [one, one + one, one + one + one];
+    let eval_points =
+        [G::Scalar::from(1), G::Scalar::from(2), G::Scalar::from(3)];
 
     rss_pair_to_shamir(prev_share, next_share, party_id, eval_points)
 }
@@ -66,9 +64,7 @@ fn scalar_from_random_bytes(bytes: [u8; 32]) -> Scalar {
     hasher.update(b"zcash.scalar_from_random_bytes.v1");
     hasher.update(bytes);
 
-    let mut uniform_bytes = [0u8; 64];
-    uniform_bytes.copy_from_slice(&hasher.finalize());
-    Scalar::from_uniform_bytes(&uniform_bytes)
+    Scalar::from_uniform_bytes(hasher.finalize().as_ref())
 }
 
 /// Converts a Shamir-shared Scalar valueto an RSS-shared Scalar value (`PrivKeyShare`)

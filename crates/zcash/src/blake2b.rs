@@ -3,7 +3,7 @@
 
 use garbled_circuit::circuit::{BinaryCircuit, CircuitBuilder, prebuilt};
 
-pub const H_WORDS: [bool; 512] = [
+const H_WORDS: [bool; 512] = [
     false, false, false, true, false, false, true, false, true, false, false,
     true, false, false, true, true, true, false, true, true, true, true,
     false, true, false, true, false, false, true, true, true, true, true,
@@ -216,7 +216,7 @@ mod tests {
         let mut bytes: [u8; 201] = [1u8; 201];
         rng.fill_bytes(&mut bytes);
         let circ = create_blake2b_circuit(bytes.len() * 8);
-        let bits = bytes_to_bits_be(&bytes);
+        let bits: Vec<bool> = bytes_to_bits_be(&bytes).collect();
         let out = circ.evaluate(&[&bits]);
 
         assert_eq!(
@@ -231,7 +231,7 @@ mod tests {
         let mut bytes: [u8; 201] = [1u8; 201];
         rng.fill_bytes(&mut bytes);
         let circ = create_blake2b_zcash_circuit(bytes.len() * 8);
-        let bits = bytes_to_bits_be(&bytes);
+        let bits: Vec<bool> = bytes_to_bits_be(&bytes).collect();
         let out = circ.evaluate(&[&bits]);
 
         let mut hasher = Params::new()

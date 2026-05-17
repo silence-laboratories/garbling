@@ -57,11 +57,9 @@ where
     )
     .await?;
 
-    let prev = bytes_to_bits_be(&rss_prev.to_repr());
-    let next = bytes_to_bits_be(&rss_next.to_repr());
-
-    let mut all_ip = prev;
-    all_ip.extend_from_slice(&next);
+    let all_ip: Vec<bool> = bytes_to_bits_be(&rss_prev.to_repr())
+        .chain(bytes_to_bits_be(&rss_next.to_repr()))
+        .collect();
 
     let (i1_yao, i2_yao, i3_yao) =
         run_batch_input_from_all_yao(setup, relay, &all_ip, yao_setup, comm)
@@ -189,8 +187,6 @@ mod tests {
         relay::SimpleMessageRelay, setup::ProtocolParticipant,
     };
 
-    use crate::utils::get_evaluation;
-
     use super::run_derivation;
 
     fn generate_shamir_shares(rng: &mut StdRng) -> [Scalar; 3] {
@@ -247,6 +243,29 @@ mod tests {
         let mut res = [0u8; 64];
         res.copy_from_slice(hash.as_bytes());
         res
+    }
+
+    fn get_evaluation(
+        party_points: &[Scalar],
+        evals: &[Scalar],
+        eval_point: &Scalar,
+    ) -> Scalar {
+        let lcoeff = party_points.iter().map(|x_i| {
+            let mut coeff = Scalar::ONE;
+            for x_j in party_points {
+                if x_i != x_j {
+                    let num = x_j.sub(eval_point);
+                    let sub = x_j.sub(x_i);
+                    coeff *= num * sub.invert().unwrap();
+                }
+            }
+            coeff
+        });
+
+        evals
+            .iter()
+            .zip(lcoeff)
+            .fold(Scalar::ZERO, |acc, (ev, lc)| acc + *ev * lc)
     }
 
     fn get_ideal_execution(sk: [u8; 32]) -> (Scalar, Base, Scalar) {

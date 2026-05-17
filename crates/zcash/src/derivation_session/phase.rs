@@ -24,7 +24,7 @@ pub(crate) enum PhaseHandleResult {
     NotReady(Message),
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Phase {
     SetupYao(SetupYaoState),
@@ -40,6 +40,21 @@ pub(crate) enum Phase {
 }
 
 impl Phase {
+    pub(crate) fn name(&self) -> &'static str {
+        match self {
+            Phase::SetupYao(_) => "SetupYao",
+            Phase::CommonRandomness(_) => "CommonRandomness",
+            Phase::ShamirToRss(_) => "ShamirToRss",
+            Phase::BatchInputYao(_) => "BatchInputYao",
+            Phase::CircuitEval(_) => "CircuitEval",
+            Phase::OutputVerification(_) => "OutputVerification",
+            Phase::BatchOutput(_) => "BatchOutput",
+            Phase::DecodeOutput(_) => "DecodeOutput",
+            Phase::Done(_) => "Done",
+            Phase::Aborted(_) => "Aborted",
+        }
+    }
+
     pub(crate) fn handle_message(
         &mut self,
         ctx: &mut Context,

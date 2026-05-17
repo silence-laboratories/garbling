@@ -25,7 +25,7 @@ use crate::{
 const COMPONENT_BITS: usize = 512;
 const OUTPUT_BITS: usize = COMPONENT_BITS * 3;
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum OutputVerificationState {
     GarblerWaitLabel {
@@ -39,7 +39,7 @@ pub(crate) enum OutputVerificationState {
     },
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BatchOutputYaoState {
     GarblerWaitLabels {
@@ -51,7 +51,7 @@ pub(crate) enum BatchOutputYaoState {
     },
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DecodeOutputState {
     bits: Vec<bool>,

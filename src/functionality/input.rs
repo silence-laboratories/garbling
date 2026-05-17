@@ -921,24 +921,6 @@ where
     )
 }
 
-fn input_yao_from_all_functionality_3_create_msg1(
-    input: &[bool],
-) -> (Vec<bool>, Vec<bool>) {
-    let mut rng = rand::rngs::StdRng::from_entropy();
-
-    let mut x1vals = Vec::with_capacity(input.len());
-    let mut x2vals = Vec::with_capacity(input.len());
-
-    (0..input.len()).for_each(|i| {
-        let x1 = rng.gen_bool(0.5);
-        let x2 = x1 ^ input[i];
-        x1vals.push(x1);
-        x2vals.push(x2);
-    });
-
-    (x1vals, x2vals)
-}
-
 fn input_yao_from_all_functionality_3_process_msg1<C, T>(
     comm: &C,
     msg1_recv_p2: &InputYaoAllMsg1p22,
@@ -1079,8 +1061,15 @@ where
 
     let out = match yao_setup {
         YaoSetup::E(_) => {
-            let (msg1_to_p1, msg1_to_p2) =
-                input_yao_from_all_functionality_3_create_msg1(input);
+            let mut rng = rand::rngs::StdRng::from_entropy();
+            let mut msg1_to_p1 = Vec::with_capacity(input.len());
+            let mut msg1_to_p2 = Vec::with_capacity(input.len());
+
+            for &bit in input {
+                let x1 = rng.gen_bool(0.5);
+                msg1_to_p1.push(x1);
+                msg1_to_p2.push(x1 ^ bit);
+            }
 
             let msg1_enc_to_p1 = encode_vec_bool(&msg1_to_p1);
             let msg1_enc_to_p2 = encode_vec_bool(&msg1_to_p2);

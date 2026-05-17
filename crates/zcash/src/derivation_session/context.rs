@@ -11,7 +11,7 @@ use super::serde_types::{
     SerializableBlock, SerializableScalar, SerializableYaoSetup,
 };
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Context {
     pub(crate) party_id: u8,
@@ -25,8 +25,8 @@ impl Context {
         self.party_id
     }
 
-    pub(crate) fn shamir_share(&self) -> SerializableScalar {
-        self.shamir_share
+    pub(crate) fn shamir_share(&self) -> &SerializableScalar {
+        &self.shamir_share
     }
 
     pub(crate) fn comm_crs(
