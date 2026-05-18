@@ -43,3 +43,5 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
       - run: cargo test --tests --all --release --locked
+
+      - run: cargo test --tests -p zcash --release --locked -F dkg

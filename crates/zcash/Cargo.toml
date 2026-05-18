@@ -1,6 +1,6 @@
 [package]
 name = "zcash"
-version = "0.1.0-pre.6"
+version = "0.1.0-pre.7"
 edition = "2024"
 license-file = "../../LICENSE"
 rust-version = "1.88"
@@ -25,7 +25,7 @@ sl-compute-common = { workspace = true }
 sl-messages = { workspace = true }
 sl-secret-sharing = { workspace = true }
 hex = "0.4"
-orchard = "0.13.0"
+orchard = { version = "0.13.0", default-features = false }
 pasta_curves = "0.5.1"
 ciborium = { version = "0.2", optional = true }
 crypto_box = { version = "0.9", optional = true }
