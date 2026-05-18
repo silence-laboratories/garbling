@@ -4,6 +4,11 @@
 use ff::{FromUniformBytes, PrimeField};
 use pasta_curves::pallas::{Base, Scalar};
 
+use orchard::{
+    keys::FullViewingKey,
+    primitives::redpallas::{SigningKey, SpendAuth, VerificationKey},
+};
+
 use garbled_circuit::{
     functionality::utils_dep::ProtocolError,
     utilities::{
@@ -269,6 +274,7 @@ impl DecodeOutputState {
         if self.bits.len() != OUTPUT_BITS {
             return Err(ProtocolError::InvalidMessage);
         }
+
         let (ask_bits, rem) = self.bits.split_at(COMPONENT_BITS);
         let (nk_bits, rivk_bits) = rem.split_at(COMPONENT_BITS);
         let ask_i = bits_to_bytes_le(ask_bits);
@@ -277,10 +283,39 @@ impl DecodeOutputState {
         let ask = Scalar::from_uniform_bytes(&ask_i.try_into().unwrap());
         let nk = Base::from_uniform_bytes(&nk_i.try_into().unwrap());
         let rivk = Scalar::from_uniform_bytes(&rivk_i.try_into().unwrap());
+
+        let mut ask_eff = ask;
+        let ak_bytes = loop {
+            let signing_key: SigningKey<SpendAuth> =
+                ask_eff.to_repr().try_into().unwrap();
+            let vk: VerificationKey<SpendAuth> = (&signing_key).into();
+            let ak_bytes: [u8; 32] = (&vk).into();
+
+            if (ak_bytes[31] >> 7) == 1 {
+                ask_eff = -ask_eff;
+                continue;
+            }
+
+            break ak_bytes;
+        };
+
+        let mut fvk_bytes = [0u8; 96];
+        fvk_bytes[0..32].copy_from_slice(&ak_bytes);
+        fvk_bytes[32..64].copy_from_slice(&nk.to_repr());
+        fvk_bytes[64..96].copy_from_slice(&rivk.to_repr());
+
+        let fvk = FullViewingKey::from_bytes(&fvk_bytes)
+            .ok_or(ProtocolError::InvalidMessage)?;
+
+        let internal_ivk = fvk.to_ivk(orchard::keys::Scope::Internal);
+        let external_ivk = fvk.to_ivk(orchard::keys::Scope::External);
+
         Ok(DerivedOrchardKeys {
             ask: ask.to_repr(),
             nk: nk.to_repr(),
             rivk: rivk.to_repr(),
+            internal_ivk: internal_ivk.to_bytes(),
+            external_ivk: external_ivk.to_bytes(),
         })
     }
 }
