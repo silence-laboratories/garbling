@@ -258,7 +258,7 @@ mod tests {
 
         use crate::{
             shamir_to_rss::run_shamir_to_scalar_rss_pallas,
-            utils::bytes_to_bits_be,
+            utils::bytes_to_bits_le,
         };
 
         let mut relay = FilteredMsgRelay::new(relay);
@@ -280,8 +280,8 @@ mod tests {
         )
         .await?;
 
-        let all_ip: Vec<bool> = bytes_to_bits_be(&rss_prev.to_repr())
-            .chain(bytes_to_bits_be(&rss_next.to_repr()))
+        let all_ip: Vec<bool> = bytes_to_bits_le(&rss_prev.to_repr())
+            .chain(bytes_to_bits_le(&rss_next.to_repr()))
             .collect();
 
         let (i1_yao, i2_yao, i3_yao) = run_batch_input_from_all_yao(

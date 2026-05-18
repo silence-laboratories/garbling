@@ -1,8 +1,7 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-/// Converts bytes to bool values in big endian.
-pub(crate) fn bytes_to_bits_be(
+pub(crate) fn bytes_to_bits_le(
     bytes: &[u8],
 ) -> impl Iterator<Item = bool> + '_ {
     bytes
