@@ -11,19 +11,7 @@ use garbled_circuit::{
 
 use crate::prf::build_prf_expand_circuit;
 
-/// Converts a vector of `u8` values to a vector of `bool` values
-pub fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
-    let mut output = Vec::with_capacity(vec_u8.len() * 8);
-    for byte in vec_u8 {
-        for i in (0..8).rev() {
-            let bit = (byte >> i) & 1;
-            output.push(bit != 0);
-        }
-    }
-    output
-}
-
-pub fn build_zcash_blake2b_circuit() -> BinaryCircuit {
+fn build_zcash_blake2b_circuit() -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
     let sk_ids = builder.new_inputs(256);
@@ -41,9 +29,7 @@ pub fn build_zcash_blake2b_circuit() -> BinaryCircuit {
     builder.finish()
 }
 
-pub fn build_zcash_import_function() -> BinaryCircuit {
-    use crate::zcash::build_zcash_blake2b_circuit;
-
+pub(crate) fn build_zcash_import_function() -> BinaryCircuit {
     let mut builder = CircuitBuilder::new();
 
     let p1_next = builder.new_inputs(256);
@@ -93,6 +79,7 @@ mod tests {
     };
     use pasta_curves::pallas::Scalar;
     use rand::{SeedableRng, rngs::StdRng};
+
     use sl_compute_common::BinaryString;
     use sl_messages::{
         relay::{Relay, SimpleMessageRelay},
@@ -100,6 +87,18 @@ mod tests {
     };
 
     use super::*;
+
+    /// Converts a vector of `u8` values to a vector of `bool` values
+    fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
+        let mut output = Vec::with_capacity(vec_u8.len() * 8);
+        for byte in vec_u8 {
+            for i in (0..8).rev() {
+                let bit = (byte >> i) & 1;
+                output.push(bit != 0);
+            }
+        }
+        output
+    }
 
     fn generate_shamir_shares(rng: &mut StdRng) -> [Scalar; 3] {
         let secret = Scalar::random(&mut *rng);
@@ -137,7 +136,6 @@ mod tests {
         println!("rivk_i: {:?}", hex::encode(rivk_i.value));
     }
 
-    #[cfg(any(test, feature = "test-support"))]
     async fn test_run_zcash_blake2b_3pc<S, R>(
         setup: S,
         scalar_bool: Vec<bool>,
@@ -185,7 +183,6 @@ mod tests {
         Ok((setup.participant_index(), out))
     }
 
-    #[cfg(any(test, feature = "test-support"))]
     async fn test_zcash_blake2b_3pc_util(
         scalar_bool: Vec<bool>,
     ) -> Vec<bool> {
@@ -245,7 +242,6 @@ mod tests {
         println!()
     }
 
-    #[cfg(any(test, feature = "test-support"))]
     async fn test_run_zcash_dkg<S, R>(
         setup: S,
         shamir_share: Scalar,
@@ -284,29 +280,9 @@ mod tests {
         )
         .await?;
 
-        // let tag = MessageTag::tag(12389);
-
-        // let res_next = p2p_send_to_next_receive_from_prev(
-        //     &setup,
-        //     tag,
-        //     rss_prev.to_repr(),
-        //     &mut relay,
-        // )
-        // .await?;
-
-        // let res = Scalar::from_repr(res_next).unwrap();
-
-        // let s = rss_next + rss_prev + res;
-
-        // if setup.participant_index() == 0 {
-        //     println!("{rss_next:?} \n{rss_prev:?} \n{res:?}\n{s:?}");
-        // }
-
-        let prev = bytes_to_bits_be(&rss_prev.to_repr());
-        let next = bytes_to_bits_be(&rss_next.to_repr());
-
-        let mut all_ip = prev;
-        all_ip.extend_from_slice(&next);
+        let all_ip: Vec<bool> = bytes_to_bits_be(&rss_prev.to_repr())
+            .chain(bytes_to_bits_be(&rss_next.to_repr()))
+            .collect();
 
         let (i1_yao, i2_yao, i3_yao) = run_batch_input_from_all_yao(
             &setup,
@@ -352,7 +328,6 @@ mod tests {
         Ok((setup.participant_index(), out))
     }
 
-    #[cfg(any(test, feature = "test-support"))]
     async fn test_zcash_dkg_util(shamir_shares: [Scalar; 3]) -> Vec<bool> {
         let mut parties = tokio::task::JoinSet::new();
         let coord = SimpleMessageRelay::new();

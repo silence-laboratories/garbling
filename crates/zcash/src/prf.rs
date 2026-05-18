@@ -6,26 +6,21 @@ use garbled_circuit::circuit::{BinaryCircuit, CircuitBuilder};
 use crate::{blake2b::create_blake2b_zcash_circuit, utils::bytes_to_bits_be};
 
 pub fn build_prf_expand_circuit(t: u8) -> BinaryCircuit {
-    let t_bits = bytes_to_bits_be(&[t]);
+    let t_bytes = [t];
+    let t_bits = bytes_to_bits_be(&t_bytes);
 
     let mut builder = CircuitBuilder::new();
 
     let mut sk = builder.new_inputs(32 * 8);
-    sk.extend_from_slice(
-        &t_bits
-            .iter()
-            .map(|v| builder.constant(*v))
-            .collect::<Vec<_>>(),
-    );
-    // inputs.extend_from_slice(&vec![
-    //     builder.constant(false);
-    //     1024 - inputs.len()
-    // ]);
+
+    sk.extend(t_bits.into_iter().map(|bit| builder.constant(bit)));
+
     let hash_circ = create_blake2b_zcash_circuit(sk.len());
     let out = builder.add_circuit(&hash_circ, &[&sk]);
     for i in out {
         builder.output(i);
     }
+
     builder.finish()
 }
 
@@ -59,7 +54,7 @@ mod tests {
         rng.fill_bytes(&mut sk);
         let t = 6;
         let circ = build_prf_expand_circuit(t);
-        let bits = bytes_to_bits_be(&sk);
+        let bits: Vec<bool> = bytes_to_bits_be(&sk).collect();
         let out = circ.evaluate(&[&bits]);
 
         assert_eq!(bits_to_bytes_le(&out), prf_expand(&sk, t).to_vec());

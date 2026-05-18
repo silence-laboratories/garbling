@@ -25,7 +25,7 @@ pub use message::Message;
 
 pub const DERIVATION_PARTIES: u8 = 3;
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DerivedOrchardKeys {
     pub ask: [u8; 32],
@@ -33,7 +33,7 @@ pub struct DerivedOrchardKeys {
     pub rivk: [u8; 32],
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Session {
     context: Context,
@@ -166,6 +166,11 @@ impl Session {
             _ => None,
         }
     }
+
+    /// Returns the current phase name for debugging.
+    pub fn current_phase_name(&self) -> String {
+        self.phase.name().to_string()
+    }
 }
 
 #[cfg(test)]
@@ -200,13 +205,13 @@ mod tests {
 
     fn run_session_derivation(
         shares: [Scalar; 3],
-        seed: [u8; 32],
+        seeds: [[u8; 32]; 3],
     ) -> (DerivedOrchardKeys, Vec<Session>) {
         let mut sessions = Vec::new();
         let mut queue = Vec::new();
         for (party_id, share) in shares.into_iter().enumerate() {
             let (session, outgoing) =
-                Session::new(party_id as u8, share, seed).unwrap();
+                Session::new(party_id as u8, share, seeds[party_id]).unwrap();
             queue.extend(outgoing);
             sessions.push(session);
         }
@@ -214,22 +219,14 @@ mod tests {
         let mut steps = 0usize;
         while !queue.is_empty() && steps < 100 {
             steps += 1;
-            let pos = queue
-                .iter()
-                .position(|message| {
-                    let to = usize::from(message.to);
-                    let mut probe = sessions[to].clone();
-                    let mut probe_outgoing = Vec::new();
-                    probe
-                        .handle_messages(
-                            vec![message.clone()],
-                            &mut probe_outgoing,
-                        )
-                        .is_ok()
-                })
-                .expect("at least one queued message is deliverable");
-            let message = queue.remove(pos);
+            let message = queue.remove(0);
             let to = usize::from(message.to);
+            eprintln!(
+                "msg: {} -> {:?} {}",
+                message.sender(),
+                message.receiver(),
+                sessions[to].current_phase_name()
+            );
             sessions[to]
                 .handle_messages(vec![message], &mut queue)
                 .unwrap();
@@ -323,7 +320,7 @@ mod tests {
         assert_eq!(outgoing.len(), 3);
     }
 
-    #[cfg(feature = "session")]
+    #[cfg(feature = "serde")]
     #[test]
     fn session_roundtrips_through_serde() {
         let (session, _outgoing) =
@@ -338,7 +335,10 @@ mod tests {
     #[test]
     fn completed_session_stays_complete_after_finish() {
         let shares = generate_shamir_shares([3u8; 32]);
-        let (keys, mut sessions) = run_session_derivation(shares, [10u8; 32]);
+        let (keys, mut sessions) = run_session_derivation(
+            shares,
+            [[10u8; 32], [10u8; 32], [10u8; 32]],
+        );
 
         let mut outgoing = Vec::new();
         let status = sessions[0]
@@ -361,8 +361,10 @@ mod tests {
         assert_eq!(relay_keys[0], relay_keys[1]);
         assert_eq!(relay_keys[0], relay_keys[2]);
 
-        let (session_keys, _sessions) =
-            run_session_derivation(shares, [21u8; 32]);
+        let (session_keys, _sessions) = run_session_derivation(
+            shares,
+            [[21u8; 32], [22u8; 32], [23u8; 32]],
+        );
         assert_eq!(derived_tuple(&session_keys), relay_keys[0]);
     }
 

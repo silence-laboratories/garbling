@@ -1,6 +1,6 @@
 [package]
 name = "zcash"
-version = "0.1.0-pre.4"
+version = "0.1.0-pre.5"
 edition = "2024"
 license-file = "../../LICENSE"
 rust-version = "1.88"
@@ -23,23 +23,31 @@ sha2 = { workspace = true }
 sl-compute-common = { workspace = true }
 sl-messages = { workspace = true }
 sl-secret-sharing = { workspace = true }
-
 hex = "0.4"
 pasta_curves = "0.5.1"
+ciborium = { version = "0.2", optional = true }
+crypto_box = { version = "0.9", optional = true }
+multi-party-schnorr = { version = "1.2.0-pre.1", optional = true, features = [
+    "serde",
+    "session",
+    "keyshare-session-id",
+    "redpallas",
+]}
 
 [dev-dependencies]
-ciborium = "0.2"
 blake2b_simd = "1.0.4"
+ciborium = "0.2"
 criterion = "0.5.1"
-hex = "0.4"
+garbled-circuit = { workspace = true, features = ["test-support"] }
 orchard = "0.13.0"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-garbled-circuit = { workspace = true, features = ["test-support"] }
 
 [[bench]]
 name = "blake2b_bench"
 harness = false
 
 [features]
-session = ["dep:serde", "rand_chacha/serde1"]
-test-support = []
+default = []
+serde = ["dep:serde", "rand_chacha/serde1"]
+session = []
+dkg = ["session", "dep:ciborium", "dep:multi-party-schnorr", "dep:crypto_box", "serde"]

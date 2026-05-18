@@ -24,7 +24,7 @@ use crate::{
     zcash::build_zcash_import_function,
 };
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct CircuitEvalState {
     inputs: [Vec<SerializableYaoShare>; 6],

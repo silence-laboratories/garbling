@@ -13,7 +13,7 @@ use garbled_circuit::{
     },
 };
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SerializableScalar(pub [u8; 32]);
 
@@ -31,11 +31,11 @@ impl From<Scalar> for SerializableScalar {
     }
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SerializableBlock(pub [u8; 16]);
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SerializableYaoSetup {
     Garbler {
@@ -88,7 +88,7 @@ impl From<YaoSetup> for SerializableYaoSetup {
     }
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SerializableYaoShare {
     Garbler {

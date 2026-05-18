@@ -12,7 +12,7 @@ use crate::derivation_session::{
     prev_party,
 };
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct CommonRandomnessState {
     key_next: [u8; 32],
@@ -25,6 +25,7 @@ impl CommonRandomnessState {
         outgoing: &mut Vec<Message>,
     ) -> Result<Phase, ProtocolError> {
         let key_next = ctx.derive_32(b"common-randomness/key-next", 0);
+
         outgoing.push(Message {
             from: ctx.party_id(),
             to: next_party(ctx.party_id()),
@@ -32,6 +33,7 @@ impl CommonRandomnessState {
                 CommonRandomnessMessage::KeyNext(key_next),
             ),
         });
+
         Ok(Phase::CommonRandomness(CommonRandomnessState {
             key_next,
             from: prev_party(ctx.party_id()),
@@ -49,23 +51,27 @@ impl CommonRandomnessState {
         {
             return Ok(PhaseHandleResult::NotReady(input));
         }
+
         if input.from != self.from {
             return Err(ProtocolError::InvalidMessage);
         }
+
         if !matches!(input.body, MessageBody::CommonRandomness(_)) {
             return Err(ProtocolError::InvalidMessage);
         }
+
         let MessageBody::CommonRandomness(CommonRandomnessMessage::KeyNext(
             key_prev,
         )) = input.body
         else {
             return Err(ProtocolError::InvalidMessage);
         };
+
         if key_prev == self.key_next {
             return Err(ProtocolError::VerificationError);
         }
-        let share = ctx.shamir_share().to_scalar()?;
-        ShamirToRssState::start(ctx, outgoing, share, key_prev, self.key_next)
+
+        ShamirToRssState::start(ctx, outgoing, key_prev, self.key_next)
             .map(|phase| PhaseHandleResult::Consumed(Some(phase)))
     }
 }

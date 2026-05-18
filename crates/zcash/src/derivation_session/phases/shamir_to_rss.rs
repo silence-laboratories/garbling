@@ -25,14 +25,12 @@ use crate::{
     shamir_to_rss::scalar_rss_to_shamir,
 };
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ShamirToRssState {
     r_prev: SerializableScalar,
     r_next: SerializableScalar,
     padded_shamir: SerializableScalar,
-    next_party: u8,
-    prev_party: u8,
     from_next: Option<ShamirToRssMessage>,
     from_prev: Option<ShamirToRssMessage>,
 }
@@ -41,12 +39,12 @@ impl ShamirToRssState {
     pub(crate) fn start(
         ctx: &mut Context,
         outgoing: &mut Vec<Message>,
-        share: Scalar,
         key_prev: [u8; 32],
         key_next: [u8; 32],
     ) -> Result<Phase, ProtocolError> {
         let mut f_prev = ChaCha20Rng::from_seed(key_prev);
         let mut f_next = ChaCha20Rng::from_seed(key_next);
+        let share = ctx.shamir_share().to_scalar()?;
 
         let mut r_prev_bytes = [0u8; 32];
         let mut r_next_bytes = [0u8; 32];
@@ -58,7 +56,7 @@ impl ShamirToRssState {
         let r_shamir = scalar_rss_to_shamir::<Point>(
             r_prev,
             r_next,
-            usize::from(ctx.party_id()),
+            ctx.party_id() as usize,
         );
         let padded_shamir = share + r_shamir;
         let padded_msg = ShamirToRssMessage(padded_shamir.into());
@@ -66,7 +64,7 @@ impl ShamirToRssState {
         outgoing.push(Message {
             from: ctx.party_id(),
             to: prev_party(ctx.party_id()),
-            body: MessageBody::ShamirToRss(padded_msg.clone()),
+            body: MessageBody::ShamirToRss(padded_msg),
         });
         outgoing.push(Message {
             from: ctx.party_id(),
@@ -78,8 +76,6 @@ impl ShamirToRssState {
             r_prev: r_prev.into(),
             r_next: r_next.into(),
             padded_shamir: padded_shamir.into(),
-            next_party: next_party(ctx.party_id()),
-            prev_party: prev_party(ctx.party_id()),
             from_next: None,
             from_prev: None,
         }))
@@ -96,13 +92,18 @@ impl ShamirToRssState {
         {
             return Ok(PhaseHandleResult::NotReady(input));
         }
+
+        let next_party = next_party(ctx.party_id());
+        let prev_party = prev_party(ctx.party_id());
+
         route_padded_message(
             &mut self.from_next,
             &mut self.from_prev,
-            self.next_party,
-            self.prev_party,
+            next_party,
+            prev_party,
             input,
         )?;
+
         match (&self.from_next, &self.from_prev) {
             (
                 Some(ShamirToRssMessage(share_next)),

@@ -3,7 +3,7 @@
 
 use super::serde_types::{SerializableBlock, SerializableScalar};
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Message {
     pub(crate) from: u8,
@@ -39,7 +39,7 @@ impl Message {
     }
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum MessageBody {
     SetupYao(SetupYaoMessage),
@@ -52,24 +52,24 @@ pub(crate) enum MessageBody {
     Abort,
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum SetupYaoMessage {
     CommCrs(SerializableBlock),
     PrfSeed([u8; 32]),
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum CommonRandomnessMessage {
     KeyNext([u8; 32]),
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ShamirToRssMessage(pub SerializableScalar);
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BatchInputYaoMessage {
     EvaluatorBits(Vec<u8>),
@@ -77,14 +77,14 @@ pub(crate) enum BatchInputYaoMessage {
     GarblerI3Commit(InputYaoAllMsg2),
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum CircuitEvalMessage {
     Hash([u8; 32]),
     GarbledTables(Vec<SerializableBlock>),
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum OutputYaoMessage {
     Label(SerializableBlock),
@@ -93,7 +93,7 @@ pub(crate) enum OutputYaoMessage {
     Bits(Vec<u8>),
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct InputYaoAllMsg1 {
     pub com_i1_0: Vec<SerializableBlock>,
@@ -104,7 +104,7 @@ pub(crate) struct InputYaoAllMsg1 {
     pub wit: Vec<SerializableBlock>,
 }
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct InputYaoAllMsg2 {
     pub comm_1f: Vec<SerializableBlock>,

@@ -36,7 +36,7 @@ use crate::{
 const SHARE_BITS: usize = 256;
 const INPUT_BITS: usize = SHARE_BITS * 2;
 
-#[cfg_attr(feature = "session", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BatchInputYaoState {
     GarblerWaitEvalBits {
@@ -287,10 +287,9 @@ fn all_input_bits(
     rss_prev: SerializableScalar,
     rss_next: SerializableScalar,
 ) -> Result<Vec<bool>, ProtocolError> {
-    let mut prev = bytes_to_bits_be(&rss_prev.to_scalar()?.to_repr());
-    let next = bytes_to_bits_be(&rss_next.to_scalar()?.to_repr());
-    prev.extend_from_slice(&next);
-    Ok(prev)
+    Ok(bytes_to_bits_be(&rss_prev.to_scalar()?.to_repr())
+        .chain(bytes_to_bits_be(&rss_next.to_scalar()?.to_repr()))
+        .collect())
 }
 
 fn evaluator_bits(ctx: &Context, input: &[bool]) -> (Vec<bool>, Vec<bool>) {
