@@ -305,10 +305,25 @@ impl DecodeOutputState {
         fvk_bytes[64..96].copy_from_slice(&rivk.to_repr());
 
         let fvk = FullViewingKey::from_bytes(&fvk_bytes)
-            .ok_or(ProtocolError::InvalidMessage)?;
+            .ok_or(ProtocolError::VerificationError)?;
 
         let internal_ivk = fvk.to_ivk(orchard::keys::Scope::Internal);
         let external_ivk = fvk.to_ivk(orchard::keys::Scope::External);
+
+        for ivk in [&internal_ivk, &external_ivk] {
+            let ivk_bytes = ivk.to_bytes();
+
+            if ivk_bytes == [0; 64] {
+                return Err(ProtocolError::VerificationError);
+            }
+
+            if orchard::keys::IncomingViewingKey::from_bytes(&ivk_bytes)
+                .into_option()
+                .is_none()
+            {
+                return Err(ProtocolError::VerificationError);
+            }
+        }
 
         Ok(DerivedOrchardKeys {
             ask: ask.to_repr(),
