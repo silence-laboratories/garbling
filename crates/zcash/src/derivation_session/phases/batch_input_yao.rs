@@ -30,7 +30,7 @@ use crate::{
             SerializableBlock, SerializableScalar, SerializableYaoShare,
         },
     },
-    utils::bytes_to_bits_be,
+    utils::bytes_to_bits_le,
 };
 
 const SHARE_BITS: usize = 256;
@@ -287,8 +287,8 @@ fn all_input_bits(
     rss_prev: SerializableScalar,
     rss_next: SerializableScalar,
 ) -> Result<Vec<bool>, ProtocolError> {
-    Ok(bytes_to_bits_be(&rss_prev.to_scalar()?.to_repr())
-        .chain(bytes_to_bits_be(&rss_next.to_scalar()?.to_repr()))
+    Ok(bytes_to_bits_le(&rss_prev.to_scalar()?.to_repr())
+        .chain(bytes_to_bits_le(&rss_next.to_scalar()?.to_repr()))
         .collect())
 }
 

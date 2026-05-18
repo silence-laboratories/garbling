@@ -27,7 +27,7 @@ use sl_messages::{relay::Relay, setup::ProtocolParticipant};
 
 use crate::{
     shamir_to_rss::run_shamir_to_scalar_rss_pallas,
-    utils::{bits_to_bytes_le, bytes_to_bits_be},
+    utils::{bits_to_bytes_le, bytes_to_bits_le},
     zcash::build_zcash_import_function,
 };
 
@@ -57,8 +57,8 @@ where
     )
     .await?;
 
-    let all_ip: Vec<bool> = bytes_to_bits_be(&rss_prev.to_repr())
-        .chain(bytes_to_bits_be(&rss_next.to_repr()))
+    let all_ip: Vec<bool> = bytes_to_bits_le(&rss_prev.to_repr())
+        .chain(bytes_to_bits_le(&rss_next.to_repr()))
         .collect();
 
     let (i1_yao, i2_yao, i3_yao) =

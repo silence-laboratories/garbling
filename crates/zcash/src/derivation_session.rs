@@ -31,6 +31,10 @@ pub struct DerivedOrchardKeys {
     pub ask: [u8; 32],
     pub nk: [u8; 32],
     pub rivk: [u8; 32],
+    #[cfg_attr(feature = "serde", serde(with = "serde_bytes"))]
+    pub internal_ivk: [u8; 64],
+    #[cfg_attr(feature = "serde", serde(with = "serde_bytes"))]
+    pub external_ivk: [u8; 64],
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

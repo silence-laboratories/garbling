@@ -3,11 +3,11 @@
 
 use garbled_circuit::circuit::{BinaryCircuit, CircuitBuilder};
 
-use crate::{blake2b::create_blake2b_zcash_circuit, utils::bytes_to_bits_be};
+use crate::{blake2b::create_blake2b_zcash_circuit, utils::bytes_to_bits_le};
 
 pub fn build_prf_expand_circuit(t: u8) -> BinaryCircuit {
     let t_bytes = [t];
-    let t_bits = bytes_to_bits_be(&t_bytes);
+    let t_bits = bytes_to_bits_le(&t_bytes);
 
     let mut builder = CircuitBuilder::new();
 
@@ -28,7 +28,7 @@ pub fn build_prf_expand_circuit(t: u8) -> BinaryCircuit {
 mod tests {
     use crate::{
         prf::build_prf_expand_circuit,
-        utils::{bits_to_bytes_le, bytes_to_bits_be},
+        utils::{bits_to_bytes_le, bytes_to_bits_le},
     };
     use blake2b_simd::Params;
     use rand::{RngCore, SeedableRng, rngs::StdRng};
@@ -54,7 +54,7 @@ mod tests {
         rng.fill_bytes(&mut sk);
         let t = 6;
         let circ = build_prf_expand_circuit(t);
-        let bits: Vec<bool> = bytes_to_bits_be(&sk).collect();
+        let bits: Vec<bool> = bytes_to_bits_le(&sk).collect();
         let out = circ.evaluate(&[&bits]);
 
         assert_eq!(bits_to_bytes_le(&out), prf_expand(&sk, t).to_vec());

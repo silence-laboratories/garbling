@@ -1808,7 +1808,7 @@ dependencies = [
 
 [[package]]
 name = "zcash"
-version = "0.1.0-pre.5"
+version = "0.1.0-pre.6"
 dependencies = [
  "blake2b_simd",
  "ciborium",
@@ -1825,6 +1825,7 @@ dependencies = [
  "rand",
  "rand_chacha",
  "serde",
+ "serde_bytes",
  "sha2",
  "sl-compute-common",
  "sl-messages",
