@@ -1,7 +1,7 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use ff::{FromUniformBytes, PrimeField};
+use ff::{Field, FromUniformBytes, PrimeField};
 use pasta_curves::pallas::{Base, Scalar};
 
 use orchard::{
@@ -298,6 +298,10 @@ impl DecodeOutputState {
 
             break ak_bytes;
         };
+
+        if ask.is_zero().into() {
+            return Err(ProtocolError::VerificationError);
+        }
 
         let mut fvk_bytes = [0u8; 96];
         fvk_bytes[0..32].copy_from_slice(&ak_bytes);
