@@ -2,10 +2,13 @@
 name = "garbled-circuit"
 version = "1.3.1-pre.2"
 edition = "2021"
+description = "Garbled-circuit stack"
+repository = "https://github.com/silence-laboratories/garbling"
+homepage = "https://github.com/silence-laboratories/garbling"
+documentation = "https://docs.rs/garbled-circuit"
 license-file = "LICENSE"
 rust-version = "1.88"
 readme = "README.md"
-publish = [ "sl" ]
 include = [
   "/benches",
   "/circuits",
@@ -59,8 +62,8 @@ signature = { version = "2.2.0" }
 thiserror = "1.0"
 tokio = "1.43.0"
 
-garbled-circuit = { path = "./", version = "1.3.1-pre.1", registry = "sl" }
-sl-secret-sharing = { path = "./crates/sl-secret-sharing", version = "0.1.0-pre.1", registry = "sl" }
+garbled-circuit = { path = "./", version = "1.3.1-pre.2" }
+sl-secret-sharing = { path = "./crates/sl-secret-sharing", version = "0.1.0-pre.1" }
 
 sl-compute-common = { version = "1.1.0" }
 sl-messages = { version = "1.3.0-pre.1", features = ["setup"] }
