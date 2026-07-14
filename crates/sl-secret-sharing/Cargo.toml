@@ -2,9 +2,12 @@
 name = "sl-secret-sharing"
 version = "0.1.0-pre.1"
 edition = "2021"
+description = "Secret sharing primitives for RSS and Shamir transformations."
+repository = "https://github.com/silence-laboratories/garbling"
+homepage = "https://github.com/silence-laboratories/garbling"
+documentation = "https://docs.rs/sl-secret-sharing"
 rust-version = "1.88"
 license-file = "../../LICENSE"
-publish = [ "sl" ]
 
 [dependencies]
 ff = { workspace = true }
