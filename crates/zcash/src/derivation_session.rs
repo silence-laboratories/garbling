@@ -68,11 +68,37 @@ pub enum DerivationStatus {
     Aborted(u8),
 }
 
+fn sample_seed() -> [u8; 32] {
+    let mut seed = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut seed);
+    seed
+}
+
 impl Session {
-    /// Creates a new derivation session for one party.
+    /// Creates a new derivation session for one party, sampling a fresh seed.
     ///
     /// Returns the session and any initial outbound messages.
+    ///
+    /// The seed is drawn from the OS-backed RNG and is not reused by this
+    /// constructor. Call [`Self::new_with_seed`] only when a deterministic
+    /// session is required (tests or replay).
     pub fn new(
+        party_id: u8,
+        shamir_share: Scalar,
+    ) -> Result<(Self, Vec<Message>), ProtocolError> {
+        Self::new_with_seed(party_id, shamir_share, sample_seed())
+    }
+
+    /// Creates a derivation session from an explicit 32-byte seed.
+    ///
+    /// # Security
+    ///
+    /// The seed **must** be sampled uniformly at random and used for at most
+    /// one session. Reusing a seed across derivations repeats `delta` and the
+    /// Yao label stream. An evaluator that sees two such runs can XOR active
+    /// labels wire-by-wire, recover `delta` from any wire whose input bit
+    /// differed, and learn which bits changed.
+    pub fn new_with_seed(
         party_id: u8,
         shamir_share: Scalar,
         seed: [u8; 32],
@@ -214,8 +240,12 @@ mod tests {
         let mut sessions = Vec::new();
         let mut queue = Vec::new();
         for (party_id, share) in shares.into_iter().enumerate() {
-            let (session, outgoing) =
-                Session::new(party_id as u8, share, seeds[party_id]).unwrap();
+            let (session, outgoing) = Session::new_with_seed(
+                party_id as u8,
+                share,
+                seeds[party_id],
+            )
+            .unwrap();
             queue.extend(outgoing);
             sessions.push(session);
         }
@@ -293,15 +323,22 @@ mod tests {
 
     #[test]
     fn rejects_invalid_party_id() {
-        let err = Session::new(3, Scalar::ONE, [7u8; 32])
+        let err = Session::new_with_seed(3, Scalar::ONE, [7u8; 32])
             .expect_err("party id 3 is invalid");
         assert!(matches!(err, ProtocolError::InvalidMessage));
     }
 
     #[test]
+    fn new_samples_distinct_seeds() {
+        let (a, _) = Session::new(0, Scalar::ONE).unwrap();
+        let (b, _) = Session::new(0, Scalar::ONE).unwrap();
+        assert_ne!(a, b);
+    }
+
+    #[test]
     fn rejects_wrong_destination() {
         let (mut session, _outgoing) =
-            Session::new(0, Scalar::ONE, [7u8; 32]).unwrap();
+            Session::new_with_seed(0, Scalar::ONE, [7u8; 32]).unwrap();
         let msg = Message {
             from: 2,
             to: 1,
@@ -319,7 +356,7 @@ mod tests {
     #[test]
     fn starts_setup_for_evaluator() {
         let (_session, outgoing) =
-            Session::new(2, Scalar::ONE, [7u8; 32]).unwrap();
+            Session::new_with_seed(2, Scalar::ONE, [7u8; 32]).unwrap();
 
         assert_eq!(outgoing.len(), 3);
     }
@@ -328,7 +365,7 @@ mod tests {
     #[test]
     fn session_roundtrips_through_serde() {
         let (session, _outgoing) =
-            Session::new(0, Scalar::ONE, [7u8; 32]).unwrap();
+            Session::new_with_seed(0, Scalar::ONE, [7u8; 32]).unwrap();
         let mut bytes = Vec::new();
         ciborium::ser::into_writer(&session, &mut bytes).unwrap();
         let restored: Session =
@@ -380,7 +417,8 @@ mod tests {
         let mut queue = Vec::new();
         for (party_id, share) in shares.into_iter().enumerate() {
             let (session, outgoing) =
-                Session::new(party_id as u8, share, [19u8; 32]).unwrap();
+                Session::new_with_seed(party_id as u8, share, [19u8; 32])
+                    .unwrap();
             queue.extend(outgoing);
             sessions.push(session);
         }
@@ -467,9 +505,12 @@ mod tests {
 
     #[test]
     fn duplicate_stale_message_is_rejected() {
-        let (mut s0, o0) = Session::new(0, Scalar::ONE, [10; 32]).unwrap();
-        let (_s1, _o1) = Session::new(1, Scalar::from(2), [11; 32]).unwrap();
-        let (_s2, o2) = Session::new(2, Scalar::from(3), [12; 32]).unwrap();
+        let (mut s0, o0) =
+            Session::new_with_seed(0, Scalar::ONE, [10; 32]).unwrap();
+        let (_s1, _o1) =
+            Session::new_with_seed(1, Scalar::from(2), [11; 32]).unwrap();
+        let (_s2, o2) =
+            Session::new_with_seed(2, Scalar::from(3), [12; 32]).unwrap();
 
         let crs_to_p0 = o0
             .iter()
@@ -493,7 +534,7 @@ mod tests {
     #[test]
     fn handles_abort_messages() {
         let (mut p0, _outgoing) =
-            Session::new(0, Scalar::ONE, [10; 32]).unwrap();
+            Session::new_with_seed(0, Scalar::ONE, [10; 32]).unwrap();
 
         let message = Message::abort(2);
         let mut outgoing = Vec::new();

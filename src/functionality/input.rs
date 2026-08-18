@@ -930,8 +930,12 @@ where
     C: Commitment,
     T: From<YaoEvaluatorShare>,
 {
-    if msg1_recv_p2.com_i1_0.len() != msg1_recv_p3.com_i1_0.len() {
-        return Err(ProtocolError::InvalidMessage);
+    if msg1_recv_p2.com_i1_0 != msg1_recv_p3.com_i1_0
+        || msg1_recv_p2.com_i1_1 != msg1_recv_p3.com_i1_1
+        || msg1_recv_p2.com_i2_0 != msg1_recv_p3.com_i2_0
+        || msg1_recv_p2.com_i2_1 != msg1_recv_p3.com_i2_1
+    {
+        return Err(ProtocolError::InconsistentMessage);
     }
 
     let i1_shares = msg1_recv_p2
@@ -947,9 +951,6 @@ where
             if v1 == v2 {
                 return Err(ProtocolError::InvalidMessage);
             }
-
-            // assert!(v1 || v2);
-            // assert!(!(v1 && v2));
 
             Ok::<_, ProtocolError>(YaoEvaluatorShare { label: *msg }.into())
         })
@@ -968,9 +969,6 @@ where
             if v1 == v2 {
                 return Err(ProtocolError::InvalidMessage);
             }
-
-            // assert!(v1 || v2);
-            // assert!(!(v1 && v2));
 
             Ok::<_, ProtocolError>(YaoEvaluatorShare { label: *msg }.into())
         })
@@ -991,14 +989,13 @@ where
     C: Commitment,
     T: From<YaoEvaluatorShare>,
 {
-    if msg2_recv_p2.comm_1f.len() != msg2_recv_p3.comm_1f.len() {
-        return Err(ProtocolError::InvalidMessage);
+    if msg2_recv_p2.comm_1f != msg2_recv_p3.comm_1f
+        || msg2_recv_p2.comm_1t != msg2_recv_p3.comm_1t
+        || msg2_recv_p2.comm_2f != msg2_recv_p3.comm_2f
+        || msg2_recv_p2.comm_2t != msg2_recv_p3.comm_2t
+    {
+        return Err(ProtocolError::InconsistentMessage);
     }
-
-    // assert_eq!(msg2_recv_p2.comm_1f, msg2_recv_p3.comm_1f);
-    // assert_eq!(msg2_recv_p2.comm_1t, msg2_recv_p3.comm_1t);
-    // assert_eq!(msg2_recv_p2.comm_2f, msg2_recv_p3.comm_2f);
-    // assert_eq!(msg2_recv_p2.comm_2t, msg2_recv_p3.comm_2t);
 
     let mut i3_shares = Vec::new();
 
