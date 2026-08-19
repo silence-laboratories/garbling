@@ -19,6 +19,13 @@ use crate::derivation_session as drv;
 pub use drv::DerivedOrchardKeys;
 
 const PARTICIPANTS: u8 = 3;
+/// Shamir threshold for the fixed 3-party DKG + derivation pipeline.
+///
+/// Downstream code (`reconstruct_shamir_share`, RSS conversion, batch input)
+/// assumes a degree-1 polynomial (2-of-3). Other thresholds are unsound:
+/// threshold 1 gives every party the full secret; threshold 3 is degree-2 and
+/// fails the line-consistency check.
+const SHAMIR_THRESHOLD: u8 = 2;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
@@ -109,6 +116,11 @@ pub struct Session {
 }
 
 impl Session {
+    /// Creates a new 2-of-3 DKG session for one party.
+    ///
+    /// `threshold` must be [`SHAMIR_THRESHOLD`] (2). The derivation pipeline
+    /// reconstructs Shamir shares by interpolating a line through two points
+    /// and checking the third; it is only correct for a degree-1 sharing.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         threshold: u8,
@@ -118,6 +130,10 @@ impl Session {
         seed: Option<Vec<u8>>,
         extra_data: Option<Vec<u8>>,
     ) -> Result<Self, ProtocolError> {
+        if threshold != SHAMIR_THRESHOLD {
+            return Err(ProtocolError::InvalidMessage);
+        }
+
         if party_id >= PARTICIPANTS {
             return Err(ProtocolError::InvalidMessage);
         }
@@ -135,7 +151,7 @@ impl Session {
         }
 
         let party = KeygenParty::new(
-            threshold,
+            SHAMIR_THRESHOLD,
             PARTICIPANTS,
             party_id,
             Arc::new(secret_key),
@@ -467,6 +483,22 @@ mod tests {
         match Session::new(1, 3, secret, public_keys, None, None) {
             Err(ProtocolError::InvalidMessage) => {}
             other => panic!("unexpected result: {:?}", other.map(|_| ())),
+        }
+    }
+
+    #[test]
+    fn rejects_unsupported_threshold() {
+        let secret = vec![0u8; crypto_box::KEY_SIZE];
+        let public_keys = vec![0u8; 3 * crypto_box::KEY_SIZE];
+        for threshold in [0u8, 1, 3] {
+            match Session::new(threshold, 0, secret.clone(), public_keys.clone(), None, None)
+            {
+                Err(ProtocolError::InvalidMessage) => {}
+                other => panic!(
+                    "threshold {threshold} should be rejected, got {:?}",
+                    other.map(|_| ())
+                ),
+            }
         }
     }
 
