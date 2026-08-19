@@ -482,17 +482,20 @@ mod tests {
                 &shares[0].1[i].keyshare,
                 0,
                 &evaluation_points,
-            );
+            )
+            .unwrap();
             let shamir_p2 = scalar_rss_to_shamir(
                 &shares[1].1[i].keyshare,
                 1,
                 &evaluation_points,
-            );
+            )
+            .unwrap();
             let shamir_p3 = scalar_rss_to_shamir(
                 &shares[2].1[i].keyshare,
                 2,
                 &evaluation_points,
-            );
+            )
+            .unwrap();
 
             let s3 = get_evaluation(
                 &[evaluation_points[0], evaluation_points[1]],
@@ -626,17 +629,20 @@ mod tests {
                 &shares[0].1[i].keyshare,
                 0,
                 &evaluation_points,
-            );
+            )
+            .unwrap();
             let shamir_p2 = scalar_rss_to_shamir(
                 &shares[1].1[i].keyshare,
                 1,
                 &evaluation_points,
-            );
+            )
+            .unwrap();
             let shamir_p3 = scalar_rss_to_shamir(
                 &shares[2].1[i].keyshare,
                 2,
                 &evaluation_points,
-            );
+            )
+            .unwrap();
 
             let s3 = get_evaluation(
                 &[evaluation_points[0], evaluation_points[1]],

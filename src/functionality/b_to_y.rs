@@ -311,6 +311,11 @@ where
 
     match yao_setup {
         YaoSetup::G(yaosetup) => {
+            let party_id = setup.participant_index();
+            if party_id > 1 || party_id != yaosetup.party_id {
+                return Err(ProtocolError::InvalidMessage);
+            }
+
             if yaosetup.party_id == 0 {
                 let (msg1, share_x1, share_x2, share_x3) =
                     bit_to_yao_create_msg1_p1(
@@ -345,8 +350,16 @@ where
         }
 
         YaoSetup::E(_e) => {
+            if setup.participant_index() != 2 {
+                return Err(ProtocolError::InvalidMessage);
+            }
+
             let recv: Vec<B2YMsg1> =
                 receive_from_parties(setup, tag, &[0, 1], relay).await?;
+
+            if recv.len() != 2 {
+                return Err(ProtocolError::MissingMessage);
+            }
 
             let msg1_p1 = &recv[0];
             let msg1_p2 = &recv[1];
@@ -380,6 +393,11 @@ where
 
     match yao_setup {
         YaoSetup::G(yaosetup) => {
+            let party_id = setup.participant_index();
+            if party_id > 1 || party_id != yaosetup.party_id {
+                return Err(ProtocolError::InvalidMessage);
+            }
+
             if yaosetup.party_id == 0 {
                 let mut msg1s = Vec::with_capacity(batch_size);
 
@@ -436,8 +454,20 @@ where
         }
 
         YaoSetup::E(_e) => {
+            if setup.participant_index() != 2 {
+                return Err(ProtocolError::InvalidMessage);
+            }
+
             let recv: Vec<Vec<B2YMsg1>> =
                 receive_from_parties(setup, tag, &[0, 1], relay).await?;
+
+            if recv.len() != 2 {
+                return Err(ProtocolError::MissingMessage);
+            }
+            if recv[0].len() != shares.len() || recv[1].len() != shares.len()
+            {
+                return Err(ProtocolError::InvalidMessage);
+            }
 
             let msg1_p1 = &recv[0];
             let msg1_p2 = &recv[1];

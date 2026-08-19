@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use crate::{
     circuit::{BinaryCircuit, BinaryGate},
+    functionality::utils_dep::ProtocolError,
     utilities::{
         hash_function::HashFunction,
         types::{Block, YaoEvaluatorShare, YaoShare, ZBLOCK},
@@ -17,19 +18,45 @@ pub fn evaluate_functionality<T, H>(
     input_encoding_shares: &[Vec<YaoShare>],
     f: &[Block],
     hash: &H,
-) -> HashMap<u32, T>
+) -> Result<HashMap<u32, T>, ProtocolError>
 where
     H: HashFunction,
     T: From<YaoEvaluatorShare>,
 {
+    if input_encoding_shares.len() != circuit.num_inputs() as usize
+        || input_encoding_shares
+            .iter()
+            .zip(circuit.input_gate_ids())
+            .any(|(shares, ids)| shares.len() != ids.len())
+    {
+        return Err(ProtocolError::InvalidLength);
+    }
+
+    if input_encoding_shares
+        .iter()
+        .flatten()
+        .any(|share| !matches!(share, YaoShare::E(_)))
+    {
+        return Err(ProtocolError::InvalidShare);
+    }
+
+    let expected_f_len =
+        2 * circuit.num_nonfree_gates() + circuit.num_constant_gates();
+    if f.len() != expected_f_len {
+        return Err(ProtocolError::InvalidLength);
+    }
+
     let mut f_index = 0;
     let mut w = vec![ZBLOCK; circuit.num_wires() as usize];
 
     for (i, gate) in circuit.gates().iter().enumerate() {
         let (out_gate, f_label) = match *gate {
             BinaryGate::Input { no, id, wire } => {
-                let share = input_encoding_shares[no as usize][id as usize]
-                    .as_evaluator();
+                let YaoShare::E(share) =
+                    &input_encoding_shares[no as usize][id as usize]
+                else {
+                    return Err(ProtocolError::InvalidShare);
+                };
                 (wire, share.label)
             }
 
@@ -94,12 +121,82 @@ where
         w[out_gate as usize] = f_label;
     }
 
-    circuit
+    Ok(circuit
         .get_output_gate_ids()
         .iter()
         .map(|&r| {
             let label = w[r as usize];
             (r, T::from(YaoEvaluatorShare { label }))
         })
-        .collect()
+        .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        customcircuits::comparison::build_comparison_circuit,
+        functionality::utils_dep::ProtocolError,
+        utilities::{
+            garble_hash::AesGarbleHash,
+            types::{YaoGarblerShare, BLOCK_SIZE},
+        },
+    };
+
+    use super::*;
+
+    #[test]
+    fn rejects_invalid_evaluator_inputs() {
+        let circuit = build_comparison_circuit();
+        let hash = AesGarbleHash::new([0; BLOCK_SIZE]);
+        let tables = vec![
+            [0; BLOCK_SIZE];
+            2 * circuit.num_nonfree_gates()
+                + circuit.num_constant_gates()
+        ];
+        let garbler_inputs = circuit
+            .input_gate_ids()
+            .iter()
+            .map(|ids| {
+                ids.iter()
+                    .map(|_| {
+                        YaoShare::G(YaoGarblerShare {
+                            delta: [0; BLOCK_SIZE],
+                            f_label: [0; BLOCK_SIZE],
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let err = evaluate_functionality::<YaoShare, _>(
+            &circuit,
+            &garbler_inputs,
+            &tables,
+            &hash,
+        )
+        .unwrap_err();
+        assert!(matches!(err, ProtocolError::InvalidShare));
+
+        let evaluator_inputs = circuit
+            .input_gate_ids()
+            .iter()
+            .map(|ids| {
+                ids.iter()
+                    .map(|_| {
+                        YaoShare::E(YaoEvaluatorShare {
+                            label: [0; BLOCK_SIZE],
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let err = evaluate_functionality::<YaoShare, _>(
+            &circuit,
+            &evaluator_inputs,
+            &[],
+            &hash,
+        )
+        .unwrap_err();
+        assert!(matches!(err, ProtocolError::InvalidLength));
+    }
 }

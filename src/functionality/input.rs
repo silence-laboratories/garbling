@@ -61,9 +61,14 @@ where
     R: Relay,
 {
     let tag1 = relay.next_tag(INPUT_YAO_FUNC_MSG1);
+    let party_id = setup.participant_index();
 
     match yao_setup {
         YaoSetup::G(g) => {
+            if party_id > 1 || party_id != g.party_id {
+                return Err(ProtocolError::InvalidMessage);
+            }
+
             let (msg1, share) = input_yao_functionality_create_msg1(input, g);
 
             send_to_party(setup, tag1, &msg1, 2, relay).await?;
@@ -71,7 +76,11 @@ where
             Ok(YaoShare::G(share))
         }
 
-        _ => {
+        YaoSetup::E(_) => {
+            if party_id != 2 {
+                return Err(ProtocolError::InvalidMessage);
+            }
+
             let msg1s: Vec<Block> =
                 receive_from_parties(setup, tag1, &[0, 1], relay).await?;
 
@@ -95,9 +104,14 @@ where
     R: Relay,
 {
     let tag1 = relay.next_tag(INPUT_YAO_FUNC_MSG1);
+    let party_id = setup.participant_index();
 
     match yao_setup {
         YaoSetup::G(g) => {
+            if party_id > 1 || party_id != g.party_id {
+                return Err(ProtocolError::InvalidMessage);
+            }
+
             let (msg1, output): (Vec<Block>, Vec<YaoShare>) = input
                 .iter()
                 .map(|&i| input_yao_functionality_create_msg1(i, g))
@@ -110,6 +124,10 @@ where
         }
 
         YaoSetup::E(_) => {
+            if party_id != 2 {
+                return Err(ProtocolError::InvalidMessage);
+            }
+
             let msg1s: Vec<Vec<Block>> =
                 receive_from_parties(setup, tag1, &[0, 1], relay).await?;
 
@@ -236,6 +254,14 @@ where
     let tag2 = relay.next_tag(INPUT_YAO_FROM_FUNC_MSG2);
 
     let party_id = setup.participant_index();
+    if pid >= 3 {
+        return Err(ProtocolError::InvalidMessage);
+    }
+    match yao_setup {
+        YaoSetup::G(g) if party_id < 2 && party_id == g.party_id => {}
+        YaoSetup::E(_) if party_id == 2 => {}
+        _ => return Err(ProtocolError::InvalidMessage),
+    }
 
     if pid == 0 || pid == 1 {
         match yao_setup {
@@ -347,7 +373,9 @@ where
         let Byte(xs) = receive_from_one_party(setup, tag1, 2, relay).await?;
         let x_val = xs % 2 == 1;
 
-        let ysetup = yao_setup.as_garbler_mut().unwrap();
+        let ysetup = yao_setup
+            .as_garbler_mut()
+            .ok_or(ProtocolError::InvalidMessage)?;
 
         let msg2vals =
             input_yao_from_functionality_3_create_msg2(comm, ysetup);
@@ -643,13 +671,20 @@ fn encode_vec_bool(input: &[bool]) -> Vec<u8> {
     o.value
 }
 
-fn decode_vec_bool(input: Vec<u8>, length: usize) -> Vec<bool> {
+fn decode_vec_bool(
+    input: Vec<u8>,
+    length: usize,
+) -> Result<Vec<bool>, ProtocolError> {
+    if input.len() != length.div_ceil(8) {
+        return Err(ProtocolError::InvalidMessage);
+    }
+
     let x = BinaryString {
         length: length as u64,
         value: input,
     };
 
-    (0..length).map(|j| x.get(j)).collect()
+    Ok((0..length).map(|j| x.get(j)).collect())
 }
 
 fn input_yao_from_all_functionality_12_create_msg1<C, T>(
@@ -1052,6 +1087,13 @@ where
     R: Relay,
     C: Commitment,
 {
+    let party_id = setup.participant_index();
+    match yao_setup {
+        YaoSetup::G(g) if party_id < 2 && party_id == g.party_id => {}
+        YaoSetup::E(_) if party_id == 2 => {}
+        _ => return Err(ProtocolError::InvalidMessage),
+    }
+
     let tag1 = relay.next_tag(INPUT_YAO_FROM_ALL_MSG1);
     let tag2 = relay.next_tag(INPUT_YAO_FROM_ALL_MSG2);
     let tag3 = relay.next_tag(INPUT_YAO_FROM_ALL_MSG3);
@@ -1087,6 +1129,9 @@ where
 
             let msg2s: Vec<InputYaoAllMsg2p22> =
                 receive_from_parties(setup, tag2, &[0, 1], relay).await?;
+            if msg2s.len() != 2 {
+                return Err(ProtocolError::MissingMessage);
+            }
 
             let i3_shares = input_yao_from_all_functionality_3_process_msg2(
                 comm,
@@ -1113,7 +1158,7 @@ where
             let msg1s: Vec<u8> =
                 receive_from_one_party(setup, tag1, 2, relay).await?;
 
-            let msg1 = decode_vec_bool(msg1s, input.len());
+            let msg1 = decode_vec_bool(msg1s, input.len())?;
 
             let (msg2, i3_shares) =
                 input_yao_from_all_functionality_12_create_msg2(

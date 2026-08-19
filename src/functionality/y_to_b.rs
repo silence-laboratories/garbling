@@ -89,7 +89,16 @@ where
 
     match yao_setup {
         YaoSetup::G(g) => {
-            let garbler_share = input.as_garbler();
+            let party_id = setup.participant_index();
+            if party_id > 1 || party_id != g.party_id {
+                return Err(ProtocolError::InvalidMessage);
+            }
+            let YaoShare::G(garbler_share) = input else {
+                return Err(ProtocolError::InvalidShare);
+            };
+            if garbler_share.delta != g.delta {
+                return Err(ProtocolError::InvalidShare);
+            }
 
             if g.party_id == 0 {
                 let (y, wyr, wr0) = create_yao_to_binary_msg1(g);
@@ -144,10 +153,6 @@ where
                 let val1 = wxz == wz0;
                 let val2 = wxz == wz1;
 
-                if g.delta != garbler_share.delta {
-                    return Err(ProtocolError::InvalidShare);
-                }
-
                 if !(val1 || val2) {
                     return Err(ProtocolError::InvalidShare);
                 }
@@ -163,12 +168,17 @@ where
         }
 
         YaoSetup::E(_e) => {
+            if setup.participant_index() != 2 {
+                return Err(ProtocolError::InvalidMessage);
+            }
+            let YaoShare::E(yaoshare) = input else {
+                return Err(ProtocolError::InvalidShare);
+            };
+
             let (wyr, Byte(y)): (Block, Byte) =
                 receive_from_one_party(setup, tag1, 0, relay).await?;
 
             let y = y != 0;
-
-            let yaoshare = input.as_evaluator();
 
             let wxz = xor_blocks(&yaoshare.label, &wyr);
 
@@ -228,6 +238,16 @@ where
 
     match yao_setup {
         YaoSetup::G(yaosetup) => {
+            let party_id = setup.participant_index();
+            if party_id > 1 || party_id != yaosetup.party_id {
+                return Err(ProtocolError::InvalidMessage);
+            }
+            if input.iter().any(|share| {
+                !matches!(share, YaoShare::G(g) if g.delta == yaosetup.delta)
+            }) {
+                return Err(ProtocolError::InvalidShare);
+            }
+
             if yaosetup.party_id == 0 {
                 let mut msgs = Vec::new();
                 let mut wr0msgs = Vec::new();
@@ -336,6 +356,13 @@ where
         }
 
         YaoSetup::E(_e) => {
+            if setup.participant_index() != 2 {
+                return Err(ProtocolError::InvalidMessage);
+            }
+            if input.iter().any(|share| !matches!(share, YaoShare::E(_))) {
+                return Err(ProtocolError::InvalidShare);
+            }
+
             let msg1s: Vec<(Block, u8)> =
                 receive_from_one_party(setup, tag1, 0, relay).await?;
 

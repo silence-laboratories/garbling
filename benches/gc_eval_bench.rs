@@ -89,7 +89,8 @@ pub fn eval_aes256_benchmark(c: &mut Criterion) {
             party_id: 0,
         },
         &hash,
-    );
+    )
+    .unwrap();
 
     group.bench_function("aes256_eval", |b| {
         b.iter(|| {
@@ -150,7 +151,8 @@ pub fn eval_aes128_benchmark(c: &mut Criterion) {
             party_id: 0,
         },
         &hash,
-    );
+    )
+    .unwrap();
     group.bench_function("aes128_eval", |b| {
         b.iter(|| {
             let _ = evaluate_functionality::<YaoEvaluatorShare, _>(
@@ -208,7 +210,8 @@ pub fn eval_sha256_benchmark(c: &mut Criterion) {
             party_id: 0,
         },
         &hash,
-    );
+    )
+    .unwrap();
     group.bench_function("sha256_eval", |b| {
         b.iter(|| {
             let _ = evaluate_functionality::<YaoEvaluatorShare, _>(

@@ -21,6 +21,46 @@ use crate::{
     },
 };
 
+fn validate_share_role(
+    party_id: usize,
+    share: &YaoShare,
+) -> Result<(), ProtocolError> {
+    match (party_id, share) {
+        (0 | 1, YaoShare::G(_)) | (2, YaoShare::E(_)) => Ok(()),
+        (0..=2, _) => Err(ProtocolError::InvalidShare),
+        _ => Err(ProtocolError::InvalidMessage),
+    }
+}
+
+fn validate_share_roles(
+    party_id: usize,
+    shares: &[YaoShare],
+) -> Result<(), ProtocolError> {
+    if party_id >= 3 {
+        return Err(ProtocolError::InvalidMessage);
+    }
+
+    for share in shares {
+        validate_share_role(party_id, share)?;
+    }
+
+    Ok(())
+}
+
+fn decode_packed_bits(
+    value: Vec<u8>,
+    length: usize,
+) -> Result<BinaryString, ProtocolError> {
+    if value.len() != length.div_ceil(8) {
+        return Err(ProtocolError::InvalidMessage);
+    }
+
+    Ok(BinaryString {
+        length: length as u64,
+        value,
+    })
+}
+
 pub async fn validate_yao_share<T, R>(
     setup: &T,
     r: &mut FilteredMsgRelay<R>,
@@ -30,6 +70,8 @@ where
     T: ProtocolParticipant,
     R: Relay,
 {
+    validate_share_role(setup.participant_index(), input)?;
+
     let tag1 = r.next_tag(OUTPUT_YAO_FUNC_MSG1);
 
     match input {
@@ -60,6 +102,8 @@ where
     T: ProtocolParticipant,
     R: Relay,
 {
+    validate_share_role(setup.participant_index(), input)?;
+
     let tag1 = relay.next_tag(OUTPUT_YAO_FUNC_MSG1);
     let tag2 = relay.next_tag(OUTPUT_YAO_FUNC_MSG2);
 
@@ -89,6 +133,9 @@ where
             let outs: Vec<u16> =
                 receive_from_parties(setup, tag2, &[0, 1], relay).await?;
 
+            if outs.len() != 2 {
+                return Err(ProtocolError::MissingMessage);
+            }
             if outs[0] != outs[1] {
                 return Err(ProtocolError::InconsistentMessage);
             }
@@ -107,12 +154,14 @@ where
     T: ProtocolParticipant,
     R: Relay,
 {
+    let party_id = setup.participant_index();
+    validate_share_roles(party_id, input)?;
+
     let tag1 = relay.next_tag(OUTPUT_YAO_FUNC_MSG1);
     let tag2 = relay.next_tag(OUTPUT_YAO_FUNC_MSG2);
 
     let batch_size = input.len();
     let mut output = vec![false; batch_size];
-    let party_id = setup.participant_index();
 
     if party_id == 0 || party_id == 1 {
         let wxs: Vec<Block> =
@@ -155,12 +204,14 @@ where
         let outs: Vec<Vec<u8>> =
             receive_from_parties(setup, tag2, &[0, 1], relay).await?;
 
+        if outs.len() != 2 {
+            return Err(ProtocolError::MissingMessage);
+        }
         if outs[0] != outs[1] {
             return Err(ProtocolError::InconsistentMessage);
         }
 
-        let mut xval = BinaryString::new_with_zeros(batch_size);
-        xval.value = outs[0].clone();
+        let xval = decode_packed_bits(outs[0].clone(), batch_size)?;
 
         (0..batch_size).for_each(|i| {
             output[i] = xval.get(i);
@@ -180,10 +231,15 @@ where
     T: ProtocolParticipant,
     R: Relay,
 {
+    let party_id = setup.participant_index();
+    if pid >= 3 {
+        return Err(ProtocolError::InvalidMessage);
+    }
+    validate_share_role(party_id, input)?;
+
     let tag1 = relay.next_tag(OUTPUT_YAO_TO_FUNC_MSG1);
 
     let mut output = None;
-    let party_id = setup.participant_index();
 
     if pid == 2 {
         match input {
@@ -242,22 +298,26 @@ where
     T: ProtocolParticipant,
     R: Relay,
 {
+    let party_id = setup.participant_index();
+    if pid >= 3 {
+        return Err(ProtocolError::InvalidMessage);
+    }
+    validate_share_roles(party_id, input)?;
+
     let tag1 = relay.next_tag(OUTPUT_YAO_TO_FUNC_MSG1);
 
     let batch_size = input.len();
     let mut output = vec![None; batch_size];
-    let party_id = setup.participant_index();
 
     if pid == 2 {
         if party_id == 2 {
-            let mut d = BinaryString::new_with_zeros(batch_size);
-
             let mut ds: Vec<Vec<u8>> =
                 receive_from_parties(setup, tag1, &[0, 1], relay).await?;
             if ds.len() != 2 || ds[0] != ds[1] {
                 return Err(ProtocolError::InconsistentMessage);
             }
-            d.value = ds.pop().unwrap(); // can't fail, ds.len() == 2;
+            let packed = ds.pop().ok_or(ProtocolError::MissingMessage)?;
+            let d = decode_packed_bits(packed, batch_size)?;
 
             for i in 0..batch_size {
                 let share = input[i].as_evaluator();
@@ -305,4 +365,23 @@ where
     }
 
     Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_share_batch_rejects_invalid_party() {
+        let err = validate_share_roles(3, &[]).unwrap_err();
+        assert!(matches!(err, ProtocolError::InvalidMessage));
+    }
+
+    #[test]
+    fn packed_bits_require_exact_length() {
+        let err = decode_packed_bits(vec![0], 9).unwrap_err();
+        assert!(matches!(err, ProtocolError::InvalidMessage));
+
+        assert!(decode_packed_bits(vec![0, 0], 9).is_ok());
+    }
 }

@@ -92,7 +92,7 @@ impl CircuitEvalState {
         let hash = AesHash::new(ctx.comm_crs()?.0);
         let yao_inputs = to_yao_inputs(&self.inputs);
         let output: HashMap<u32, YaoShare> =
-            evaluate_functionality(&circuit, &yao_inputs, &f, &hash);
+            evaluate_functionality(&circuit, &yao_inputs, &f, &hash)?;
         OutputVerificationState::start(ctx, outgoing, output)
             .map(|phase| PhaseHandleResult::Consumed(Some(phase)))
     }
@@ -115,7 +115,7 @@ fn garble_or_hash(
     let hash = AesHash::new(ctx.comm_crs()?.0);
     let yao_inputs = to_yao_inputs(inputs);
     let (f, out): (Vec<_>, HashMap<_, YaoShare>) =
-        garble_functionality(&circuit, &yao_inputs, g, &hash);
+        garble_functionality(&circuit, &yao_inputs, g, &hash)?;
     if ctx.party_id() == 0 {
         let hashval: [u8; 32] = f
             .iter()

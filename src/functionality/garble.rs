@@ -7,6 +7,7 @@ use rand::RngCore;
 
 use crate::{
     circuit::{BinaryCircuit, BinaryGate},
+    functionality::utils_dep::ProtocolError,
     utilities::{
         hash_function::HashFunction,
         types::{Block, GarblerSetup, YaoGarblerShare, YaoShare, BLOCK_SIZE},
@@ -19,11 +20,26 @@ pub fn garble_functionality<T, H>(
     input_shares: &[Vec<YaoShare>],
     setup: &mut GarblerSetup,
     hash: &H,
-) -> (Vec<Block>, HashMap<u32, T>)
+) -> Result<(Vec<Block>, HashMap<u32, T>), ProtocolError>
 where
     H: HashFunction,
     T: From<YaoGarblerShare>,
 {
+    if input_shares.len() != circuit.num_inputs() as usize
+        || input_shares
+            .iter()
+            .zip(circuit.input_gate_ids())
+            .any(|(shares, ids)| shares.len() != ids.len())
+    {
+        return Err(ProtocolError::InvalidLength);
+    }
+
+    if input_shares.iter().flatten().any(
+        |share| !matches!(share, YaoShare::G(g) if g.delta == setup.delta),
+    ) {
+        return Err(ProtocolError::InvalidShare);
+    }
+
     let mut w = vec![[0; BLOCK_SIZE]; circuit.num_wires() as usize];
 
     let mut f: Vec<Block> = vec![];
@@ -31,8 +47,11 @@ where
     for (i, gate) in circuit.gates().iter().enumerate() {
         let (out_gate, f_label) = match *gate {
             BinaryGate::Input { no, id, wire } => {
-                let share =
-                    input_shares[no as usize][id as usize].as_garbler();
+                let YaoShare::G(share) =
+                    &input_shares[no as usize][id as usize]
+                else {
+                    return Err(ProtocolError::InvalidShare);
+                };
                 (wire, share.f_label)
             }
 
@@ -121,7 +140,7 @@ where
         );
     }
 
-    (f, outputs)
+    Ok((f, outputs))
 }
 
 #[cfg(test)]
@@ -132,7 +151,8 @@ mod tests {
     use crate::{
         circuit::prebuilt,
         customcircuits::comparison::build_comparison_circuit,
-        utilities::garble_hash::AesGarbleHash,
+        functionality::utils_dep::ProtocolError,
+        utilities::{garble_hash::AesGarbleHash, types::YaoEvaluatorShare},
     };
 
     use super::*;
@@ -142,6 +162,63 @@ mod tests {
             env!("OUT_DIR"),
             "/circuits/aes128.bin"
         )))
+    }
+
+    #[test]
+    fn rejects_invalid_garbler_inputs() {
+        let circuit = build_comparison_circuit();
+        let mut setup = GarblerSetup {
+            comm_crs: Block::default(),
+            prf: ChaCha8Rng::from_seed([0; 32]),
+            delta: [1; BLOCK_SIZE],
+            party_id: 0,
+        };
+        let hash = AesGarbleHash::new(Block::default());
+        let evaluator_inputs = circuit
+            .input_gate_ids()
+            .iter()
+            .map(|ids| {
+                ids.iter()
+                    .map(|_| {
+                        YaoShare::E(YaoEvaluatorShare {
+                            label: [0; BLOCK_SIZE],
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let err = garble_functionality::<YaoShare, _>(
+            &circuit,
+            &evaluator_inputs,
+            &mut setup,
+            &hash,
+        )
+        .unwrap_err();
+        assert!(matches!(err, ProtocolError::InvalidShare));
+
+        let wrong_delta_inputs = circuit
+            .input_gate_ids()
+            .iter()
+            .map(|ids| {
+                ids.iter()
+                    .map(|_| {
+                        YaoShare::G(YaoGarblerShare {
+                            delta: [0; BLOCK_SIZE],
+                            f_label: [0; BLOCK_SIZE],
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let err = garble_functionality::<YaoShare, _>(
+            &circuit,
+            &wrong_delta_inputs,
+            &mut setup,
+            &hash,
+        )
+        .unwrap_err();
+        assert!(matches!(err, ProtocolError::InvalidShare));
     }
 
     #[test]
@@ -172,7 +249,7 @@ mod tests {
             .collect();
 
         let (f, _o): (_, HashMap<u32, YaoShare>) =
-            garble_functionality(&circuit, &gin, &mut setup, &hash);
+            garble_functionality(&circuit, &gin, &mut setup, &hash).unwrap();
 
         println!("cir: gates.len() {}", circuit.gates().len());
         let nonfree = circuit.get_num_nonfree_gates();
@@ -213,7 +290,7 @@ mod tests {
         circuit.print_circuit();
 
         let (f, _o): (_, HashMap<u32, YaoShare>) =
-            garble_functionality(&circuit, &gin, &mut setup, &hash);
+            garble_functionality(&circuit, &gin, &mut setup, &hash).unwrap();
 
         println!("cir: gates.len() {}", circuit.gates().len());
         let nonfree = circuit.get_num_nonfree_gates();

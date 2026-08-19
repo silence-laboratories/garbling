@@ -57,7 +57,8 @@ pub fn garb_blake2b_benchmark(c: &mut Criterion) {
                     party_id: 0,
                 },
                 &hash,
-            );
+            )
+            .unwrap();
         })
     });
 
@@ -112,7 +113,8 @@ pub fn eval_blake2b_benchmark(c: &mut Criterion) {
             party_id: 0,
         },
         &hash,
-    );
+    )
+    .unwrap();
     println!("{}", gc.len());
     group.bench_function("blake2b_eval", |b| {
         b.iter(|| {

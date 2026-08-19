@@ -23,12 +23,23 @@ use crate::{
 
 use super::garble::garble_functionality;
 
+fn validate_yao_setup_role(
+    party_id: usize,
+    yao_setup: &YaoSetup,
+) -> Result<(), ProtocolError> {
+    match yao_setup {
+        YaoSetup::G(g) if party_id < 2 && party_id == g.party_id => Ok(()),
+        YaoSetup::E(_) if party_id == 2 => Ok(()),
+        _ => Err(ProtocolError::InvalidMessage),
+    }
+}
+
 pub fn yao_circuit_eval_process_msg1_p2<H>(
     input: &[Vec<YaoShare>],
     fs: &[Block],
     circuit: &BinaryCircuit,
     hash: &H,
-) -> HashMap<u32, YaoShare>
+) -> Result<HashMap<u32, YaoShare>, ProtocolError>
 where
     H: HashFunction,
 {
@@ -40,7 +51,7 @@ fn yao_circuit_eval_create_msg1_p01<H>(
     garble_setup: &mut GarblerSetup,
     circuit: &BinaryCircuit,
     hash: &H,
-) -> (Vec<Block>, HashMap<u32, YaoShare>)
+) -> Result<(Vec<Block>, HashMap<u32, YaoShare>), ProtocolError>
 where
     H: HashFunction,
 {
@@ -60,6 +71,8 @@ where
     R: Relay,
     H: HashFunction,
 {
+    validate_yao_setup_role(setup.participant_index(), yao_setup)?;
+
     if input.len() != circuit.num_inputs() as usize {
         return Err(ProtocolError::InvalidLength);
     }
@@ -90,12 +103,12 @@ where
                 return Err(ProtocolError::InconsistentMessage);
             }
 
-            Ok(yao_circuit_eval_process_msg1_p2(input, &fs, circuit, hash))
+            yao_circuit_eval_process_msg1_p2(input, &fs, circuit, hash)
         }
 
         YaoSetup::G(g) => {
             let (f, out) =
-                yao_circuit_eval_create_msg1_p01(input, g, circuit, hash);
+                yao_circuit_eval_create_msg1_p01(input, g, circuit, hash)?;
 
             if g.party_id == 0 {
                 let hashval: [u8; 32] = f
@@ -126,6 +139,8 @@ where
     R: Relay,
     H: HashFunction,
 {
+    validate_yao_setup_role(setup.participant_index(), yao_setup)?;
+
     let tag1 = relay.next_tag(YAO_CIRC_EVAL_FUNC_MSG1);
     let tag2 = relay.next_tag(YAO_CIRC_EVAL_FUNC_MSG2);
 
@@ -153,7 +168,7 @@ where
 
                     output.push(yao_circuit_eval_process_msg1_p2(
                         input, &fs, circuit, hash,
-                    ));
+                    )?);
                 }
 
                 MapArg::Vector(input) => {
@@ -176,15 +191,33 @@ where
                     let complen = 2 * circuit.num_nonfree_gates()
                         + circuit.num_constant_gates();
 
-                    output = input
-                        .iter()
-                        .zip(fs.chunks_exact(complen))
-                        .map(|(i, f)| {
-                            yao_circuit_eval_process_msg1_p2(
-                                i, f, circuit, hash,
-                            )
-                        })
-                        .collect();
+                    if fs.len() != complen * input.len() {
+                        return Err(ProtocolError::InvalidLength);
+                    }
+
+                    output = if complen == 0 {
+                        input
+                            .iter()
+                            .map(|i| {
+                                yao_circuit_eval_process_msg1_p2(
+                                    i,
+                                    &[],
+                                    circuit,
+                                    hash,
+                                )
+                            })
+                            .collect::<Result<_, _>>()?
+                    } else {
+                        input
+                            .iter()
+                            .zip(fs.chunks_exact(complen))
+                            .map(|(i, f)| {
+                                yao_circuit_eval_process_msg1_p2(
+                                    i, f, circuit, hash,
+                                )
+                            })
+                            .collect::<Result<_, _>>()?
+                    };
                 }
             },
 
@@ -206,6 +239,17 @@ where
                         return Err(ProtocolError::InconsistentMessage);
                     }
 
+                    let expected_len = circuits
+                        .iter()
+                        .map(|circuit| {
+                            2 * circuit.num_nonfree_gates()
+                                + circuit.num_constant_gates()
+                        })
+                        .sum::<usize>();
+                    if fs.len() != expected_len {
+                        return Err(ProtocolError::InvalidLength);
+                    }
+
                     let mut len = 0;
                     output = circuits
                         .iter()
@@ -213,14 +257,13 @@ where
                             let complen = 2 * circuit.num_nonfree_gates()
                                 + circuit.num_constant_gates();
                             let f = &fs[len..len + complen];
-                            let out = yao_circuit_eval_process_msg1_p2(
-                                input, f, circuit, hash,
-                            );
                             len += complen;
 
-                            out
+                            yao_circuit_eval_process_msg1_p2(
+                                input, f, circuit, hash,
+                            )
                         })
-                        .collect();
+                        .collect::<Result<_, _>>()?;
                 }
 
                 &MapArg::Vector(input) => {
@@ -244,6 +287,17 @@ where
                         return Err(ProtocolError::InconsistentMessage);
                     }
 
+                    let expected_len = circuits
+                        .iter()
+                        .map(|circuit| {
+                            2 * circuit.num_nonfree_gates()
+                                + circuit.num_constant_gates()
+                        })
+                        .sum::<usize>();
+                    if fs.len() != expected_len {
+                        return Err(ProtocolError::InvalidLength);
+                    }
+
                     let mut len = 0;
                     output = circuits
                         .iter()
@@ -252,14 +306,13 @@ where
                             let complen = 2 * circuit.num_nonfree_gates()
                                 + circuit.num_constant_gates();
                             let f = &fs[len..len + complen];
-                            let out = yao_circuit_eval_process_msg1_p2(
-                                ip, f, circuit, hash,
-                            );
                             len += complen;
 
-                            out
+                            yao_circuit_eval_process_msg1_p2(
+                                ip, f, circuit, hash,
+                            )
                         })
-                        .collect();
+                        .collect::<Result<_, _>>()?;
                 }
             },
         },
@@ -269,7 +322,7 @@ where
                 MapArg::Scalar(input) => {
                     let (f, out) = yao_circuit_eval_create_msg1_p01(
                         input, g, circuit, hash,
-                    );
+                    )?;
 
                     if g.party_id == 0 {
                         let hashval: [u8; 32] = f
@@ -298,7 +351,7 @@ where
                                 ip, g, circuit, hash,
                             )
                         })
-                        .collect();
+                        .collect::<Result<_, _>>()?;
 
                     let fvec =
                         f.iter().flatten().cloned().collect::<Vec<_>>();
@@ -332,7 +385,7 @@ where
                                 input, g, circuit, hash,
                             )
                         })
-                        .collect();
+                        .collect::<Result<_, _>>()?;
 
                     let fvec =
                         f.iter().flatten().cloned().collect::<Vec<_>>();
@@ -369,7 +422,7 @@ where
                                 ip, g, circuit, hash,
                             )
                         })
-                        .collect();
+                        .collect::<Result<_, _>>()?;
 
                     let fvec =
                         f.iter().flatten().cloned().collect::<Vec<_>>();

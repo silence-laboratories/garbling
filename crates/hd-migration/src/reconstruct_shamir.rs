@@ -26,6 +26,17 @@ pub async fn run_reconstruct_shamir<R: Relay, S: ProtocolParticipant>(
     let tag2 = relay.next_tag(RECONSTRUCT_SHAMIR_MSG1);
 
     let my_party_id = setup.participant_index();
+    if my_party_id >= 3 || evaluation_points.len() != 3 {
+        return Err(HardDerivationError::InvalidMessage);
+    }
+
+    if evaluation_points[0].as_ref() == evaluation_points[1].as_ref()
+        || evaluation_points[0].as_ref() == evaluation_points[2].as_ref()
+        || evaluation_points[1].as_ref() == evaluation_points[2].as_ref()
+    {
+        return Err(HardDerivationError::InvalidMessage);
+    }
+
     let prev_party = (3 + my_party_id - 1) % 3;
     let next_party = (3 + my_party_id + 1) % 3;
 

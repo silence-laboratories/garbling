@@ -76,7 +76,8 @@ pub fn garble_aes256_benchmark(c: &mut Criterion) {
                     party_id: 0,
                 },
                 &hash,
-            );
+            )
+            .unwrap();
         })
     });
 
@@ -121,7 +122,8 @@ pub fn garble_aes128_benchmark(c: &mut Criterion) {
                     party_id: 0,
                 },
                 &hash,
-            );
+            )
+            .unwrap();
         })
     });
     group.finish();
@@ -165,7 +167,8 @@ pub fn garble_sha256_benchmark(c: &mut Criterion) {
                     party_id: 0,
                 },
                 &hash,
-            );
+            )
+            .unwrap();
         })
     });
     group.finish();

@@ -20,14 +20,30 @@ pub fn scalar_rss_to_shamir(
     inp: &PrivKeyShare<ProjectivePoint>,
     party_id: usize,
     evaluation_points: &[NonZeroScalar],
-) -> Scalar {
+) -> Result<Scalar, HardDerivationError> {
+    if party_id >= 3 || evaluation_points.len() != 3 {
+        return Err(HardDerivationError::InvalidMessage);
+    }
+
+    if evaluation_points[0].as_ref() == evaluation_points[1].as_ref()
+        || evaluation_points[0].as_ref() == evaluation_points[2].as_ref()
+        || evaluation_points[1].as_ref() == evaluation_points[2].as_ref()
+    {
+        return Err(HardDerivationError::InvalidMessage);
+    }
+
     let eval_points = [
         *evaluation_points[0].as_ref(),
         *evaluation_points[1].as_ref(),
         *evaluation_points[2].as_ref(),
     ];
 
-    rss_pair_to_shamir(inp.prev_share, inp.next_share, party_id, eval_points)
+    Ok(rss_pair_to_shamir(
+        inp.prev_share,
+        inp.next_share,
+        party_id,
+        eval_points,
+    ))
 }
 
 /// Converts a Shamir-shared Scalar valueto an RSS-shared Scalar value (`PrivKeyShare`)
@@ -44,7 +60,7 @@ pub async fn run_shamir_to_scalar_rss<R: Relay, S: ProtocolParticipant>(
         PrivKeyShare::<ProjectivePoint>::get_random_share(randomness);
 
     let r_shamir =
-        scalar_rss_to_shamir(&r_scalar_rss, my_party_id, evaluation_points);
+        scalar_rss_to_shamir(&r_scalar_rss, my_party_id, evaluation_points)?;
 
     let padded_shamir = share + r_shamir;
 
@@ -85,13 +101,39 @@ mod tests {
     use sl_messages::relay::{Relay, SimpleMessageRelay};
 
     use crate::{
-        shamir_to_rss::run_shamir_to_scalar_rss,
+        shamir_to_rss::{run_shamir_to_scalar_rss, scalar_rss_to_shamir},
         types::{
             HardDerivationError, PrivKeyShare, ProtocolParticipant,
             ScalarFromBytes,
         },
         utils::{get_evaluation, run_init},
     };
+
+    #[test]
+    fn scalar_rss_to_shamir_rejects_invalid_party() {
+        let share = PrivKeyShare::<ProjectivePoint> {
+            prev_share: Scalar::ZERO,
+            next_share: Scalar::ZERO,
+        };
+        let point = NonZeroScalar::new(Scalar::ONE).unwrap();
+        let err = scalar_rss_to_shamir(&share, 3, &[point; 3]).unwrap_err();
+        assert!(matches!(err, HardDerivationError::InvalidMessage));
+    }
+
+    #[test]
+    fn scalar_rss_to_shamir_rejects_invalid_points() {
+        let share = PrivKeyShare::<ProjectivePoint> {
+            prev_share: Scalar::ZERO,
+            next_share: Scalar::ZERO,
+        };
+        let err = scalar_rss_to_shamir(&share, 0, &[]).unwrap_err();
+        assert!(matches!(err, HardDerivationError::InvalidMessage));
+
+        let duplicate = NonZeroScalar::new(Scalar::ONE).unwrap();
+        let err =
+            scalar_rss_to_shamir(&share, 0, &[duplicate; 3]).unwrap_err();
+        assert!(matches!(err, HardDerivationError::InvalidMessage));
+    }
 
     async fn test_run_shamir_to_scalar_rss<S, R>(
         setup: S,
