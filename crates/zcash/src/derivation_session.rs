@@ -45,12 +45,21 @@ pub struct Session {
     pending: Vec<Message>,
 }
 
-pub(crate) fn setup_delta_from_seed(prf_seed: [u8; 32]) -> SerializableBlock {
+/// Derives delta from `prf_seed` and returns both delta and the PRF stream
+/// advanced past the bytes consumed for delta.
+///
+/// Callers **must** use the returned `ChaCha8Rng` as the label generator,
+/// not a fresh `ChaCha8Rng::from_seed(prf_seed)`. Re-seeding would reset the
+/// stream to position 0 and re-emit the same bytes that became delta, letting
+/// an adversary recover delta from any pair of active labels.
+pub(crate) fn setup_delta_from_seed(
+    prf_seed: [u8; 32],
+) -> (SerializableBlock, ChaCha8Rng) {
     let mut rng = ChaCha8Rng::from_seed(prf_seed);
     let mut delta = [0u8; 16];
     rng.fill_bytes(&mut delta);
     delta[0] |= 1;
-    SerializableBlock(delta)
+    (SerializableBlock(delta), rng)
 }
 
 pub(crate) fn prev_party(party_id: u8) -> u8 {

@@ -63,9 +63,12 @@ where
         rng.fill_bytes(&mut delta);
         delta[0] |= 1;
 
+        // `rng` has already consumed the 16 bytes that became delta.
+        // Store that advanced stream, not a fresh one re-seeded from prf_key,
+        // so the label generator never re-emits those bytes.
         Ok(YaoSetup::G(GarblerSetup {
             comm_crs,
-            prf: ChaCha8Rng::from_seed(prf_key),
+            prf: rng,
             delta,
             party_id,
         }))
