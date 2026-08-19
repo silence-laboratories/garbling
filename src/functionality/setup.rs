@@ -45,11 +45,16 @@ where
         let comm_crs = receive_from_one_party(setup, tag1, 2, relay).await?;
 
         let prf_key = if party_id == 0 {
-            let seed = rng.gen();
-            send_to_party(setup, tag2, &seed, 1, relay).await?;
+            let seed: [u8; 32] = rng.gen();
+            send_to_party(setup, tag2, &(seed, comm_crs), 1, relay).await?;
             seed
         } else {
-            receive_from_one_party(setup, tag2, 0, relay).await?
+            let (seed, p0_comm_crs): ([u8; 32], Block) =
+                receive_from_one_party(setup, tag2, 0, relay).await?;
+            if p0_comm_crs != comm_crs {
+                return Err(ProtocolError::InconsistentMessage);
+            }
+            seed
         };
 
         let mut rng = ChaCha8Rng::from_seed(prf_key);

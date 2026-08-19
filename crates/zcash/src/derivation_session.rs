@@ -468,7 +468,9 @@ mod tests {
                 message.to == 1
                     && matches!(
                         message.body,
-                        MessageBody::SetupYao(SetupYaoMessage::PrfSeed(_))
+                        MessageBody::SetupYao(
+                            SetupYaoMessage::PrfSeed { .. }
+                        )
                     )
             })
             .expect("PRF seed for p1 should exist");
