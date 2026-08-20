@@ -104,17 +104,12 @@ impl HashFunction for AesGarbleHash {
     }
 
     /// Tweakable circular correlation robust hash function (cf.
-    /// <https://eprint.iacr.org/2019/074>, §7.4).
+    /// <https://eprint.iacr.org/2014/756.pdf>, §4.1).
     ///
     /// The function computes `H(H(x) ⊕ i) ⊕ H(x)`.
     fn tccr_hash(&self, x: &Block, i: &Block) -> Block {
-        // let two = GF2_256(U256::ONE + U256::ONE);
-        // let xval = GF2_256(U256::from_be_bytes(*x));
-        // let ival = GF2_256(U256::from_be_bytes(*i));
-        // let kval = xval.mul(two).add(ival);
-        // self.get_hash(&kval.0.to_be_bytes()).unwrap()
-
-        self.get_hash(&xor_blocks(&double_gf2_128_bytes(x), i))
+        let k = xor_blocks(&double_gf2_128_bytes(x), i);
+        xor_blocks(&self.get_hash(&k), &k)
     }
 
     /// Implementation of the `get_hash` function for a `AesGarbleHash`.
