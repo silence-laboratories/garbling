@@ -10,8 +10,8 @@ use crate::{
     },
     functionality::{
         utils::{
-            receive_from_one_party, receive_from_parties, send_to_party,
-            FilteredMsgRelay,
+            check_len, packed_bytes, receive_from_one_party,
+            receive_from_parties, send_to_party, FilteredMsgRelay,
         },
         utils_dep::ProtocolError,
     },
@@ -89,6 +89,8 @@ where
             let outs: Vec<u16> =
                 receive_from_parties(setup, tag2, &[0, 1], relay).await?;
 
+            check_len(outs.len(), 2)?;
+
             if outs[0] != outs[1] {
                 return Err(ProtocolError::InconsistentMessage);
             }
@@ -154,6 +156,9 @@ where
 
         let outs: Vec<Vec<u8>> =
             receive_from_parties(setup, tag2, &[0, 1], relay).await?;
+
+        check_len(outs.len(), 2)?;
+        check_len(outs[0].len(), packed_bytes(batch_size))?;
 
         if outs[0] != outs[1] {
             return Err(ProtocolError::InconsistentMessage);
@@ -257,6 +262,7 @@ where
             if ds.len() != 2 || ds[0] != ds[1] {
                 return Err(ProtocolError::InconsistentMessage);
             }
+            check_len(ds[0].len(), packed_bytes(batch_size))?;
             d.value = ds.pop().unwrap(); // can't fail, ds.len() == 2;
 
             for i in 0..batch_size {

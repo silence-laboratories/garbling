@@ -5,14 +5,19 @@ use std::collections::HashMap;
 
 use sha2::{Digest, Sha256};
 
-use sl_messages::{relay::Relay, setup::ProtocolParticipant};
+use sl_messages::{
+    message::MessageTag, relay::Relay, setup::ProtocolParticipant,
+};
 
 use crate::{
     circuit::BinaryCircuit,
     config::constants::{YAO_CIRC_EVAL_FUNC_MSG1, YAO_CIRC_EVAL_FUNC_MSG2},
     functionality::{
         evaluate::evaluate_functionality,
-        utils::{receive_from_one_party, send_to_party, FilteredMsgRelay},
+        utils::{
+            check_len, receive_from_one_party, send_to_party,
+            FilteredMsgRelay,
+        },
         utils_dep::ProtocolError,
     },
     utilities::{
@@ -22,6 +27,45 @@ use crate::{
 };
 
 use super::garble::garble_functionality;
+
+/// Receives the garbled circuit from `P_2` and `P_1`'s digest of it, then
+/// checks that the two agree and that the garbled circuit has exactly the
+/// length `expected_len` that the circuit being evaluated calls for.
+///
+/// The digest check alone would already catch a length mismatch from a single
+/// corrupted garbler, but the explicit check keeps a malformed message from
+/// reaching the evaluator, which indexes into the garbled circuit directly.
+async fn receive_garbled_circuit<T, R>(
+    setup: &T,
+    relay: &mut FilteredMsgRelay<R>,
+    tag1: MessageTag,
+    tag2: MessageTag,
+    expected_len: usize,
+) -> Result<Vec<Block>, ProtocolError>
+where
+    T: ProtocolParticipant,
+    R: Relay,
+{
+    let hashes: [u8; 32] =
+        receive_from_one_party(setup, tag2, 0, relay).await?;
+
+    let fs: Vec<Block> =
+        receive_from_one_party(setup, tag1, 1, relay).await?;
+
+    check_len(fs.len(), expected_len)?;
+
+    let hashout: [u8; 32] = fs
+        .iter()
+        .fold(Sha256::new(), Digest::chain_update)
+        .finalize()
+        .into();
+
+    if hashout != hashes {
+        return Err(ProtocolError::InconsistentMessage);
+    }
+
+    Ok(fs)
+}
 
 pub fn yao_circuit_eval_process_msg1_p2<H>(
     input: &[Vec<YaoShare>],
@@ -74,21 +118,14 @@ where
 
     match yao_setup {
         YaoSetup::E(_) => {
-            let hashes: [u8; 32] =
-                receive_from_one_party(setup, tag2, 0, relay).await?;
-
-            let fs: Vec<Block> =
-                receive_from_one_party(setup, tag1, 1, relay).await?;
-
-            let hashout: [u8; 32] = fs
-                .iter()
-                .fold(Sha256::new(), Digest::chain_update)
-                .finalize()
-                .into();
-
-            if hashout != hashes {
-                return Err(ProtocolError::InconsistentMessage);
-            }
+            let fs = receive_garbled_circuit(
+                setup,
+                relay,
+                tag1,
+                tag2,
+                circuit.garbled_table_len(),
+            )
+            .await?;
 
             Ok(yao_circuit_eval_process_msg1_p2(input, &fs, circuit, hash))
         }
@@ -135,21 +172,14 @@ where
         YaoSetup::E(_e) => match *circuits {
             MapArg::Scalar(circuit) => match *inputs {
                 MapArg::Scalar(input) => {
-                    let hashes: [u8; 32] =
-                        receive_from_one_party(setup, tag2, 0, relay).await?;
-
-                    let fs: Vec<Block> =
-                        receive_from_one_party(setup, tag1, 1, relay).await?;
-
-                    let hashout: [u8; 32] = fs
-                        .iter()
-                        .fold(Sha256::new(), Digest::chain_update)
-                        .finalize()
-                        .into();
-
-                    if hashout != hashes {
-                        return Err(ProtocolError::InconsistentMessage);
-                    }
+                    let fs = receive_garbled_circuit(
+                        setup,
+                        relay,
+                        tag1,
+                        tag2,
+                        circuit.garbled_table_len(),
+                    )
+                    .await?;
 
                     output.push(yao_circuit_eval_process_msg1_p2(
                         input, &fs, circuit, hash,
@@ -157,29 +187,24 @@ where
                 }
 
                 MapArg::Vector(input) => {
-                    let hashes: [u8; 32] =
-                        receive_from_one_party(setup, tag2, 0, relay).await?;
+                    let complen = circuit.garbled_table_len();
 
-                    let fs: Vec<Block> =
-                        receive_from_one_party(setup, tag1, 1, relay).await?;
+                    let fs = receive_garbled_circuit(
+                        setup,
+                        relay,
+                        tag1,
+                        tag2,
+                        input.len() * complen,
+                    )
+                    .await?;
 
-                    let hashout: [u8; 32] = fs
-                        .iter()
-                        .fold(Sha256::new(), Digest::chain_update)
-                        .finalize()
-                        .into();
-
-                    if hashout != hashes {
-                        return Err(ProtocolError::InconsistentMessage);
-                    }
-
-                    let complen = 2 * circuit.num_nonfree_gates()
-                        + circuit.num_constant_gates();
-
+                    // Indexed rather than `chunks_exact`, which panics for a
+                    // circuit with no AND gates and no constant wires.
                     output = input
                         .iter()
-                        .zip(fs.chunks_exact(complen))
-                        .map(|(i, f)| {
+                        .enumerate()
+                        .map(|(n, i)| {
+                            let f = &fs[n * complen..(n + 1) * complen];
                             yao_circuit_eval_process_msg1_p2(
                                 i, f, circuit, hash,
                             )
@@ -190,28 +215,19 @@ where
 
             MapArg::Vector(circuits) => match inputs {
                 MapArg::Scalar(input) => {
-                    let hashes: [u8; 32] =
-                        receive_from_one_party(setup, tag2, 0, relay).await?;
+                    let total: usize =
+                        circuits.iter().map(|c| c.garbled_table_len()).sum();
 
-                    let fs: Vec<Block> =
-                        receive_from_one_party(setup, tag1, 1, relay).await?;
-
-                    let hashout: [u8; 32] = fs
-                        .iter()
-                        .fold(Sha256::new(), Digest::chain_update)
-                        .finalize()
-                        .into();
-
-                    if hashout != hashes {
-                        return Err(ProtocolError::InconsistentMessage);
-                    }
+                    let fs = receive_garbled_circuit(
+                        setup, relay, tag1, tag2, total,
+                    )
+                    .await?;
 
                     let mut len = 0;
                     output = circuits
                         .iter()
                         .map(|circuit| {
-                            let complen = 2 * circuit.num_nonfree_gates()
-                                + circuit.num_constant_gates();
+                            let complen = circuit.garbled_table_len();
                             let f = &fs[len..len + complen];
                             let out = yao_circuit_eval_process_msg1_p2(
                                 input, f, circuit, hash,
@@ -228,29 +244,20 @@ where
                         return Err(ProtocolError::InvalidLength);
                     }
 
-                    let hashes: [u8; 32] =
-                        receive_from_one_party(setup, tag2, 0, relay).await?;
+                    let total: usize =
+                        circuits.iter().map(|c| c.garbled_table_len()).sum();
 
-                    let fs: Vec<Block> =
-                        receive_from_one_party(setup, tag1, 1, relay).await?;
-
-                    let hashout: [u8; 32] = fs
-                        .iter()
-                        .fold(Sha256::new(), Digest::chain_update)
-                        .finalize()
-                        .into();
-
-                    if hashout != hashes {
-                        return Err(ProtocolError::InconsistentMessage);
-                    }
+                    let fs = receive_garbled_circuit(
+                        setup, relay, tag1, tag2, total,
+                    )
+                    .await?;
 
                     let mut len = 0;
                     output = circuits
                         .iter()
                         .zip(input)
                         .map(|(circuit, ip)| {
-                            let complen = 2 * circuit.num_nonfree_gates()
-                                + circuit.num_constant_gates();
+                            let complen = circuit.garbled_table_len();
                             let f = &fs[len..len + complen];
                             let out = yao_circuit_eval_process_msg1_p2(
                                 ip, f, circuit, hash,

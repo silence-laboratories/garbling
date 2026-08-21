@@ -59,6 +59,29 @@ impl<R: Relay> FilteredMsgRelay<R> {
     }
 }
 
+/// Returns an error unless a decoded message holds exactly `expected` items.
+///
+/// The size of an incoming message is chosen by its sender, so every
+/// variable-length payload has to be checked against the length the receiver
+/// expects before it is indexed, sliced or zipped. Skipping the check turns a
+/// malformed message into a panic (or, for `zip`, into silently truncated
+/// output) instead of a protocol abort.
+#[inline]
+pub fn check_len(
+    actual: usize,
+    expected: usize,
+) -> Result<(), ProtocolError> {
+    (actual == expected)
+        .then_some(())
+        .ok_or(ProtocolError::InvalidLength)
+}
+
+/// Number of bytes a [`BinaryString`] uses to pack `bits` bits.
+#[inline]
+pub fn packed_bytes(bits: usize) -> usize {
+    bits.div_ceil(8)
+}
+
 /// Party sends a message to other party
 pub async fn send_to_party<P, R, T>(
     setup: &P,

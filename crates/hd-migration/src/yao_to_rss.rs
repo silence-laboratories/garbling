@@ -370,13 +370,26 @@ pub fn get_private_key_shares_dkg_create_msg2_p3(
     sha_hashed_vals: &[YaoEvaluatorShare],
     msg1_from_p1: &YaoToScalarRssKeypairMsg1,
     msg1_from_p2: &YaoToScalarRssKeypairMsg1,
-) -> (
-    YaoToScalarRssKeypairMsg2,
-    YaoToScalarRssKeypairMsg2,
-    YaoToScalarRssKeypairState2,
-) {
-    // Step 5a
-    assert_eq!(msg1_from_p1, msg1_from_p2);
+) -> Result<
+    (
+        YaoToScalarRssKeypairMsg2,
+        YaoToScalarRssKeypairMsg2,
+        YaoToScalarRssKeypairState2,
+    ),
+    HardDerivationError,
+> {
+    // Step 5a. This is the dual-execution consistency check for the gadget:
+    // a mismatch means one garbler deviated, so abort rather than panic.
+    if msg1_from_p1 != msg1_from_p2 {
+        return Err(HardDerivationError::InvalidMessage);
+    }
+
+    // `evaluate_gadget` walks both vectors in lockstep with the local shares.
+    if msg1_from_p1.cvec.len() != sha_hashed_vals.len()
+        || msg1_from_p1.cvec_star.len() != sha_hashed_vals.len()
+    {
+        return Err(HardDerivationError::InvalidMessage);
+    }
 
     // Step 5c
     let sk_tilde = evaluate_gadget::<ProjectivePoint>(
@@ -425,7 +438,7 @@ pub fn get_private_key_shares_dkg_create_msg2_p3(
         skip2_tilde: sk2_tilde,
     };
 
-    (
+    Ok((
         msg2_p1,
         msg2_p2,
         YaoToScalarRssKeypairState2 {
@@ -435,7 +448,7 @@ pub fn get_private_key_shares_dkg_create_msg2_p3(
             delta_0: msg1_from_p1.delta_0,
             delta_2: msg1_from_p1.delta_2,
         },
-    )
+    ))
 }
 
 /// Create msg3 in the DeriveSKSharesDKG protocol, to be executed by parties p1 and p2
@@ -497,15 +510,18 @@ pub fn get_private_key_shares_dkg_process_msg3_p12(
     msg3_recv_pim1: &YaoToScalarRssKeypairMsg3p12,
     msg3_recv_pip2: &YaoToScalarRssKeypairMsg3p12,
     state3: &YaoToScalarRssKeypairState3p12,
-) {
+) -> Result<(), HardDerivationError> {
     // Step 8c
-    assert_eq!(state3.pki_tilde, msg3_recv_pim1.pkip2_tilde);
-    assert_eq!(state3.pkip2_tilde, msg3_recv_pip2.pki_tilde);
-    assert_eq!(msg3_recv_pip2.pkip2_tilde, msg3_recv_pim1.pki_tilde);
-    assert_eq!(
-        state3.pki_tilde + state3.pkip2_tilde + msg3_recv_pim1.pki_tilde,
-        state3.pk_tilde
-    );
+    if state3.pki_tilde != msg3_recv_pim1.pkip2_tilde
+        || state3.pkip2_tilde != msg3_recv_pip2.pki_tilde
+        || msg3_recv_pip2.pkip2_tilde != msg3_recv_pim1.pki_tilde
+        || state3.pki_tilde + state3.pkip2_tilde + msg3_recv_pim1.pki_tilde
+            != state3.pk_tilde
+    {
+        return Err(HardDerivationError::InvalidMessage);
+    }
+
+    Ok(())
 }
 
 /// Process msg3 in the DeriveSKSharesDKG protocol, to be executed by parties p3
@@ -514,24 +530,26 @@ fn get_private_key_shares_dkg_process_msg3_p3(
     msg3_recv_pip2: &YaoToScalarRssKeypairMsg3p3,
     state2: &YaoToScalarRssKeypairState2,
     state3: &YaoToScalarRssKeypairState3p3,
-) -> Scalar {
+) -> Result<Scalar, HardDerivationError> {
     // Step 8c
-    assert_eq!(msg3_recv_pim1.alpha, msg3_recv_pip2.alpha);
-    assert_eq!(state3.pki_tilde, msg3_recv_pim1.pkip2_tilde);
-    assert_eq!(state3.pkip2_tilde, msg3_recv_pip2.pki_tilde);
-    assert_eq!(msg3_recv_pip2.pkip2_tilde, msg3_recv_pim1.pki_tilde);
-    assert_eq!(
-        state3.pki_tilde + state3.pkip2_tilde + msg3_recv_pim1.pki_tilde,
-        state2.pk_tilde
-    );
-    msg3_recv_pip2.alpha
+    if msg3_recv_pim1.alpha != msg3_recv_pip2.alpha
+        || state3.pki_tilde != msg3_recv_pim1.pkip2_tilde
+        || state3.pkip2_tilde != msg3_recv_pip2.pki_tilde
+        || msg3_recv_pip2.pkip2_tilde != msg3_recv_pim1.pki_tilde
+        || state3.pki_tilde + state3.pkip2_tilde + msg3_recv_pim1.pki_tilde
+            != state2.pk_tilde
+    {
+        return Err(HardDerivationError::InvalidMessage);
+    }
+
+    Ok(msg3_recv_pip2.alpha)
 }
 
 /// Create msg4 in the DeriveSKSharesDKG protocol, to be executed by parties p1 and p2
 fn get_private_key_shares_dkg_create_msg4_p12(
     state3: &YaoToScalarRssKeypairState3p12,
     state1: &YaoToScalarRssKeypairState1,
-) -> ProjectivePoint {
+) -> Result<ProjectivePoint, HardDerivationError> {
     // Step 9a
     let pk = (state3.pk_tilde - (ProjectivePoint::GENERATOR * state1.beta))
         * state1.alpha.invert().unwrap();
@@ -540,19 +558,25 @@ fn get_private_key_shares_dkg_create_msg4_p12(
         - (ProjectivePoint::GENERATOR * state1.beta_star))
         * state1.alpha_star.invert().unwrap();
 
-    // Step 9b
-    assert_eq!(pk, pk_star);
-    pk
+    // Step 9b. The two gadget instances must decode to the same public key.
+    if pk != pk_star {
+        return Err(HardDerivationError::InvalidMessage);
+    }
+
+    Ok(pk)
 }
 
 /// Process msg4 in the DeriveSKSharesDKG protocol, to be executed by parties p3
 fn get_private_key_shares_dkg_process_msg4_p3(
     msg4_p1: &ProjectivePoint,
     msg4_p2: &ProjectivePoint,
-) -> ProjectivePoint {
+) -> Result<ProjectivePoint, HardDerivationError> {
     // Step 10
-    assert_eq!(msg4_p1, msg4_p2);
-    *msg4_p1
+    if msg4_p1 != msg4_p2 {
+        return Err(HardDerivationError::InvalidMessage);
+    }
+
+    Ok(*msg4_p1)
 }
 
 /// Get output of the DeriveSKSharesDKG protocol to be executed by party p1
@@ -641,6 +665,10 @@ where
         let msg1: Vec<YaoToScalarRssKeypairMsg1> =
             receive_from_parties(setup, tag1, &[0, 1], relay).await?;
 
+        if msg1.len() != 2 {
+            return Err(HardDerivationError::MissingMessage);
+        }
+
         let msg1_p3_from_p1 = &msg1[0];
         let msg1_p3_from_p2 = &msg1[1];
 
@@ -655,7 +683,7 @@ where
                 &eins,
                 msg1_p3_from_p1,
                 msg1_p3_from_p2,
-            );
+            )?;
 
         send_to_party(setup, tag2, &msg2_0, 0, relay).await?;
         send_to_party(setup, tag2, &msg2_1, 1, relay).await?;
@@ -669,25 +697,31 @@ where
         let msg3s: Vec<YaoToScalarRssKeypairMsg3p3> =
             receive_from_parties(setup, tag3, &[0, 1], relay).await?;
 
+        if msg3s.len() != 2 {
+            return Err(HardDerivationError::MissingMessage);
+        }
+
         let msg3_0 = &msg3s[0];
         let msg3_1 = &msg3s[1];
 
         let alpha_p3 = get_private_key_shares_dkg_process_msg3_p3(
             msg3_1, msg3_0, &state2, &state3,
-        );
+        )?;
 
         let pks: Vec<[u8; 33]> =
             receive_from_parties(setup, tag4, &[0, 1], relay).await?;
 
-        let encoded = EncodedPoint::from_bytes(pks[0]).unwrap();
-        let affine = AffinePoint::from_encoded_point(&encoded).unwrap();
-        let pk_p1 = ProjectivePoint::from(affine);
+        if pks.len() != 2 {
+            return Err(HardDerivationError::MissingMessage);
+        }
 
-        let encoded = EncodedPoint::from_bytes(pks[1]).unwrap();
-        let affine = AffinePoint::from_encoded_point(&encoded).unwrap();
-        let pk_p2 = ProjectivePoint::from(affine);
+        // The encodings are attacker controlled: abort, never panic.
+        let pk_p1 = decode_point(&pks[0])
+            .ok_or(HardDerivationError::InvalidMessage)?;
+        let pk_p2 = decode_point(&pks[1])
+            .ok_or(HardDerivationError::InvalidMessage)?;
 
-        let pk = get_private_key_shares_dkg_process_msg4_p3(&pk_p1, &pk_p2);
+        let pk = get_private_key_shares_dkg_process_msg4_p3(&pk_p1, &pk_p2)?;
 
         Ok(get_private_key_shares_dkg_genout_p3(
             &pk, &alpha_p3, &state2,
@@ -714,20 +748,25 @@ where
             receive_from_parties(setup, tag3, &[1 - party_id, 2], relay)
                 .await?;
 
+        if msg3s.len() != 2 {
+            return Err(HardDerivationError::MissingMessage);
+        }
+
         let msg3_01 = &msg3s[0];
         let msg3_2 = &msg3s[1];
 
         if party_id == 0 {
             get_private_key_shares_dkg_process_msg3_p12(
                 msg3_2, msg3_01, &state3,
-            );
+            )?;
         } else {
             get_private_key_shares_dkg_process_msg3_p12(
                 msg3_01, msg3_2, &state3,
-            );
+            )?;
         }
 
-        let pk = get_private_key_shares_dkg_create_msg4_p12(&state3, &state1);
+        let pk =
+            get_private_key_shares_dkg_create_msg4_p12(&state3, &state1)?;
         send_to_party(
             setup,
             tag4,
@@ -769,6 +808,13 @@ where
         let msg1s: Vec<Vec<YaoToScalarRssKeypairMsg1>> =
             receive_from_parties(setup, tag1, &[0, 1], relay).await?;
 
+        if msg1s.len() != 2
+            || msg1s[0].len() != batch_size
+            || msg1s[1].len() != batch_size
+        {
+            return Err(HardDerivationError::InvalidMessage);
+        }
+
         let msg1s_p3_from_p1 = &msg1s[0];
         let msg1s_p3_from_p2 = &msg1s[1];
 
@@ -793,7 +839,7 @@ where
                     &eins[i],
                     &msg1s_p3_from_p1[i],
                     &msg1s_p3_from_p2[i],
-                );
+                )?;
 
             msg2_0s.push(msg2_0);
             msg2_1s.push(msg2_1);
@@ -818,6 +864,13 @@ where
         let msg3s: Vec<Vec<YaoToScalarRssKeypairMsg3p3>> =
             receive_from_parties(setup, tag3, &[0, 1], relay).await?;
 
+        if msg3s.len() != 2
+            || msg3s[0].len() != batch_size
+            || msg3s[1].len() != batch_size
+        {
+            return Err(HardDerivationError::InvalidMessage);
+        }
+
         let msg3s_0 = &msg3s[0];
         let msg3s_1 = &msg3s[1];
 
@@ -829,7 +882,7 @@ where
                 &msg3s_0[i],
                 &state2s[i],
                 &state3s[i],
-            );
+            )?;
 
             alpha_p3s.push(alpha_p3);
         }
@@ -837,18 +890,23 @@ where
         let pks: Vec<Vec<[u8; 33]>> =
             receive_from_parties(setup, tag4, &[0, 1], relay).await?;
 
+        if pks.len() != 2
+            || pks[0].len() != batch_size
+            || pks[1].len() != batch_size
+        {
+            return Err(HardDerivationError::InvalidMessage);
+        }
+
         let mut output = Vec::with_capacity(batch_size);
         for i in 0..batch_size {
-            let encoded = EncodedPoint::from_bytes(pks[0][i]).unwrap();
-            let affine = AffinePoint::from_encoded_point(&encoded).unwrap();
-            let pk_p1 = ProjectivePoint::from(affine);
-
-            let encoded = EncodedPoint::from_bytes(pks[1][i]).unwrap();
-            let affine = AffinePoint::from_encoded_point(&encoded).unwrap();
-            let pk_p2 = ProjectivePoint::from(affine);
+            // The encodings are attacker controlled: abort, never panic.
+            let pk_p1 = decode_point(&pks[0][i])
+                .ok_or(HardDerivationError::InvalidMessage)?;
+            let pk_p2 = decode_point(&pks[1][i])
+                .ok_or(HardDerivationError::InvalidMessage)?;
 
             let pk =
-                get_private_key_shares_dkg_process_msg4_p3(&pk_p1, &pk_p2);
+                get_private_key_shares_dkg_process_msg4_p3(&pk_p1, &pk_p2)?;
             output.push(get_private_key_shares_dkg_genout_p3(
                 &pk,
                 &alpha_p3s[i],
@@ -907,6 +965,13 @@ where
             receive_from_parties(setup, tag3, &[1 - party_id, 2], relay)
                 .await?;
 
+        if msg3s.len() != 2
+            || msg3s[0].len() != batch_size
+            || msg3s[1].len() != batch_size
+        {
+            return Err(HardDerivationError::InvalidMessage);
+        }
+
         let msg3_01s = &msg3s[0];
         let msg3_2s = &msg3s[1];
 
@@ -918,19 +983,19 @@ where
                     &msg3_2s[i],
                     &msg3_01s[i],
                     &state3s[i],
-                );
+                )?;
             } else {
                 get_private_key_shares_dkg_process_msg3_p12(
                     &msg3_01s[i],
                     &msg3_2s[i],
                     &state3s[i],
-                );
+                )?;
             }
 
             let pk = get_private_key_shares_dkg_create_msg4_p12(
                 &state3s[i],
                 &state1s[i],
-            );
+            )?;
             pk_ors.push(pk);
 
             pks.push(

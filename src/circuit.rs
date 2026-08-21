@@ -534,6 +534,15 @@ impl BinaryCircuit {
         self.num_nonfree_gates
     }
 
+    /// Returns the number of `Block`s the garbled circuit for this circuit
+    /// occupies: two per AND gate plus one per constant wire.
+    ///
+    /// Garbling and evaluation must agree on this value, and the evaluator
+    /// uses it to validate the length of the garbled circuit it receives.
+    pub fn garbled_table_len(&self) -> usize {
+        2 * self.num_nonfree_gates() + self.num_constant_gates()
+    }
+
     /// Returns the number of non-free gates.
     pub fn get_num_nonfree_gates(&self) -> usize {
         self.num_nonfree_gates()

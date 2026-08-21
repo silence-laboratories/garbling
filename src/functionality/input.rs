@@ -14,8 +14,9 @@ use crate::{
     },
     functionality::{
         utils::{
-            receive_from_one_party, receive_from_parties, send_to_party,
-            Byte, FilteredMsgRelay, Wrap,
+            check_len, packed_bytes, receive_from_one_party,
+            receive_from_parties, send_to_party, Byte, FilteredMsgRelay,
+            Wrap,
         },
         utils_dep::ProtocolError,
     },
@@ -500,6 +501,9 @@ where
             return Err(ProtocolError::MissingMessage);
         }
 
+        check_len(msg[0].len(), batch_size)?;
+        check_len(msg[1].len(), batch_size)?;
+
         for i in 0..batch_size {
             if msg[0][i].0 != msg[1][i].0 {
                 return Err(ProtocolError::InconsistentMessage);
@@ -541,6 +545,8 @@ where
 
         let recv: BinaryString =
             receive_from_one_party(setup, tag1, 2, relay).await?;
+
+        check_len(recv.value.len(), packed_bytes(batch_size))?;
 
         let mut msg = vec![];
 
@@ -614,6 +620,13 @@ impl Wrap for InputYaoAllMsg1p22 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
+        // Six equally sized vectors of `Block`s. Reject anything that is not
+        // an exact multiple, rather than rounding down and silently dropping
+        // the trailing bytes of every field.
+        if !buffer.len().is_multiple_of(6 * BLOCK_SIZE) {
+            return None;
+        }
+
         let blocks = buffer.len() / 6;
         let (buffer, com_i1_0) = Wrap::decode(buffer, blocks)?;
         let (buffer, com_i2_0) = Wrap::decode(buffer, blocks)?;
@@ -925,11 +938,23 @@ fn input_yao_from_all_functionality_3_process_msg1<C, T>(
     comm: &C,
     msg1_recv_p2: &InputYaoAllMsg1p22,
     msg1_recv_p3: &InputYaoAllMsg1p22,
+    expected: usize,
 ) -> Result<(Vec<T>, Vec<T>), ProtocolError>
 where
     C: Commitment,
     T: From<YaoEvaluatorShare>,
 {
+    // The `zip`s below would silently truncate on a short message, returning
+    // fewer shares than requested instead of failing, so check every vector.
+    for msg in [msg1_recv_p2, msg1_recv_p3] {
+        check_len(msg.com_i1_0.len(), expected)?;
+        check_len(msg.com_i1_1.len(), expected)?;
+        check_len(msg.com_i2_0.len(), expected)?;
+        check_len(msg.com_i2_1.len(), expected)?;
+        check_len(msg.w.len(), expected)?;
+        check_len(msg.wit.len(), expected)?;
+    }
+
     if msg1_recv_p2.com_i1_0 != msg1_recv_p3.com_i1_0
         || msg1_recv_p2.com_i1_1 != msg1_recv_p3.com_i1_1
         || msg1_recv_p2.com_i2_0 != msg1_recv_p3.com_i2_0
@@ -989,6 +1014,18 @@ where
     C: Commitment,
     T: From<YaoEvaluatorShare>,
 {
+    // Every vector below is indexed up to `i3_len`, so validate first.
+    for msg in [msg2_recv_p2, msg2_recv_p3] {
+        check_len(msg.comm_1f.len(), i3_len)?;
+        check_len(msg.comm_1t.len(), i3_len)?;
+        check_len(msg.comm_2f.len(), i3_len)?;
+        check_len(msg.comm_2t.len(), i3_len)?;
+        check_len(msg.w.len(), i3_len)?;
+        check_len(msg.wit.len(), i3_len)?;
+    }
+    check_len(msg1_p2.len(), i3_len)?;
+    check_len(msg1_p3.len(), i3_len)?;
+
     if msg2_recv_p2.comm_1f != msg2_recv_p3.comm_1f
         || msg2_recv_p2.comm_1t != msg2_recv_p3.comm_1t
         || msg2_recv_p2.comm_2f != msg2_recv_p3.comm_2f
@@ -1082,11 +1119,16 @@ where
 
             let (i1_shares, i2_shares) =
                 input_yao_from_all_functionality_3_process_msg1(
-                    comm, &msg1_p1, &msg1_p2,
+                    comm,
+                    &msg1_p1,
+                    &msg1_p2,
+                    input.len(),
                 )?;
 
             let msg2s: Vec<InputYaoAllMsg2p22> =
                 receive_from_parties(setup, tag2, &[0, 1], relay).await?;
+
+            check_len(msg2s.len(), 2)?;
 
             let i3_shares = input_yao_from_all_functionality_3_process_msg2(
                 comm,
@@ -1112,6 +1154,8 @@ where
 
             let msg1s: Vec<u8> =
                 receive_from_one_party(setup, tag1, 2, relay).await?;
+
+            check_len(msg1s.len(), packed_bytes(input.len()))?;
 
             let msg1 = decode_vec_bool(msg1s, input.len());
 

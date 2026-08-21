@@ -19,9 +19,7 @@ use crate::{
     },
     utilities::{
         commitments::Commitment,
-        types::{
-            Block, GarblerSetup, YaoGarblerShare, YaoSetup, YaoShare, ZBLOCK,
-        },
+        types::{Block, GarblerSetup, YaoGarblerShare, YaoSetup, YaoShare},
         utils::{lsb, xor_blocks},
     },
 };
@@ -122,17 +120,23 @@ where
                 let wr0: Block =
                     receive_from_one_party(setup, tag1, 0, relay).await?;
 
-                let (com0, com1, wz0, wz1, _, _) = create_yao_to_binary_msg2(
-                    &wr0,
-                    comm,
-                    &mut g.prf,
-                    garbler_share,
-                );
+                let (com0, com1, wz0, wz1, wit0, wit1) =
+                    create_yao_to_binary_msg2(
+                        &wr0,
+                        comm,
+                        &mut g.prf,
+                        garbler_share,
+                    );
 
+                // Both garblers derive the witnesses from the shared PRF, so
+                // P2 sends its copies too and P3 checks them for equality.
+                // Without this, a corrupted P1 could send one valid and one
+                // garbage witness, making P3's abort depend on `s_x ^ y` and
+                // so leaking the secret bit to P1.
                 send_to_party(
                     setup,
                     tag2,
-                    &((com0, com1), (ZBLOCK, ZBLOCK)),
+                    &((com0, com1), (wit0, wit1)),
                     2,
                     relay,
                 )
@@ -185,7 +189,7 @@ where
             let (com01, com11) = &msg2s[1].0;
             let (wit0, wit1) = &msg2s[0].1;
 
-            if com0 != com01 || com1 != com11 {
+            if com0 != com01 || com1 != com11 || msg2s[0].1 != msg2s[1].1 {
                 return Err(ProtocolError::InconsistentMessage);
             }
 
@@ -284,7 +288,7 @@ where
                 for (share, &wr0) in
                     input.iter().map(YaoShare::as_garbler).zip(&msg1s)
                 {
-                    let (com0, com1, wz0, wz1, _, _) =
+                    let (com0, com1, wz0, wz1, wit0, wit1) =
                         create_yao_to_binary_msg2(
                             &wr0,
                             comm,
@@ -292,7 +296,9 @@ where
                             share,
                         );
 
-                    msgs.push((com0, com1));
+                    // Witnesses are included so that P3 can check them
+                    // against P1's; see `yao_to_binary_functionality`.
+                    msgs.push(((com0, com1), (wit0, wit1)));
 
                     wr0s.push(wr0);
                     wz0s.push(wz0);
@@ -367,7 +373,7 @@ where
             let msg2s_0: Vec<((Block, Block), (Block, Block))> =
                 receive_from_one_party(setup, tag2, 0, relay).await?;
 
-            let msg2s_1: Vec<(Block, Block)> =
+            let msg2s_1: Vec<((Block, Block), (Block, Block))> =
                 receive_from_one_party(setup, tag4, 1, relay).await?;
 
             if msg2s_0.len() != input.len() {
@@ -387,10 +393,10 @@ where
                 .zip(&wxzs_store)
                 .map(|((((share, m0), m1), &ys_i), wxzs_store_i)| {
                     let (com0, com1) = &m0.0;
-                    let (com01, com11) = &m1;
+                    let (com01, com11) = &m1.0;
                     let (wit0, wit1) = &m0.1;
 
-                    if com0 != com01 || com1 != com11 {
+                    if com0 != com01 || com1 != com11 || m0.1 != m1.1 {
                         return Err(ProtocolError::InconsistentMessage);
                     }
 
@@ -456,8 +462,57 @@ mod tests {
     };
 
     use super::{
-        batch_yao_to_binary_functionality, yao_to_binary_functionality,
+        batch_yao_to_binary_functionality, create_yao_to_binary_msg2,
+        yao_to_binary_functionality,
     };
+
+    /// Both garblers must derive byte-identical commitments *and* witnesses
+    /// from the shared PRF.
+    ///
+    /// `yao_to_binary_functionality` relies on this: P2 sends its witnesses
+    /// alongside P1's so that P3 can reject a mismatch. If the two garblers
+    /// could disagree here, that check would abort every honest run; if P3
+    /// did not check, a corrupted P1 could send one valid and one garbage
+    /// witness and learn the secret bit from whether P3 aborts.
+    #[test]
+    fn garblers_derive_identical_commitments_and_witnesses() {
+        use rand::SeedableRng;
+        use rand_chacha::ChaCha8Rng;
+
+        use crate::utilities::{
+            commitments::Commitment,
+            types::{Block, YaoGarblerShare, BLOCK_SIZE},
+        };
+
+        let mut delta = [9u8; BLOCK_SIZE];
+        delta[0] |= 1;
+
+        let share = YaoGarblerShare {
+            delta,
+            f_label: [3u8; BLOCK_SIZE],
+        };
+        let wr0: Block = [7u8; BLOCK_SIZE];
+        let comm = HashCommitment::new(Sha512Hash::new());
+
+        // Two garblers seeded from the same PRF seed, as `SetupYao` arranges.
+        let mut prf_p1 = ChaCha8Rng::from_seed([42; 32]);
+        let mut prf_p2 = ChaCha8Rng::from_seed([42; 32]);
+
+        let p1 = create_yao_to_binary_msg2(&wr0, &comm, &mut prf_p1, &share);
+        let p2 = create_yao_to_binary_msg2(&wr0, &comm, &mut prf_p2, &share);
+
+        assert_eq!(p1.0, p2.0, "com0 must match");
+        assert_eq!(p1.1, p2.1, "com1 must match");
+        assert_eq!(p1.4, p2.4, "wit0 must match");
+        assert_eq!(p1.5, p2.5, "wit1 must match");
+
+        // The witnesses are what the commitments were actually made with.
+        let (com0, com1, wz0, wz1, wit0, wit1) = p1;
+        let p = crate::utilities::utils::lsb(&share.f_label);
+        let (msg0, msg1) = if p == 0 { (wz0, wz1) } else { (wz1, wz0) };
+        assert!(comm.verify(&msg0, &wit0, &com0));
+        assert!(comm.verify(&msg1, &wit1, &com1));
+    }
 
     fn aes128_circuit() -> BinaryCircuit {
         prebuilt::decode(include_bytes!(concat!(

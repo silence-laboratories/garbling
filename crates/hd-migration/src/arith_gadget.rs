@@ -106,6 +106,9 @@ where
     G: Group + GroupEncoding,
     G::Scalar: PrimeField + ScalarFromBytes,
 {
+    // Internal precondition. `cvec` arrives from the garblers, so its length
+    // is checked against the local share count at the message boundary in
+    // `get_private_key_shares_dkg_create_msg2_p3` before this is reached.
     assert_eq!(cvec.len(), garbled_inputs.len());
 
     let eta = cvec.len();

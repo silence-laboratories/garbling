@@ -101,7 +101,9 @@ where
     R: Relay,
     H: HashFunction,
 {
-    assert_eq!(parent_key.len(), index_child.len());
+    if parent_key.len() != index_child.len() {
+        return Err(HardDerivationError::InvalidMessage);
+    }
 
     let batch_size = parent_key.len();
     let mut circuit_store = Vec::new();

@@ -10,7 +10,7 @@ use crate::{
     config::constants::B2Y_FUNC_MSG1,
     functionality::{
         utils::{
-            receive_from_parties, send_to_party, FilteredMsgRelay,
+            check_len, receive_from_parties, send_to_party, FilteredMsgRelay,
             FixedExternalSize, Wrap,
         },
         utils_dep::ProtocolError,
@@ -348,6 +348,8 @@ where
             let recv: Vec<B2YMsg1> =
                 receive_from_parties(setup, tag, &[0, 1], relay).await?;
 
+            check_len(recv.len(), 2)?;
+
             let msg1_p1 = &recv[0];
             let msg1_p2 = &recv[1];
 
@@ -438,6 +440,10 @@ where
         YaoSetup::E(_e) => {
             let recv: Vec<Vec<B2YMsg1>> =
                 receive_from_parties(setup, tag, &[0, 1], relay).await?;
+
+            check_len(recv.len(), 2)?;
+            check_len(recv[0].len(), batch_size)?;
+            check_len(recv[1].len(), batch_size)?;
 
             let msg1_p1 = &recv[0];
             let msg1_p2 = &recv[1];
