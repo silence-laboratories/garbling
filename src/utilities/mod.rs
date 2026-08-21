@@ -12,3 +12,5 @@ pub mod types;
 pub mod shahash;
 
 pub mod garble_hash;
+
+pub mod blake_garble_hash;

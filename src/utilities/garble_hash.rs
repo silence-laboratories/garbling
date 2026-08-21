@@ -108,8 +108,8 @@ impl HashFunction for AesGarbleHash {
     ///
     /// The function computes `H(H(x) ⊕ i) ⊕ H(x)`.
     fn tccr_hash(&self, x: &Block, i: &Block) -> Block {
-        let k = xor_blocks(&double_gf2_128_bytes(x), i);
-        xor_blocks(&self.get_hash(&k), &k)
+        let m = self.get_hash(x);
+        xor_blocks(&self.get_hash(&xor_blocks(&m, i)), &m)
     }
 
     /// Implementation of the `get_hash` function for a `AesGarbleHash`.
