@@ -8,7 +8,7 @@ mod phases;
 mod serde_types;
 
 use pasta_curves::pallas::Scalar;
-use rand::{RngCore, SeedableRng};
+use rand::RngCore;
 use rand_chacha::ChaCha8Rng;
 
 use garbled_circuit::functionality::utils_dep::ProtocolError;
@@ -45,21 +45,18 @@ pub struct Session {
     pending: Vec<Message>,
 }
 
-/// Derives delta from `prf_seed` and returns both delta and the PRF stream
-/// advanced past the bytes consumed for delta.
+/// Expands `prf_seed` into a free-XOR offset and an independent label PRF.
 ///
-/// Callers **must** use the returned `ChaCha8Rng` as the label generator,
-/// not a fresh `ChaCha8Rng::from_seed(prf_seed)`. Re-seeding would reset the
-/// stream to position 0 and re-emit the same bytes that became delta, letting
-/// an adversary recover delta from any pair of active labels.
+/// Uses [`garbled_circuit::functionality::setup::garbler_delta_and_prf`] so
+/// the session layer stays in lockstep with `setup_yao_functionality`.
 pub(crate) fn setup_delta_from_seed(
     prf_seed: [u8; 32],
 ) -> (SerializableBlock, ChaCha8Rng) {
-    let mut rng = ChaCha8Rng::from_seed(prf_seed);
-    let mut delta = [0u8; 16];
-    rng.fill_bytes(&mut delta);
-    delta[0] |= 1;
-    (SerializableBlock(delta), rng)
+    let (delta, prf) =
+        garbled_circuit::functionality::setup::garbler_delta_and_prf(
+            prf_seed,
+        );
+    (SerializableBlock(delta), prf)
 }
 
 pub(crate) fn prev_party(party_id: u8) -> u8 {
@@ -328,6 +325,29 @@ mod tests {
         let rivk = Option::<Scalar>::from(Scalar::from_repr(keys.rivk))
             .expect("session rivk should be canonical");
         (ask, nk, rivk)
+    }
+
+    #[test]
+    fn setup_delta_matches_shared_helper_and_avoids_label_overlap() {
+        use garbled_circuit::functionality::setup::garbler_delta_and_prf;
+        use rand::RngCore;
+
+        let prf_key = [0x5au8; 32];
+        let (session_delta, mut session_prf) = setup_delta_from_seed(prf_key);
+        let (core_delta, mut core_prf) = garbler_delta_and_prf(prf_key);
+        assert_eq!(session_delta.0, core_delta);
+
+        let mut session_first = [0u8; 16];
+        let mut core_first = [0u8; 16];
+        session_prf.fill_bytes(&mut session_first);
+        core_prf.fill_bytes(&mut core_first);
+        assert_eq!(session_first, core_first);
+
+        let (delta, mut prf) = setup_delta_from_seed(prf_key);
+        let _permute = prf.next_u32();
+        let mut label = [0u8; 16];
+        prf.fill_bytes(&mut label);
+        assert_ne!(&label[..12], &delta.0[4..]);
     }
 
     #[test]

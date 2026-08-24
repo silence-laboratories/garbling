@@ -491,8 +491,14 @@ mod tests {
         let secret = vec![0u8; crypto_box::KEY_SIZE];
         let public_keys = vec![0u8; 3 * crypto_box::KEY_SIZE];
         for threshold in [0u8, 1, 3] {
-            match Session::new(threshold, 0, secret.clone(), public_keys.clone(), None, None)
-            {
+            match Session::new(
+                threshold,
+                0,
+                secret.clone(),
+                public_keys.clone(),
+                None,
+                None,
+            ) {
                 Err(ProtocolError::InvalidMessage) => {}
                 other => panic!(
                     "threshold {threshold} should be rejected, got {:?}",
