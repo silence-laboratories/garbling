@@ -1,8 +1,6 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 use sha2::{Digest, Sha256};
 
 use garbled_circuit::functionality::utils_dep::ProtocolError;
@@ -68,10 +66,10 @@ impl Context {
         comm_crs: SerializableBlock,
         prf_seed: [u8; 32],
     ) {
-        let delta = super::setup_delta_from_seed(prf_seed);
+        let (delta, prf) = super::setup_delta_from_seed(prf_seed);
         self.yao_setup = Some(SerializableYaoSetup::Garbler {
             comm_crs,
-            prf: Box::new(ChaCha8Rng::from_seed(prf_seed)),
+            prf: Box::new(prf),
             delta,
             party_id: self.party_id,
         });
