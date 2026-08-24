@@ -127,11 +127,15 @@ where
 ///
 /// # Security
 ///
-/// The seed **must** be sampled uniformly at random and used for at most one
-/// derivation. Reusing it repeats `delta` and the Yao label stream, which lets
-/// an evaluator XOR labels from two runs and recover `delta` plus which input
-/// bits changed. Use [`run_derivation`] unless you need a deterministic seed
-/// (tests or replay).
+/// The seed **must** be sampled from a CSPRNG and used for at most one
+/// derivation. This function cannot detect reuse. Use [`run_derivation`]
+/// unless you need a deterministic seed (tests or replay).
+///
+/// Reusing a **garbler** seed repeats `delta` and the Yao label stream, which
+/// lets an evaluator XOR labels from two runs and recover `delta`.
+/// Reusing an **evaluator** seed still repeats CRS and common-randomness keys.
+/// The evaluator's input-bit pad is sampled from the OS RNG each run and is
+/// not derived from this seed.
 pub async fn run_derivation_with_seed<S, R>(
     setup: S,
     shamir_share: Scalar,

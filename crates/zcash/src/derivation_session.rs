@@ -99,11 +99,16 @@ impl Session {
     ///
     /// # Security
     ///
-    /// The seed **must** be sampled uniformly at random and used for at most
-    /// one session. Reusing a seed across derivations repeats `delta` and the
-    /// Yao label stream. An evaluator that sees two such runs can XOR active
-    /// labels wire-by-wire, recover `delta` from any wire whose input bit
-    /// differed, and learn which bits changed.
+    /// The seed **must** be sampled from a CSPRNG and used for at most one
+    /// session. This constructor cannot detect reuse.
+    ///
+    /// Reusing a **garbler** seed repeats `delta` and the Yao label stream. An
+    /// evaluator that sees two such runs can XOR active labels wire-by-wire
+    /// and recover `delta` from any wire whose input bit changed.
+    ///
+    /// Reusing an **evaluator** seed still repeats CRS and common-randomness
+    /// keys. The evaluator's input-bit pad is sampled from the OS RNG each
+    /// session and is not derived from this seed.
     pub fn new_with_seed(
         party_id: u8,
         shamir_share: Scalar,
