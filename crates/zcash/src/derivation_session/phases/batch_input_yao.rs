@@ -1,7 +1,7 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use rand::{RngCore, SeedableRng};
+use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use ff::PrimeField;
@@ -250,7 +250,7 @@ impl BatchInputYaoState {
         outgoing: &mut Vec<Message>,
         all_ip: Vec<bool>,
     ) -> Result<Phase, ProtocolError> {
-        let (msg1_to_p0, msg1_to_p1) = evaluator_bits(ctx, &all_ip);
+        let (msg1_to_p0, msg1_to_p1) = evaluator_bits(&all_ip);
         outgoing.push(Message {
             from: ctx.party_id(),
             to: 0,
@@ -292,13 +292,14 @@ fn all_input_bits(
         .collect())
 }
 
-fn evaluator_bits(ctx: &Context, input: &[bool]) -> (Vec<bool>, Vec<bool>) {
-    let mut rng =
-        ChaCha8Rng::from_seed(ctx.derive_32(b"batch-input/eval-bits", 0));
+fn evaluator_bits(input: &[bool]) -> (Vec<bool>, Vec<bool>) {
+    // Sampled independently of the session seed so a reused seed cannot
+    // repeat this one-time pad. Matches `run_batch_input_from_all_yao`.
+    let mut rng = rand::rngs::StdRng::from_entropy();
     let mut p0 = Vec::with_capacity(input.len());
     let mut p1 = Vec::with_capacity(input.len());
     for &bit in input {
-        let x0 = rng.next_u32() % 2 == 0;
+        let x0 = rng.gen_bool(0.5);
         p0.push(x0);
         p1.push(x0 ^ bit);
     }

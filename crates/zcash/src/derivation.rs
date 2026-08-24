@@ -104,6 +104,9 @@ where
     Ok((ask_i.to_vec(), nk_i.to_vec(), rivk_i.to_vec()))
 }
 
+/// Runs derivation, sampling a fresh 32-byte seed from the OS-backed RNG.
+///
+/// Prefer this over [`run_derivation_with_seed`] in production.
 pub async fn run_derivation<S, R>(
     setup: S,
     shamir_share: Scalar,
@@ -120,6 +123,19 @@ where
     run_derivation_with_seed(setup, shamir_share, relay, seed).await
 }
 
+/// Runs derivation from an explicit 32-byte seed.
+///
+/// # Security
+///
+/// The seed **must** be sampled from a CSPRNG and used for at most one
+/// derivation. This function cannot detect reuse. Use [`run_derivation`]
+/// unless you need a deterministic seed (tests or replay).
+///
+/// Reusing a **garbler** seed repeats `delta` and the Yao label stream, which
+/// lets an evaluator XOR labels from two runs and recover `delta`.
+/// Reusing an **evaluator** seed still repeats CRS and common-randomness keys.
+/// The evaluator's input-bit pad is sampled from the OS RNG each run and is
+/// not derived from this seed.
 pub async fn run_derivation_with_seed<S, R>(
     setup: S,
     shamir_share: Scalar,
