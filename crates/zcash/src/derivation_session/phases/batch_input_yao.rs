@@ -459,10 +459,17 @@ fn process_msg1<C: Commitment>(
 > {
     validate_msg1(p0, len)?;
     validate_msg1(p1, len)?;
+    if p0.com_i1_0 != p1.com_i1_0
+        || p0.com_i1_1 != p1.com_i1_1
+        || p0.com_i2_0 != p1.com_i2_0
+        || p0.com_i2_1 != p1.com_i2_1
+    {
+        return Err(ProtocolError::InconsistentMessage);
+    }
     let i1 = process_input_labels(
         comm,
-        &p0.com_i1_0,
-        &p0.com_i1_1,
+        &p1.com_i1_0,
+        &p1.com_i1_1,
         &p0.w,
         &p0.wit,
         len,
@@ -537,18 +544,25 @@ fn process_msg2<C: Commitment>(
     }
     validate_msg2(p0, len)?;
     validate_msg2(p1, len)?;
+    if p0.comm_1f != p1.comm_1f
+        || p0.comm_1t != p1.comm_1t
+        || p0.comm_2f != p1.comm_2f
+        || p0.comm_2t != p1.comm_2t
+    {
+        return Err(ProtocolError::InconsistentMessage);
+    }
 
     let mut out = Vec::with_capacity(len);
     for i in 0..len {
         let valid0 = if msg1_p0[i] {
-            comm.verify(&p0.w[i].0, &p0.wit[i].0, &p0.comm_1t[i].0)
+            comm.verify(&p0.w[i].0, &p0.wit[i].0, &p1.comm_1t[i].0)
         } else {
-            comm.verify(&p0.w[i].0, &p0.wit[i].0, &p0.comm_1f[i].0)
+            comm.verify(&p0.w[i].0, &p0.wit[i].0, &p1.comm_1f[i].0)
         };
         let valid1 = if msg1_p1[i] {
-            comm.verify(&p1.w[i].0, &p1.wit[i].0, &p1.comm_2t[i].0)
+            comm.verify(&p1.w[i].0, &p1.wit[i].0, &p0.comm_2t[i].0)
         } else {
-            comm.verify(&p1.w[i].0, &p1.wit[i].0, &p1.comm_2f[i].0)
+            comm.verify(&p1.w[i].0, &p1.wit[i].0, &p0.comm_2f[i].0)
         };
         if !valid0 || !valid1 {
             return Err(ProtocolError::InvalidMessage);
@@ -699,6 +713,30 @@ mod tests {
         msg2.comm_2t.pop();
         let err = validate_msg2(&msg2, INPUT_BITS).unwrap_err();
         assert!(matches!(err, ProtocolError::InvalidMessage));
+    }
+
+    fn dummy_comm() -> HashCommitment<AesHash> {
+        HashCommitment::new(AesHash::new([0u8; 16]))
+    }
+
+    #[test]
+    fn process_msg1_rejects_mismatched_garbler_commitments() {
+        let p0 = msg1_with_len(1);
+        let mut p1 = p0.clone();
+        p1.com_i1_0[0] = SerializableBlock([1; 16]);
+        let err = process_msg1(&dummy_comm(), &p0, &p1, 1).unwrap_err();
+        assert!(matches!(err, ProtocolError::InconsistentMessage));
+    }
+
+    #[test]
+    fn process_msg2_rejects_mismatched_garbler_commitments() {
+        let p0 = msg2_with_len(1);
+        let mut p1 = p0.clone();
+        p1.comm_1f[0] = SerializableBlock([1; 16]);
+        let err =
+            process_msg2(&dummy_comm(), &p0, &p1, 1, &[false], &[false])
+                .unwrap_err();
+        assert!(matches!(err, ProtocolError::InconsistentMessage));
     }
 
     #[test]
