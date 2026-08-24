@@ -74,7 +74,7 @@ impl SetupYaoState {
                     ) {
                         (0, 2, MessageBody::CommonRandomness(_)) => true,
                         (1, 0, MessageBody::CommonRandomness(_)) => true,
-                        (1, 0, MessageBody::SetupYao(SetupYaoMessage::PrfSeed(_))) => true,
+                        (1, 0, MessageBody::SetupYao(SetupYaoMessage::PrfSeed { .. })) => true,
                         _ => false,
                     };
 
@@ -92,12 +92,16 @@ impl SetupYaoState {
                 {
                     Ok(PhaseHandleResult::NotReady(message))
                 } else if message.from == 0 {
-                    let MessageBody::SetupYao(SetupYaoMessage::PrfSeed(
-                        prf_seed,
-                    )) = message.body
+                    let MessageBody::SetupYao(SetupYaoMessage::PrfSeed {
+                        seed: prf_seed,
+                        comm_crs: p0_comm_crs,
+                    }) = message.body
                     else {
                         return Err(ProtocolError::InvalidMessage);
                     };
+                    if p0_comm_crs != *comm_crs {
+                        return Err(ProtocolError::InconsistentMessage);
+                    }
                     ctx.setup_garbler(*comm_crs, prf_seed);
                     CommonRandomnessState::start(ctx, outgoing)
                         .map(|phase| PhaseHandleResult::Consumed(Some(phase)))
@@ -120,9 +124,10 @@ impl SetupYaoState {
                 outgoing.push(Message {
                     from: ctx.party_id(),
                     to: 1,
-                    body: MessageBody::SetupYao(SetupYaoMessage::PrfSeed(
-                        prf_seed,
-                    )),
+                    body: MessageBody::SetupYao(SetupYaoMessage::PrfSeed {
+                        seed: prf_seed,
+                        comm_crs,
+                    }),
                 });
                 ctx.setup_garbler(comm_crs, prf_seed);
                 CommonRandomnessState::start(ctx, outgoing)
@@ -198,7 +203,10 @@ mod tests {
         let message = Message {
             from: 0,
             to: 1,
-            body: MessageBody::SetupYao(SetupYaoMessage::PrfSeed([0; 32])),
+            body: MessageBody::SetupYao(SetupYaoMessage::PrfSeed {
+                seed: [0; 32],
+                comm_crs: SerializableBlock([0; 16]),
+            }),
         };
 
         let result = state
@@ -225,12 +233,37 @@ mod tests {
                 Message {
                     from: 2,
                     to: 1,
-                    body: MessageBody::SetupYao(SetupYaoMessage::PrfSeed(
-                        [0; 32],
-                    )),
+                    body: MessageBody::SetupYao(SetupYaoMessage::PrfSeed {
+                        seed: [0; 32],
+                        comm_crs: SerializableBlock([0; 16]),
+                    }),
                 },
             )
             .unwrap_err();
         assert!(matches!(err, ProtocolError::InvalidMessage));
+    }
+
+    #[test]
+    fn rejects_mismatched_comm_crs() {
+        let mut ctx = test_context(1);
+        let mut state = SetupYaoState::WaitPrf {
+            comm_crs: SerializableBlock([1; 16]),
+        };
+        let mut outgoing = Vec::new();
+        let err = state
+            .handle_message(
+                &mut ctx,
+                &mut outgoing,
+                Message {
+                    from: 0,
+                    to: 1,
+                    body: MessageBody::SetupYao(SetupYaoMessage::PrfSeed {
+                        seed: [0; 32],
+                        comm_crs: SerializableBlock([2; 16]),
+                    }),
+                },
+            )
+            .unwrap_err();
+        assert!(matches!(err, ProtocolError::InconsistentMessage));
     }
 }
