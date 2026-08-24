@@ -247,7 +247,6 @@ impl Session {
                         let (drv, drv_messages) = drv::Session::new(
                             self.party_id,
                             *share.shamir_share(),
-                            rand::random(),
                         )?;
                         self.phase = Phase::Derivation {
                             share,
