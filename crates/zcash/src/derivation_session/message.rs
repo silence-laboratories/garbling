@@ -56,7 +56,10 @@ pub(crate) enum MessageBody {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum SetupYaoMessage {
     CommCrs(SerializableBlock),
-    PrfSeed([u8; 32]),
+    PrfSeed {
+        seed: [u8; 32],
+        comm_crs: SerializableBlock,
+    },
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
