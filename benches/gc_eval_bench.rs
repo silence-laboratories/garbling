@@ -96,7 +96,8 @@ pub fn eval_aes256_benchmark(c: &mut Criterion) {
         b.iter(|| {
             let _ = evaluate_functionality::<YaoEvaluatorShare, _>(
                 &circuit, &ein, &gc, &hash,
-            );
+            )
+            .unwrap();
         })
     });
 
@@ -157,7 +158,8 @@ pub fn eval_aes128_benchmark(c: &mut Criterion) {
         b.iter(|| {
             let _ = evaluate_functionality::<YaoEvaluatorShare, _>(
                 &circuit, &ein, &gc, &hash,
-            );
+            )
+            .unwrap();
         })
     });
     group.finish();
@@ -216,7 +218,8 @@ pub fn eval_sha256_benchmark(c: &mut Criterion) {
         b.iter(|| {
             let _ = evaluate_functionality::<YaoEvaluatorShare, _>(
                 &circuit, &ein, &gc, &hash,
-            );
+            )
+            .unwrap();
         })
     });
     group.finish();

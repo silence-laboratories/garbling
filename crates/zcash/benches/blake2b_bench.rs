@@ -120,7 +120,8 @@ pub fn eval_blake2b_benchmark(c: &mut Criterion) {
         b.iter(|| {
             let _ = evaluate_functionality::<YaoEvaluatorShare, _>(
                 &circuit, &ein, &gc, &hash,
-            );
+            )
+            .unwrap();
         })
     });
     group.finish();

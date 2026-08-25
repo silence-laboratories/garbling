@@ -28,7 +28,7 @@ pub fn yao_circuit_eval_process_msg1_p2<H>(
     fs: &[Block],
     circuit: &BinaryCircuit,
     hash: &H,
-) -> HashMap<u32, YaoShare>
+) -> Result<HashMap<u32, YaoShare>, ProtocolError>
 where
     H: HashFunction,
 {
@@ -90,7 +90,7 @@ where
                 return Err(ProtocolError::InconsistentMessage);
             }
 
-            Ok(yao_circuit_eval_process_msg1_p2(input, &fs, circuit, hash))
+            Ok(yao_circuit_eval_process_msg1_p2(input, &fs, circuit, hash)?)
         }
 
         YaoSetup::G(g) => {
@@ -153,7 +153,7 @@ where
 
                     output.push(yao_circuit_eval_process_msg1_p2(
                         input, &fs, circuit, hash,
-                    ));
+                    )?);
                 }
 
                 MapArg::Vector(input) => {
@@ -184,7 +184,7 @@ where
                                 i, f, circuit, hash,
                             )
                         })
-                        .collect();
+                        .collect::<Result<Vec<_>, _>>()?;
                 }
             },
 
@@ -212,15 +212,17 @@ where
                         .map(|circuit| {
                             let complen = 2 * circuit.num_nonfree_gates()
                                 + circuit.num_constant_gates();
-                            let f = &fs[len..len + complen];
+                            let f = fs
+                                .get(len..len + complen)
+                                .ok_or(ProtocolError::InvalidLength)?;
                             let out = yao_circuit_eval_process_msg1_p2(
                                 input, f, circuit, hash,
-                            );
+                            )?;
                             len += complen;
 
-                            out
+                            Ok::<_, ProtocolError>(out)
                         })
-                        .collect();
+                        .collect::<Result<Vec<_>, _>>()?;
                 }
 
                 &MapArg::Vector(input) => {
@@ -251,15 +253,17 @@ where
                         .map(|(circuit, ip)| {
                             let complen = 2 * circuit.num_nonfree_gates()
                                 + circuit.num_constant_gates();
-                            let f = &fs[len..len + complen];
+                            let f = fs
+                                .get(len..len + complen)
+                                .ok_or(ProtocolError::InvalidLength)?;
                             let out = yao_circuit_eval_process_msg1_p2(
                                 ip, f, circuit, hash,
-                            );
+                            )?;
                             len += complen;
 
-                            out
+                            Ok::<_, ProtocolError>(out)
                         })
-                        .collect();
+                        .collect::<Result<Vec<_>, _>>()?;
                 }
             },
         },
