@@ -19,6 +19,9 @@ pub enum FileParsingError {
     /// # Fields
     /// - `0`: The line number where the formatting issue occurred.
     FileFormatError(usize),
+
+    /// Declared circuit dimensions exceed the allowed maximum (DoS protection).
+    CircuitTooLarge,
 }
 
 /// Implements conversion from `std::io::Error` to `FileParsingError`,
