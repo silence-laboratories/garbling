@@ -11,6 +11,16 @@ use garbled_circuit::functionality::{
     utils::FilteredMsgRelay, utils_dep::ProtocolError,
 };
 
+/// Decode a peer-supplied Pallas scalar encoding.
+///
+/// Non-canonical encodings must not panic: return [`ProtocolError::InvalidShare`].
+fn scalar_from_canonical_repr(
+    bytes: [u8; 32],
+) -> Result<Scalar, ProtocolError> {
+    Option::<Scalar>::from(Scalar::from_repr(bytes))
+        .ok_or(ProtocolError::InvalidShare)
+}
+
 /// Function to reconstruct a shamir shared Scalar value to all parties
 pub async fn run_reconstruct_pallas_shamir<
     R: Relay,
@@ -39,15 +49,32 @@ pub async fn run_reconstruct_pallas_shamir<
     let shares_recv_p: [u8; 32] =
         receive_from_one_party(setup, tag2, prev_party, relay).await?;
 
-    let share_prev = &Scalar::from_repr(shares_recv_p).unwrap();
-    let share_next = &Scalar::from_repr(shares_recv_n).unwrap();
+    let share_prev = scalar_from_canonical_repr(shares_recv_p)?;
+    let share_next = scalar_from_canonical_repr(shares_recv_n)?;
 
     reconstruct_shamir_share(
         *share,
-        *share_next,
-        *share_prev,
+        share_next,
+        share_prev,
         [Scalar::from(1), Scalar::from(2), Scalar::from(3)],
         my_party_id,
     )
     .ok_or(ProtocolError::VerificationError)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_non_canonical_scalar_encoding() {
+        let err = scalar_from_canonical_repr([0xff; 32]).unwrap_err();
+        assert!(matches!(err, ProtocolError::InvalidShare));
+    }
+
+    #[test]
+    fn accepts_canonical_scalar_encoding() {
+        let s = Scalar::from(7u64);
+        assert_eq!(scalar_from_canonical_repr(s.to_repr()).unwrap(), s);
+    }
 }
