@@ -607,6 +607,7 @@ dependencies = [
  "signature",
  "sl-compute-common",
  "sl-messages",
+ "subtle",
  "thiserror",
  "tokio",
 ]
