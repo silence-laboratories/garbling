@@ -23,6 +23,7 @@ pub const OUTPUT_YAO_TO_FUNC_MSG1: u32 = 206;
 
 pub const SETUP_YAO_FUNC_MSG1: u32 = 207;
 pub const SETUP_YAO_FUNC_MSG2: u32 = 208;
+pub const SETUP_YAO_FUNC_MSG3: u32 = 219;
 
 pub const YAO_CIRC_EVAL_FUNC_MSG1: u32 = 209;
 pub const YAO_CIRC_EVAL_FUNC_MSG2: u32 = 210;

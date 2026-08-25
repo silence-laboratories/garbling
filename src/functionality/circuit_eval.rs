@@ -476,12 +476,12 @@ mod tests {
 
         let (hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
-                let hash = AesGarbleHash::new(e.comm_crs);
+                let hash = AesGarbleHash::new(e.garble_key);
                 let comm = HashCommitment::new(Sha512Hash::new());
                 (hash, comm)
             }
             YaoSetup::G(g) => {
-                let hash = AesGarbleHash::new(g.comm_crs);
+                let hash = AesGarbleHash::new(g.garble_key);
                 let comm = HashCommitment::new(Sha512Hash::new());
                 (hash, comm)
             }
@@ -840,12 +840,12 @@ mod tests {
 
         let (hash, comm) = match &yao_setup {
             YaoSetup::E(e) => {
-                let hash = AesGarbleHash::new(e.comm_crs);
+                let hash = AesGarbleHash::new(e.garble_key);
                 let comm = HashCommitment::new(Sha512Hash::new());
                 (hash, comm)
             }
             YaoSetup::G(g) => {
-                let hash = AesGarbleHash::new(g.comm_crs);
+                let hash = AesGarbleHash::new(g.garble_key);
                 let comm = HashCommitment::new(Sha512Hash::new());
                 (hash, comm)
             }

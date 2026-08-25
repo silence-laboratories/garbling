@@ -150,6 +150,7 @@ mod tests {
 
         let mut setup = GarblerSetup {
             comm_crs: Block::default(),
+            garble_key: Block::default(),
             prf: ChaCha8Rng::from_seed([0; 32]),
             delta: Block::default(),
             party_id: 0,
@@ -189,6 +190,7 @@ mod tests {
 
         let mut setup = GarblerSetup {
             comm_crs: Block::default(),
+            garble_key: Block::default(),
             prf: ChaCha8Rng::from_seed([0; 32]),
             delta: Block::default(),
             party_id: 0,

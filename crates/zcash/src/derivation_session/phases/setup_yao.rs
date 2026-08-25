@@ -16,6 +16,7 @@ use crate::derivation_session::{
 pub(crate) enum SetupYaoState {
     WaitCrs,
     WaitPrf { comm_crs: SerializableBlock },
+    WaitGarbleKey { comm_crs: SerializableBlock },
 }
 
 impl SetupYaoState {
@@ -35,9 +36,9 @@ impl SetupYaoState {
                         ),
                     });
                 }
-                ctx.yao_setup =
-                    Some(SerializableYaoSetup::Evaluator { comm_crs });
-                CommonRandomnessState::start(ctx, outgoing)
+                Ok(Phase::SetupYao(SetupYaoState::WaitGarbleKey {
+                    comm_crs,
+                }))
             }
             0 | 1 => Ok(Phase::SetupYao(SetupYaoState::WaitCrs)),
             _ => Err(ProtocolError::InvalidMessage),
@@ -109,6 +110,29 @@ impl SetupYaoState {
                     Err(ProtocolError::InvalidMessage)
                 }
             }
+            SetupYaoState::WaitGarbleKey { comm_crs } => {
+                if matches!(message.body, MessageBody::CommonRandomness(_))
+                    && ctx.party_id() == 2
+                    && message.from == 1
+                {
+                    Ok(PhaseHandleResult::NotReady(message))
+                } else if message.from == 0 {
+                    let MessageBody::SetupYao(SetupYaoMessage::GarbleKey(
+                        garble_key,
+                    )) = message.body
+                    else {
+                        return Err(ProtocolError::InvalidMessage);
+                    };
+                    ctx.yao_setup = Some(SerializableYaoSetup::Evaluator {
+                        comm_crs: *comm_crs,
+                        garble_key,
+                    });
+                    CommonRandomnessState::start(ctx, outgoing)
+                        .map(|phase| PhaseHandleResult::Consumed(Some(phase)))
+                } else {
+                    Err(ProtocolError::InvalidMessage)
+                }
+            }
         }
     }
 
@@ -129,7 +153,14 @@ impl SetupYaoState {
                         comm_crs,
                     }),
                 });
-                ctx.setup_garbler(comm_crs, prf_seed);
+                let garble_key = ctx.setup_garbler(comm_crs, prf_seed);
+                outgoing.push(Message {
+                    from: ctx.party_id(),
+                    to: 2,
+                    body: MessageBody::SetupYao(SetupYaoMessage::GarbleKey(
+                        garble_key,
+                    )),
+                });
                 CommonRandomnessState::start(ctx, outgoing)
             }
             1 => Ok(Phase::SetupYao(SetupYaoState::WaitPrf { comm_crs })),
@@ -265,5 +296,81 @@ mod tests {
             )
             .unwrap_err();
         assert!(matches!(err, ProtocolError::InconsistentMessage));
+    }
+
+    #[test]
+    fn party_zero_sends_garble_key_after_crs() {
+        let mut ctx = test_context(0);
+        let mut state = SetupYaoState::WaitCrs;
+        let mut outgoing = Vec::new();
+        let comm_crs = SerializableBlock([9; 16]);
+        state
+            .handle_message(
+                &mut ctx,
+                &mut outgoing,
+                Message {
+                    from: 2,
+                    to: 0,
+                    body: MessageBody::SetupYao(SetupYaoMessage::CommCrs(
+                        comm_crs,
+                    )),
+                },
+            )
+            .unwrap();
+
+        assert!(matches!(
+            outgoing[0].body,
+            MessageBody::SetupYao(SetupYaoMessage::PrfSeed { .. })
+        ));
+        assert!(matches!(
+            outgoing[1].body,
+            MessageBody::SetupYao(SetupYaoMessage::GarbleKey(_))
+        ));
+        let Some(SerializableYaoSetup::Garbler {
+            garble_key,
+            comm_crs: stored_crs,
+            ..
+        }) = &ctx.yao_setup
+        else {
+            panic!("expected garbler setup");
+        };
+        assert_eq!(*stored_crs, comm_crs);
+        let MessageBody::SetupYao(SetupYaoMessage::GarbleKey(sent)) =
+            &outgoing[1].body
+        else {
+            unreachable!();
+        };
+        assert_eq!(sent, garble_key);
+    }
+
+    #[test]
+    fn evaluator_stores_garble_key() {
+        let mut ctx = test_context(2);
+        let mut state = SetupYaoState::WaitGarbleKey {
+            comm_crs: SerializableBlock([3; 16]),
+        };
+        let mut outgoing = Vec::new();
+        let garble_key = SerializableBlock([4; 16]);
+        state
+            .handle_message(
+                &mut ctx,
+                &mut outgoing,
+                Message {
+                    from: 0,
+                    to: 2,
+                    body: MessageBody::SetupYao(SetupYaoMessage::GarbleKey(
+                        garble_key,
+                    )),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            ctx.yao_setup,
+            Some(SerializableYaoSetup::Evaluator {
+                comm_crs: SerializableBlock([3; 16]),
+                garble_key,
+            })
+        );
     }
 }

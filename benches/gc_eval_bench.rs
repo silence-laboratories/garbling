@@ -85,6 +85,7 @@ pub fn eval_aes256_benchmark(c: &mut Criterion) {
         &mut GarblerSetup {
             delta,
             comm_crs: Block::default(),
+            garble_key: Block::default(),
             prf: ChaCha8Rng::from_seed([0; 32]),
             party_id: 0,
         },
@@ -147,6 +148,7 @@ pub fn eval_aes128_benchmark(c: &mut Criterion) {
             delta,
             prf: ChaCha8Rng::from_seed([0; 32]),
             comm_crs: Block::default(),
+            garble_key: Block::default(),
             party_id: 0,
         },
         &hash,
@@ -204,6 +206,7 @@ pub fn eval_sha256_benchmark(c: &mut Criterion) {
         &mut GarblerSetup {
             delta,
             comm_crs: Block::default(),
+            garble_key: Block::default(),
             prf: ChaCha8Rng::from_seed([0; 32]),
             party_id: 0,
         },
