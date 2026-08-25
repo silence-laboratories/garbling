@@ -97,6 +97,13 @@ pub struct BinaryCircuit {
 const COMPACT_MAGIC: [u8; 4] = *b"GCB1";
 const COMPACT_VERSION: u16 = 2;
 
+/// Upper bounds for untrusted Bristol Fashion text. Sized for large hash
+/// circuits (e.g. SHA-512) while rejecting attacker-chosen `usize::MAX`
+/// allocations.
+const MAX_BRISTOL_GATES: usize = 2_000_000;
+const MAX_BRISTOL_WIRES: u32 = 2_000_000;
+const MAX_BRISTOL_INPUT_GROUPS: usize = 64;
+
 const TAG_INPUT: u8 = 0;
 const TAG_CONST_FALSE: u8 = 1;
 const TAG_CONST_TRUE: u8 = 2;
@@ -171,8 +178,9 @@ impl BinaryCircuit {
     ///
     /// # Returns
     /// * `Ok(Self)` if parsing succeeds.
-    /// * `Err(FileParsingError)` if the input is missing required sections or a
-    ///   gate line cannot be decoded.
+    /// * `Err(FileParsingError)` if the input is missing required sections, a
+    ///   gate line cannot be decoded, dimensions exceed the allowed maximum,
+    ///   or a wire index is out of range.
     pub fn parse(file: &str) -> Result<Self, FileParsingError> {
         let mut reader = file.lines();
 
@@ -180,29 +188,47 @@ impl BinaryCircuit {
             .next()
             .map(|line1| line1.split_whitespace())
             .and_then(|mut parts| {
-                let num_gates = parts.next().and_then(|s| s.parse().ok())?;
-                let num_wires = parts.next().and_then(|s| s.parse().ok())?;
+                let num_gates: usize =
+                    parts.next().and_then(|s| s.parse().ok())?;
+                let num_wires: u32 =
+                    parts.next().and_then(|s| s.parse().ok())?;
 
                 Some((num_gates, num_wires))
             })
             .ok_or(FileParsingError::InputNoParsingError)?;
 
+        if num_gates > MAX_BRISTOL_GATES || num_wires > MAX_BRISTOL_WIRES {
+            return Err(FileParsingError::CircuitTooLarge);
+        }
+
         let input_sizes = reader
             .next()
             .map(|line| line.split_whitespace())
             .and_then(|mut parts| {
-                let num_inp_wires =
+                let num_inp_wires: usize =
                     parts.next().and_then(|s| s.parse().ok())?;
+                if num_inp_wires > MAX_BRISTOL_INPUT_GROUPS {
+                    return None;
+                }
                 let mut input_sizes = Vec::with_capacity(num_inp_wires);
                 for _ in 0..num_inp_wires {
-                    let num_iplen =
+                    let num_iplen: u32 =
                         parts.next().and_then(|s| s.parse().ok())?;
+                    if num_iplen > num_wires {
+                        return None;
+                    }
                     input_sizes.push(num_iplen);
                 }
 
                 Some(input_sizes)
             })
             .ok_or(FileParsingError::InputNoParsingError)?;
+
+        let total_input_wires: u32 = input_sizes.iter().try_fold(
+            0u32,
+            |acc, &w| acc.checked_add(w),
+        )
+        .ok_or(FileParsingError::CircuitTooLarge)?;
 
         let num_outputs = reader
             .next()
@@ -217,17 +243,34 @@ impl BinaryCircuit {
             })
             .ok_or(FileParsingError::InputNoParsingError)?;
 
-        let mut gates = Vec::with_capacity(num_gates);
+        if num_outputs > num_wires {
+            return Err(FileParsingError::FileFormatError(0));
+        }
+
+        let total_gates = (total_input_wires as usize)
+            .checked_add(num_gates)
+            .ok_or(FileParsingError::CircuitTooLarge)?;
+        if total_gates > MAX_BRISTOL_GATES {
+            return Err(FileParsingError::CircuitTooLarge);
+        }
+
+        let mut gates = Vec::with_capacity(total_gates);
         let num_inputs = input_sizes.len() as u32;
         let mut input_gate_ids = Vec::with_capacity(input_sizes.len());
+        let output_base = num_wires
+            .checked_sub(num_outputs)
+            .ok_or(FileParsingError::FileFormatError(0))?;
         let output_gate_ids = (0..num_outputs)
-            .map(|i| num_wires - num_outputs + i)
+            .map(|i| output_base + i)
             .collect();
 
-        let mut totalcount = 0;
+        let mut totalcount = 0u32;
         for (ipcnt, &width) in input_sizes.iter().enumerate() {
             let mut ids = Vec::with_capacity(width as usize);
             for id in 0..width {
+                if totalcount >= num_wires {
+                    return Err(FileParsingError::FileFormatError(0));
+                }
                 gates.push(BinaryGate::Input {
                     no: ipcnt as u32,
                     id,
@@ -250,15 +293,24 @@ impl BinaryCircuit {
                         parts.next().and_then(|s| s.parse().ok())?;
                     let _num_output: u32 =
                         parts.next().and_then(|s| s.parse().ok())?;
-                    let input0 = parts.next().and_then(|s| s.parse().ok())?;
+                    let input0: u32 =
+                        parts.next().and_then(|s| s.parse().ok())?;
 
-                    let input1 = if num_input == 2 {
+                    let input1: u32 = if num_input == 2 {
                         parts.next().and_then(|s| s.parse().ok())?
                     } else {
                         0
                     };
 
-                    let output = parts.next().and_then(|s| s.parse().ok())?;
+                    let output: u32 =
+                        parts.next().and_then(|s| s.parse().ok())?;
+
+                    if input0 >= num_wires
+                        || output >= num_wires
+                        || (num_input == 2 && input1 >= num_wires)
+                    {
+                        return None;
+                    }
 
                     Some(match parts.next()? {
                         "AND" => {
@@ -1043,6 +1095,32 @@ mod tests {
         };
 
         assert_eq!(required_circuit, circuit.unwrap());
+    }
+
+    #[test]
+    fn parse_rejects_oversized_header() {
+        let err = BinaryCircuit::parse("2000001 10\n1 1\n1 1\n").unwrap_err();
+        assert!(matches!(err, crate::config::errors::FileParsingError::CircuitTooLarge));
+    }
+
+    #[test]
+    fn parse_rejects_more_outputs_than_wires() {
+        let err = BinaryCircuit::parse("0 1\n1 1\n1 2\n").unwrap_err();
+        assert!(matches!(
+            err,
+            crate::config::errors::FileParsingError::FileFormatError(_)
+        ));
+    }
+
+    #[test]
+    fn parse_rejects_out_of_range_wire() {
+        // 1 gate, 2 wires, 1 input width 1 → wire 0 is input; XOR refs wire 99
+        let src = "1 2\n1 1\n1 1\n2 1 0 99 1 XOR\n";
+        let err = BinaryCircuit::parse(src).unwrap_err();
+        assert!(matches!(
+            err,
+            crate::config::errors::FileParsingError::FileFormatError(_)
+        ));
     }
 
     fn assert_prebuilt_matches_parse(bytes: &[u8], source: &str) {
