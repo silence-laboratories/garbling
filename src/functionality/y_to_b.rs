@@ -22,7 +22,7 @@ use crate::{
         types::{
             Block, GarblerSetup, YaoGarblerShare, YaoSetup, YaoShare, ZBLOCK,
         },
-        utils::{lsb, xor_blocks},
+        utils::{label_in_pair, lsb, xor_blocks},
     },
 };
 
@@ -141,14 +141,11 @@ where
                 let wxz: Block =
                     receive_from_one_party(setup, tag3, 2, relay).await?;
 
-                let val1 = wxz == wz0;
-                let val2 = wxz == wz1;
-
                 if g.delta != garbler_share.delta {
                     return Err(ProtocolError::InvalidShare);
                 }
 
-                if !(val1 || val2) {
+                if !label_in_pair(&wxz, &wz0, &wz1) {
                     return Err(ProtocolError::InvalidShare);
                 }
 
@@ -316,10 +313,7 @@ where
                     .zip(&wz0s)
                     .zip(&wz1s)
                     .map(|((((share, wxz), wr0s_i), wz0s_i), wz1s_i)| {
-                        let val1 = wxz == wz0s_i;
-                        let val2 = wxz == wz1s_i;
-
-                        if !(val1 || val2) {
+                        if !label_in_pair(wxz, wz0s_i, wz1s_i) {
                             return Err(ProtocolError::InvalidShare);
                         }
 
