@@ -92,7 +92,7 @@ impl CircuitEvalState {
         let hash = AesHash::new(ctx.garble_key()?.0);
         let yao_inputs = to_yao_inputs(&self.inputs);
         let output: HashMap<u32, YaoShare> =
-            evaluate_functionality(&circuit, &yao_inputs, &f, &hash);
+            evaluate_functionality(&circuit, &yao_inputs, &f, &hash)?;
         OutputVerificationState::start(ctx, outgoing, output)
             .map(|phase| PhaseHandleResult::Consumed(Some(phase)))
     }

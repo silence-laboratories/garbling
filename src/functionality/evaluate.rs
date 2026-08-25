@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use crate::{
     circuit::{BinaryCircuit, BinaryGate},
+    functionality::utils_dep::ProtocolError,
     utilities::{
         hash_function::HashFunction,
         types::{Block, YaoEvaluatorShare, YaoShare, ZBLOCK},
@@ -17,7 +18,7 @@ pub fn evaluate_functionality<T, H>(
     input_encoding_shares: &[Vec<YaoShare>],
     f: &[Block],
     hash: &H,
-) -> HashMap<u32, T>
+) -> Result<HashMap<u32, T>, ProtocolError>
 where
     H: HashFunction,
     T: From<YaoEvaluatorShare>,
@@ -28,20 +29,26 @@ where
     for (i, gate) in circuit.gates().iter().enumerate() {
         let (out_gate, f_label) = match *gate {
             BinaryGate::Input { no, id, wire } => {
-                let share = input_encoding_shares[no as usize][id as usize]
+                let share = input_encoding_shares
+                    .get(no as usize)
+                    .and_then(|v| v.get(id as usize))
+                    .ok_or(ProtocolError::InvalidLength)?
                     .as_evaluator();
                 (wire, share.label)
             }
 
             BinaryGate::Constant { val: _, wire } => {
-                let op_label = f[f_index];
+                let op_label =
+                    *f.get(f_index).ok_or(ProtocolError::InvalidLength)?;
                 f_index += 1;
                 (wire, op_label)
             }
 
             BinaryGate::Xor { xid, yid, out } => {
-                let x_label = &w[xid as usize];
-                let y_label = &w[yid as usize];
+                let x_label =
+                    w.get(xid as usize).ok_or(ProtocolError::InvalidLength)?;
+                let y_label =
+                    w.get(yid as usize).ok_or(ProtocolError::InvalidLength)?;
                 (out, xor_blocks(x_label, y_label))
             }
 
@@ -51,8 +58,10 @@ where
                 id: _,
                 out,
             } => {
-                let x_label = &w[xid as usize];
-                let y_label = &w[yid as usize];
+                let x_label =
+                    w.get(xid as usize).ok_or(ProtocolError::InvalidLength)?;
+                let y_label =
+                    w.get(yid as usize).ok_or(ProtocolError::InvalidLength)?;
 
                 let k0 = (2 * i) as u128;
                 let k1 = (2 * i + 1) as u128;
@@ -62,9 +71,11 @@ where
                 let sx = lsb(x_label);
                 let sy = lsb(y_label);
 
-                let g0 = &f[f_index];
+                let g0 =
+                    f.get(f_index).ok_or(ProtocolError::InvalidLength)?;
                 f_index += 1;
-                let g1 = &f[f_index];
+                let g1 =
+                    f.get(f_index).ok_or(ProtocolError::InvalidLength)?;
                 f_index += 1;
 
                 let w_out_p1 = hash.tccr_hash(x_label, &k0_bytes);
@@ -86,20 +97,60 @@ where
             }
 
             BinaryGate::Inv { xid, out } => {
-                let x_label = w[xid as usize];
+                let x_label =
+                    *w.get(xid as usize).ok_or(ProtocolError::InvalidLength)?;
                 (out, x_label)
             }
         };
 
-        w[out_gate as usize] = f_label;
+        *w.get_mut(out_gate as usize)
+            .ok_or(ProtocolError::InvalidLength)? = f_label;
     }
 
     circuit
         .get_output_gate_ids()
         .iter()
         .map(|&r| {
-            let label = w[r as usize];
-            (r, T::from(YaoEvaluatorShare { label }))
+            let label =
+                *w.get(r as usize).ok_or(ProtocolError::InvalidLength)?;
+            Ok((r, T::from(YaoEvaluatorShare { label })))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utilities::hash_function::AesHash;
+
+    #[test]
+    fn rejects_short_garbled_tables() {
+        let circuit =
+            BinaryCircuit::parse("1 3\n2 1 1\n1 1\n2 1 0 1 2 AND\n").unwrap();
+        let hash = AesHash::new([0; 16]);
+        let inputs = vec![
+            vec![YaoShare::E(YaoEvaluatorShare { label: [1; 16] })],
+            vec![YaoShare::E(YaoEvaluatorShare { label: [2; 16] })],
+        ];
+        let err = evaluate_functionality::<YaoEvaluatorShare, _>(
+            &circuit, &inputs, &[], &hash,
+        )
+        .unwrap_err();
+        assert!(matches!(err, ProtocolError::InvalidLength));
+    }
+
+    #[test]
+    fn rejects_missing_input_share() {
+        let circuit =
+            BinaryCircuit::parse("1 3\n2 1 1\n1 1\n2 1 0 1 2 AND\n").unwrap();
+        let hash = AesHash::new([0; 16]);
+        let err = evaluate_functionality::<YaoEvaluatorShare, _>(
+            &circuit,
+            &[],
+            &[[0; 16], [0; 16]],
+            &hash,
+        )
+        .unwrap_err();
+        assert!(matches!(err, ProtocolError::InvalidLength));
+    }
 }
