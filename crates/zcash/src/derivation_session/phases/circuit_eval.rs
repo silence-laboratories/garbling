@@ -89,7 +89,7 @@ impl CircuitEvalState {
             return Err(ProtocolError::InconsistentMessage);
         }
         let circuit = build_zcash_import_function();
-        let hash = AesHash::new(ctx.comm_crs()?.0);
+        let hash = AesHash::new(ctx.garble_key()?.0);
         let yao_inputs = to_yao_inputs(&self.inputs);
         let output: HashMap<u32, YaoShare> =
             evaluate_functionality(&circuit, &yao_inputs, &f, &hash);
@@ -112,7 +112,7 @@ fn garble_or_hash(
         .as_garbler_mut()
         .ok_or(ProtocolError::InvalidMessage)?;
     let circuit = build_zcash_import_function();
-    let hash = AesHash::new(ctx.comm_crs()?.0);
+    let hash = AesHash::new(ctx.garble_key()?.0);
     let yao_inputs = to_yao_inputs(inputs);
     let (f, out): (Vec<_>, HashMap<_, YaoShare>) =
         garble_functionality(&circuit, &yao_inputs, g, &hash);

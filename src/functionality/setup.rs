@@ -8,7 +8,9 @@ use rand_chacha::ChaCha8Rng;
 use sl_messages::{relay::Relay, setup::ProtocolParticipant};
 
 use crate::{
-    config::constants::{SETUP_YAO_FUNC_MSG1, SETUP_YAO_FUNC_MSG2},
+    config::constants::{
+        SETUP_YAO_FUNC_MSG1, SETUP_YAO_FUNC_MSG2, SETUP_YAO_FUNC_MSG3,
+    },
     functionality::{
         utils::{receive_from_one_party, send_to_party, FilteredMsgRelay},
         utils_dep::ProtocolError,
@@ -20,22 +22,27 @@ use crate::{
     },
 };
 
-/// Expands a shared PRF key into an independent free-XOR offset and label stream.
+/// Expands a shared PRF key into free-XOR offset, label stream, and garble key.
 ///
-/// Delta and wire labels must not share ChaCha8 keystream. The input key is
-/// stretched into two 32-byte seeds: one for `delta`, one for the stored PRF.
-pub fn garbler_delta_and_prf(prf_key: [u8; 32]) -> (Block, ChaCha8Rng) {
+/// Delta, wire labels, and the circuit-garbling hash key must not share
+/// ChaCha8 keystream. The input key is stretched into three 32-byte seeds.
+pub fn garbler_delta_and_prf(prf_key: [u8; 32]) -> (Block, ChaCha8Rng, Block) {
     let mut kdf = ChaCha8Rng::from_seed(prf_key);
     let mut delta_seed = [0u8; 32];
     let mut label_seed = [0u8; 32];
+    let mut garble_seed = [0u8; 32];
     kdf.fill_bytes(&mut delta_seed);
     kdf.fill_bytes(&mut label_seed);
+    kdf.fill_bytes(&mut garble_seed);
 
     let mut delta = Block::default();
     ChaCha8Rng::from_seed(delta_seed).fill_bytes(&mut delta);
     delta[0] |= 1;
 
-    (delta, ChaCha8Rng::from_seed(label_seed))
+    let mut garble_key = Block::default();
+    garble_key.copy_from_slice(&garble_seed[..16]);
+
+    (delta, ChaCha8Rng::from_seed(label_seed), garble_key)
 }
 
 pub async fn setup_yao_functionality<T, R>(
@@ -48,6 +55,7 @@ where
 {
     let tag1 = relay.next_tag(SETUP_YAO_FUNC_MSG1);
     let tag2 = relay.next_tag(SETUP_YAO_FUNC_MSG2);
+    let tag3 = relay.next_tag(SETUP_YAO_FUNC_MSG3);
 
     let party_id = setup.participant_index();
     let mut rng = rand::rngs::StdRng::from_entropy();
@@ -58,7 +66,13 @@ where
         send_to_party(setup, tag1, &crs, 0, relay).await?;
         send_to_party(setup, tag1, &crs, 1, relay).await?;
 
-        Ok(YaoSetup::E(EvaluatorSetup { comm_crs: crs }))
+        let garble_key: Block =
+            receive_from_one_party(setup, tag3, 0, relay).await?;
+
+        Ok(YaoSetup::E(EvaluatorSetup {
+            comm_crs: crs,
+            garble_key,
+        }))
     } else {
         let comm_crs = receive_from_one_party(setup, tag1, 2, relay).await?;
 
@@ -75,10 +89,15 @@ where
             seed
         };
 
-        let (delta, prf) = garbler_delta_and_prf(prf_key);
+        let (delta, prf, garble_key) = garbler_delta_and_prf(prf_key);
+
+        if party_id == 0 {
+            send_to_party(setup, tag3, &garble_key, 2, relay).await?;
+        }
 
         Ok(YaoSetup::G(GarblerSetup {
             comm_crs,
+            garble_key,
             prf,
             delta,
             party_id,
@@ -95,12 +114,8 @@ where
     R: Relay,
 {
     let yao_setup = setup_yao_functionality(setup, relay).await?;
-    let comm_crs = match &yao_setup {
-        YaoSetup::E(e) => e.comm_crs,
-        YaoSetup::G(g) => g.comm_crs,
-    };
-    let hash = AesHash::new(comm_crs);
-    let comm = HashCommitment::new(hash);
+    let hash = AesHash::new(yao_setup.garble_key());
+    let comm = HashCommitment::new(AesHash::new(yao_setup.comm_crs()));
 
     Ok((yao_setup, hash, comm))
 }
@@ -128,7 +143,7 @@ mod tests {
     }
 
     fn first_input_label(prf_key: [u8; 32]) -> (Block, Block) {
-        let (delta, mut prf) = garbler_delta_and_prf(prf_key);
+        let (delta, mut prf, _) = garbler_delta_and_prf(prf_key);
         let _permute = prf.next_u32();
         let mut label = Block::default();
         prf.fill_bytes(&mut label);
@@ -145,11 +160,13 @@ mod tests {
     #[test]
     fn first_prf_block_is_independent_of_delta() {
         let prf_key = [0x5au8; 32];
-        let (delta, mut prf) = garbler_delta_and_prf(prf_key);
+        let (delta, mut prf, garble_key) = garbler_delta_and_prf(prf_key);
 
         let mut first_block = Block::default();
         prf.fill_bytes(&mut first_block);
         assert_ne!(first_block, delta);
+        assert_ne!(garble_key, delta);
+        assert_ne!(garble_key, first_block);
 
         let (delta, label) = first_input_label(prf_key);
         assert_ne!(&label[..12], &delta[4..]);
@@ -162,5 +179,15 @@ mod tests {
                 "12-byte window of delta at offset {offset} leaked into the first label"
             );
         }
+    }
+
+    #[test]
+    fn garble_key_is_independent_of_comm_crs_style_seed() {
+        // Same PRF key always yields the same garble key; it must not equal an
+        // unrelated evaluator CRS block used only for commitments.
+        let prf_key = [0x5au8; 32];
+        let (_, _, garble_key) = garbler_delta_and_prf(prf_key);
+        let comm_crs = [0x11u8; 16];
+        assert_ne!(garble_key, comm_crs);
     }
 }

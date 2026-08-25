@@ -150,12 +150,8 @@ where
 
     let mut yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
-    let comm_crs = match &yao_setup {
-        YaoSetup::E(e) => e.comm_crs,
-        YaoSetup::G(g) => g.comm_crs,
-    };
-    let hash = AesHash::new(comm_crs);
-    let comm = HashCommitment::new(hash);
+    let hash = AesHash::new(yao_setup.garble_key());
+    let comm = HashCommitment::new(AesHash::new(yao_setup.comm_crs()));
 
     let mut randomness =
         run_common_randomness(&setup, &seed, &mut relay).await?;

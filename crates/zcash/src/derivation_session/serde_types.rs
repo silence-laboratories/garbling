@@ -40,12 +40,14 @@ pub struct SerializableBlock(pub [u8; 16]);
 pub enum SerializableYaoSetup {
     Garbler {
         comm_crs: SerializableBlock,
+        garble_key: SerializableBlock,
         prf: Box<ChaCha8Rng>,
         delta: SerializableBlock,
         party_id: u8,
     },
     Evaluator {
         comm_crs: SerializableBlock,
+        garble_key: SerializableBlock,
     },
 }
 
@@ -54,20 +56,24 @@ impl SerializableYaoSetup {
         match self {
             SerializableYaoSetup::Garbler {
                 comm_crs,
+                garble_key,
                 prf,
                 delta,
                 party_id,
             } => Ok(YaoSetup::G(GarblerSetup {
                 comm_crs: comm_crs.0,
+                garble_key: garble_key.0,
                 prf: (**prf).clone(),
                 delta: delta.0,
                 party_id: usize::from(*party_id),
             })),
-            SerializableYaoSetup::Evaluator { comm_crs } => {
-                Ok(YaoSetup::E(EvaluatorSetup {
-                    comm_crs: comm_crs.0,
-                }))
-            }
+            SerializableYaoSetup::Evaluator {
+                comm_crs,
+                garble_key,
+            } => Ok(YaoSetup::E(EvaluatorSetup {
+                comm_crs: comm_crs.0,
+                garble_key: garble_key.0,
+            })),
         }
     }
 }
@@ -77,12 +83,14 @@ impl From<YaoSetup> for SerializableYaoSetup {
         match value {
             YaoSetup::G(g) => SerializableYaoSetup::Garbler {
                 comm_crs: SerializableBlock(g.comm_crs),
+                garble_key: SerializableBlock(g.garble_key),
                 prf: Box::new(g.prf),
                 delta: SerializableBlock(g.delta),
                 party_id: g.party_id as u8,
             },
             YaoSetup::E(e) => SerializableYaoSetup::Evaluator {
                 comm_crs: SerializableBlock(e.comm_crs),
+                garble_key: SerializableBlock(e.garble_key),
             },
         }
     }

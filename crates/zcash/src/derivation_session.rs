@@ -45,18 +45,22 @@ pub struct Session {
     pending: Vec<Message>,
 }
 
-/// Expands `prf_seed` into a free-XOR offset and an independent label PRF.
+/// Expands `prf_seed` into free-XOR offset, label PRF, and garble hash key.
 ///
 /// Uses [`garbled_circuit::functionality::setup::garbler_delta_and_prf`] so
 /// the session layer stays in lockstep with `setup_yao_functionality`.
 pub(crate) fn setup_delta_from_seed(
     prf_seed: [u8; 32],
-) -> (SerializableBlock, ChaCha8Rng) {
-    let (delta, prf) =
+) -> (SerializableBlock, ChaCha8Rng, SerializableBlock) {
+    let (delta, prf, garble_key) =
         garbled_circuit::functionality::setup::garbler_delta_and_prf(
             prf_seed,
         );
-    (SerializableBlock(delta), prf)
+    (
+        SerializableBlock(delta),
+        prf,
+        SerializableBlock(garble_key),
+    )
 }
 
 pub(crate) fn prev_party(party_id: u8) -> u8 {
@@ -338,9 +342,12 @@ mod tests {
         use rand::RngCore;
 
         let prf_key = [0x5au8; 32];
-        let (session_delta, mut session_prf) = setup_delta_from_seed(prf_key);
-        let (core_delta, mut core_prf) = garbler_delta_and_prf(prf_key);
+        let (session_delta, mut session_prf, session_garble) =
+            setup_delta_from_seed(prf_key);
+        let (core_delta, mut core_prf, core_garble) =
+            garbler_delta_and_prf(prf_key);
         assert_eq!(session_delta.0, core_delta);
+        assert_eq!(session_garble.0, core_garble);
 
         let mut session_first = [0u8; 16];
         let mut core_first = [0u8; 16];
@@ -348,7 +355,7 @@ mod tests {
         core_prf.fill_bytes(&mut core_first);
         assert_eq!(session_first, core_first);
 
-        let (delta, mut prf) = setup_delta_from_seed(prf_key);
+        let (delta, mut prf, _) = setup_delta_from_seed(prf_key);
         let _permute = prf.next_u32();
         let mut label = [0u8; 16];
         prf.fill_bytes(&mut label);
@@ -392,7 +399,9 @@ mod tests {
         let (_session, outgoing) =
             Session::new_with_seed(2, Scalar::ONE, [7u8; 32]).unwrap();
 
-        assert_eq!(outgoing.len(), 3);
+        // Evaluator only emits CommCrs to both garblers; CommonRandomness
+        // starts after receiving the garbler-shared garble key.
+        assert_eq!(outgoing.len(), 2);
     }
 
     #[cfg(feature = "serde")]

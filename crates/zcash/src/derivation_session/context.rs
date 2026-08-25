@@ -36,7 +36,24 @@ impl Context {
             .ok_or(ProtocolError::MissingMessage)?
         {
             SerializableYaoSetup::Garbler { comm_crs, .. }
-            | SerializableYaoSetup::Evaluator { comm_crs } => Ok(*comm_crs),
+            | SerializableYaoSetup::Evaluator { comm_crs, .. } => {
+                Ok(*comm_crs)
+            }
+        }
+    }
+
+    pub(crate) fn garble_key(
+        &self,
+    ) -> Result<SerializableBlock, ProtocolError> {
+        match self
+            .yao_setup
+            .as_ref()
+            .ok_or(ProtocolError::MissingMessage)?
+        {
+            SerializableYaoSetup::Garbler { garble_key, .. }
+            | SerializableYaoSetup::Evaluator { garble_key, .. } => {
+                Ok(*garble_key)
+            }
         }
     }
 
@@ -65,13 +82,15 @@ impl Context {
         &mut self,
         comm_crs: SerializableBlock,
         prf_seed: [u8; 32],
-    ) {
-        let (delta, prf) = super::setup_delta_from_seed(prf_seed);
+    ) -> SerializableBlock {
+        let (delta, prf, garble_key) = super::setup_delta_from_seed(prf_seed);
         self.yao_setup = Some(SerializableYaoSetup::Garbler {
             comm_crs,
+            garble_key,
             prf: Box::new(prf),
             delta,
             party_id: self.party_id,
         });
+        garble_key
     }
 }

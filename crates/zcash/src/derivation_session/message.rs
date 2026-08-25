@@ -60,6 +60,8 @@ pub(crate) enum SetupYaoMessage {
         seed: [u8; 32],
         comm_crs: SerializableBlock,
     },
+    /// Garbler-shared circuit-hash key, sent from party 0 to the evaluator.
+    GarbleKey(SerializableBlock),
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

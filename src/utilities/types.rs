@@ -107,7 +107,10 @@ impl YaoShare {
 
 #[derive(Debug)]
 pub struct GarblerSetup {
+    /// Evaluator-chosen CRS used only for input commitments.
     pub comm_crs: Block,
+    /// Garbler-shared key for circuit garbling / evaluation hashes.
+    pub garble_key: Block,
     pub prf: ChaCha8Rng,
     pub delta: Block,
     pub party_id: usize,
@@ -115,7 +118,10 @@ pub struct GarblerSetup {
 
 #[derive(Debug)]
 pub struct EvaluatorSetup {
+    /// Evaluator-chosen CRS used only for input commitments.
     pub comm_crs: Block,
+    /// Garbler-shared key for circuit garbling / evaluation hashes.
+    pub garble_key: Block,
 }
 
 #[derive(Debug)]
@@ -126,6 +132,22 @@ pub enum YaoSetup {
 }
 
 impl YaoSetup {
+    /// Key used to seed the circuit garbling hash (`AesHash` / `AesGarbleHash`).
+    pub fn garble_key(&self) -> Block {
+        match self {
+            YaoSetup::G(g) => g.garble_key,
+            YaoSetup::E(e) => e.garble_key,
+        }
+    }
+
+    /// Evaluator CRS used to seed input-commitment hashes only.
+    pub fn comm_crs(&self) -> Block {
+        match self {
+            YaoSetup::G(g) => g.comm_crs,
+            YaoSetup::E(e) => e.comm_crs,
+        }
+    }
+
     pub fn as_garbler(&self) -> Option<&GarblerSetup> {
         match self {
             YaoSetup::G(g) => Some(g),
