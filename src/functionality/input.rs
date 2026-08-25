@@ -500,6 +500,10 @@ where
             return Err(ProtocolError::MissingMessage);
         }
 
+        if msg[0].len() != batch_size || msg[1].len() != batch_size {
+            return Err(ProtocolError::InvalidMessage);
+        }
+
         for i in 0..batch_size {
             if msg[0][i].0 != msg[1][i].0 {
                 return Err(ProtocolError::InconsistentMessage);
@@ -840,11 +844,15 @@ fn input_yao_from_all_functionality_12_create_msg2<C, T>(
     i3_len: usize,
     msg1_recv: &[bool],
     yao_setup: &mut GarblerSetup,
-) -> (InputYaoAllMsg2p22, Vec<T>)
+) -> Result<(InputYaoAllMsg2p22, Vec<T>), ProtocolError>
 where
     C: Commitment,
     T: From<YaoGarblerShare>,
 {
+    if msg1_recv.len() != i3_len {
+        return Err(ProtocolError::InvalidMessage);
+    }
+
     let rng = &mut yao_setup.prf;
 
     let mut i3_shares = Vec::new();
@@ -855,7 +863,7 @@ where
     let mut w = Vec::with_capacity(i3_len);
     let mut wit = Vec::with_capacity(i3_len);
 
-    (0..i3_len).for_each(|i| {
+    for i in 0..i3_len {
         let mut w01 = Block::default();
         rng.fill_bytes(&mut w01);
 
@@ -906,9 +914,9 @@ where
         comm_2t.push(comm2t);
         w.push(msg);
         wit.push(witness);
-    });
+    }
 
-    (
+    Ok((
         InputYaoAllMsg2p22 {
             comm_1f,
             comm_1t,
@@ -918,7 +926,7 @@ where
             wit,
         },
         i3_shares,
-    )
+    ))
 }
 
 fn input_yao_from_all_functionality_3_process_msg1<C, T>(
@@ -977,6 +985,22 @@ where
     Ok((i1_shares, i2_shares))
 }
 
+fn validate_input_yao_all_msg2(
+    msg: &InputYaoAllMsg2p22,
+    len: usize,
+) -> Result<(), ProtocolError> {
+    if msg.comm_1f.len() != len
+        || msg.comm_1t.len() != len
+        || msg.comm_2f.len() != len
+        || msg.comm_2t.len() != len
+        || msg.w.len() != len
+        || msg.wit.len() != len
+    {
+        return Err(ProtocolError::InvalidMessage);
+    }
+    Ok(())
+}
+
 fn input_yao_from_all_functionality_3_process_msg2<C, T>(
     comm: &C,
     msg2_recv_p2: &InputYaoAllMsg2p22,
@@ -989,6 +1013,12 @@ where
     C: Commitment,
     T: From<YaoEvaluatorShare>,
 {
+    if msg1_p2.len() != i3_len || msg1_p3.len() != i3_len {
+        return Err(ProtocolError::InvalidMessage);
+    }
+    validate_input_yao_all_msg2(msg2_recv_p2, i3_len)?;
+    validate_input_yao_all_msg2(msg2_recv_p3, i3_len)?;
+
     if msg2_recv_p2.comm_1f != msg2_recv_p3.comm_1f
         || msg2_recv_p2.comm_1t != msg2_recv_p3.comm_1t
         || msg2_recv_p2.comm_2f != msg2_recv_p3.comm_2f
@@ -997,7 +1027,7 @@ where
         return Err(ProtocolError::InconsistentMessage);
     }
 
-    let mut i3_shares = Vec::new();
+    let mut i3_shares = Vec::with_capacity(i3_len);
 
     for i in 0..i3_len {
         let com_1f = &msg2_recv_p2.comm_1f[i];
@@ -1088,6 +1118,10 @@ where
             let msg2s: Vec<InputYaoAllMsg2p22> =
                 receive_from_parties(setup, tag2, &[0, 1], relay).await?;
 
+            if msg2s.len() != 2 {
+                return Err(ProtocolError::MissingMessage);
+            }
+
             let i3_shares = input_yao_from_all_functionality_3_process_msg2(
                 comm,
                 &msg2s[0],
@@ -1121,7 +1155,7 @@ where
                     input.len(),
                     &msg1,
                     g,
-                );
+                )?;
 
             send_to_party(setup, tag2, &msg2, 2, relay).await?;
 
