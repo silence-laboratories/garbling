@@ -1,7 +1,7 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use crate::utilities::hash_function::HashFunction;
+use crate::utilities::{hash_function::HashFunction, utils::ct_eq};
 
 use super::types::Block;
 
@@ -53,7 +53,10 @@ impl<H: HashFunction> Commitment for HashCommitment<H> {
         witness: &Block,
         commitment: &Block,
     ) -> bool {
-        self.hash.get_hash(&[*message, *witness].concat()) == *commitment
+        ct_eq(
+            &self.hash.get_hash(&[*message, *witness].concat()),
+            commitment,
+        )
     }
 }
 

@@ -1,7 +1,11 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
+use core::sync::atomic::{compiler_fence, Ordering};
+
+use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
+use zeroize::Zeroize;
 
 use crate::utilities::utils::xor_blocks;
 
@@ -26,6 +30,16 @@ pub struct YaoGarblerShare {
     pub f_label: Block,
 }
 
+/// `YaoGarblerShare` is `Copy`, so it cannot implement `Drop` and therefore
+/// cannot be wiped automatically. Holders of long lived garbler shares should
+/// call this before dropping them.
+impl Zeroize for YaoGarblerShare {
+    fn zeroize(&mut self) {
+        self.delta.zeroize();
+        self.f_label.zeroize();
+    }
+}
+
 impl YaoGarblerShare {
     pub fn xor(&self, other: &Self) -> Self {
         assert_eq!(self.delta, other.delta);
@@ -39,6 +53,12 @@ impl YaoGarblerShare {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct YaoEvaluatorShare {
     pub label: Block,
+}
+
+impl Zeroize for YaoEvaluatorShare {
+    fn zeroize(&mut self) {
+        self.label.zeroize();
+    }
 }
 
 impl YaoEvaluatorShare {
@@ -64,6 +84,15 @@ impl From<YaoGarblerShare> for YaoShare {
 impl From<YaoEvaluatorShare> for YaoShare {
     fn from(share: YaoEvaluatorShare) -> Self {
         YaoShare::E(share)
+    }
+}
+
+impl Zeroize for YaoShare {
+    fn zeroize(&mut self) {
+        match self {
+            YaoShare::G(share) => share.zeroize(),
+            YaoShare::E(share) => share.zeroize(),
+        }
     }
 }
 
@@ -111,6 +140,32 @@ pub struct GarblerSetup {
     pub prf: ChaCha8Rng,
     pub delta: Block,
     pub party_id: usize,
+}
+
+impl GarblerSetup {
+    /// Clears the global offset and resets the label PRF.
+    ///
+    /// `delta` is the value whose disclosure breaks the whole construction,
+    /// and the PRF state reproduces every wire label of the session, so
+    /// neither should outlive the setup in freed memory. This runs
+    /// automatically on drop; call it directly to wipe earlier.
+    pub fn wipe(&mut self) {
+        self.delta.zeroize();
+        self.comm_crs.zeroize();
+
+        // `rand_chacha` implements neither `Zeroize` nor `Drop`, so the
+        // ChaCha state cannot be wiped through its public API. Overwriting it
+        // with a zero-seeded generator replaces the key and counter in place;
+        // the fence keeps the compiler from discarding the write as dead.
+        self.prf = ChaCha8Rng::from_seed([0u8; 32]);
+        compiler_fence(Ordering::SeqCst);
+    }
+}
+
+impl Drop for GarblerSetup {
+    fn drop(&mut self) {
+        self.wipe();
+    }
 }
 
 #[derive(Debug)]
@@ -164,5 +219,73 @@ impl From<GarblerSetup> for YaoSetup {
 impl From<EvaluatorSetup> for YaoSetup {
     fn from(value: EvaluatorSetup) -> Self {
         YaoSetup::E(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
+    use zeroize::Zeroize;
+
+    use super::{
+        Block, GarblerSetup, YaoEvaluatorShare, YaoGarblerShare, YaoShare,
+        BLOCK_SIZE,
+    };
+
+    #[test]
+    fn zeroize_clears_share_secrets() {
+        let mut garbler = YaoGarblerShare {
+            delta: [0xa5; BLOCK_SIZE],
+            f_label: [0x5a; BLOCK_SIZE],
+        };
+        garbler.zeroize();
+        assert_eq!(garbler.delta, Block::default());
+        assert_eq!(garbler.f_label, Block::default());
+
+        let mut evaluator = YaoEvaluatorShare {
+            label: [0x5a; BLOCK_SIZE],
+        };
+        evaluator.zeroize();
+        assert_eq!(evaluator.label, Block::default());
+
+        let mut share = YaoShare::G(YaoGarblerShare {
+            delta: [0xa5; BLOCK_SIZE],
+            f_label: [0x5a; BLOCK_SIZE],
+        });
+        share.zeroize();
+        assert_eq!(*share.as_garbler(), YaoGarblerShare::default());
+    }
+
+    /// Dropping a `GarblerSetup` must clear the offset and reset the label
+    /// PRF, so neither survives in the memory the setup occupied.
+    #[test]
+    fn dropping_garbler_setup_clears_delta_and_prf() {
+        let mut setup = GarblerSetup {
+            comm_crs: [0x11; BLOCK_SIZE],
+            prf: ChaCha8Rng::from_seed([7; 32]),
+            delta: [0xa5; BLOCK_SIZE],
+            party_id: 0,
+        };
+
+        // What the PRF would have produced had it not been reset.
+        let mut live = Block::default();
+        {
+            use rand::RngCore;
+            ChaCha8Rng::from_seed([7; 32]).fill_bytes(&mut live);
+        }
+
+        // `Drop` delegates to `wipe`, so this exercises the same code.
+        setup.wipe();
+
+        assert_eq!(setup.delta, Block::default());
+        assert_eq!(setup.comm_crs, Block::default());
+
+        let mut after = Block::default();
+        {
+            use rand::RngCore;
+            setup.prf.fill_bytes(&mut after);
+        }
+        assert_ne!(after, live);
     }
 }

@@ -3,6 +3,8 @@
 
 use std::collections::HashMap;
 
+use zeroize::Zeroize;
+
 use crate::{
     circuit::{BinaryCircuit, BinaryGate},
     utilities::{
@@ -94,12 +96,17 @@ where
         w[out_gate as usize] = f_label;
     }
 
-    circuit
+    let outputs = circuit
         .get_output_gate_ids()
         .iter()
         .map(|&r| {
             let label = w[r as usize];
             (r, T::from(YaoEvaluatorShare { label }))
         })
-        .collect()
+        .collect();
+
+    // The table holds the evaluator's label for every wire in the circuit.
+    w.zeroize();
+
+    outputs
 }

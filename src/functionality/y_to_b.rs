@@ -2,6 +2,7 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use zeroize::Zeroize;
 
 use sl_compute_common::BinaryShare;
 use sl_messages::{relay::Relay, setup::ProtocolParticipant};
@@ -20,7 +21,7 @@ use crate::{
     utilities::{
         commitments::Commitment,
         types::{Block, GarblerSetup, YaoGarblerShare, YaoSetup, YaoShare},
-        utils::{lsb, xor_blocks},
+        utils::{ct_eq, ct_eq_either, lsb, xor_blocks},
     },
 };
 
@@ -69,6 +70,19 @@ where
     (com0, com1, wz0, wz1, wit0, wit1)
 }
 
+/// A garbler's msg2: the two commitments and their two witnesses.
+type CommitmentsWithWitnesses = ((Block, Block), (Block, Block));
+
+/// Wipes the commitment witnesses out of an already sent message buffer.
+///
+/// Tuples do not implement `Zeroize`, so the blocks are wiped by hand.
+fn zeroize_witnesses(msgs: &mut [CommitmentsWithWitnesses]) {
+    for (_, (wit0, wit1)) in msgs.iter_mut() {
+        wit0.zeroize();
+        wit1.zeroize();
+    }
+}
+
 pub async fn yao_to_binary_functionality<T, C, R>(
     setup: &T,
     relay: &mut FilteredMsgRelay<R>,
@@ -94,7 +108,7 @@ where
                 send_to_party(setup, tag1, &(wyr, y as u8), 2, relay).await?;
                 send_to_party(setup, tag1, &wr0, 1, relay).await?;
 
-                let (com0, com1, _, _, wit0, wit1) =
+                let (com0, com1, _, _, mut wit0, mut wit1) =
                     create_yao_to_binary_msg2(
                         &wr0,
                         comm,
@@ -111,6 +125,9 @@ where
                 )
                 .await?;
 
+                wit0.zeroize();
+                wit1.zeroize();
+
                 let p = lsb(&garbler_share.f_label) != 0;
                 Ok(BinaryShare {
                     value1: p ^ y,
@@ -120,7 +137,7 @@ where
                 let wr0: Block =
                     receive_from_one_party(setup, tag1, 0, relay).await?;
 
-                let (com0, com1, wz0, wz1, wit0, wit1) =
+                let (com0, com1, wz0, wz1, mut wit0, mut wit1) =
                     create_yao_to_binary_msg2(
                         &wr0,
                         comm,
@@ -142,17 +159,17 @@ where
                 )
                 .await?;
 
+                wit0.zeroize();
+                wit1.zeroize();
+
                 let wxz: Block =
                     receive_from_one_party(setup, tag3, 2, relay).await?;
-
-                let val1 = wxz == wz0;
-                let val2 = wxz == wz1;
 
                 if g.delta != garbler_share.delta {
                     return Err(ProtocolError::InvalidShare);
                 }
 
-                if !(val1 || val2) {
+                if !ct_eq_either(&wxz, &wz0, &wz1) {
                     return Err(ProtocolError::InvalidShare);
                 }
 
@@ -178,7 +195,7 @@ where
 
             send_to_party(setup, tag3, &wxz, 1, relay).await?;
 
-            let msg2s: Vec<((Block, Block), (Block, Block))> =
+            let msg2s: Vec<CommitmentsWithWitnesses> =
                 receive_from_parties(setup, tag2, &[0, 1], relay).await?;
 
             if msg2s.len() != 2 {
@@ -189,7 +206,11 @@ where
             let (com01, com11) = &msg2s[1].0;
             let (wit0, wit1) = &msg2s[0].1;
 
-            if com0 != com01 || com1 != com11 || msg2s[0].1 != msg2s[1].1 {
+            if !ct_eq(com0, com01)
+                || !ct_eq(com1, com11)
+                || !ct_eq(wit0, &msg2s[1].1 .0)
+                || !ct_eq(wit1, &msg2s[1].1 .1)
+            {
                 return Err(ProtocolError::InconsistentMessage);
             }
 
@@ -271,6 +292,8 @@ where
                 send_to_party(setup, tag1, &wr0msgs, 1, relay).await?;
                 send_to_party(setup, tag2, &msg2s, 2, relay).await?;
 
+                zeroize_witnesses(&mut msg2s);
+
                 Ok(outputs)
             } else {
                 let msg1s: Vec<Block> =
@@ -307,6 +330,8 @@ where
 
                 send_to_party(setup, tag4, &msgs, 2, relay).await?;
 
+                zeroize_witnesses(&mut msgs);
+
                 let msg2s: Vec<Block> =
                     receive_from_one_party(setup, tag3, 2, relay).await?;
 
@@ -322,10 +347,7 @@ where
                     .zip(&wz0s)
                     .zip(&wz1s)
                     .map(|((((share, wxz), wr0s_i), wz0s_i), wz1s_i)| {
-                        let val1 = wxz == wz0s_i;
-                        let val2 = wxz == wz1s_i;
-
-                        if !(val1 || val2) {
+                        if !ct_eq_either(wxz, wz0s_i, wz1s_i) {
                             return Err(ProtocolError::InvalidShare);
                         }
 
@@ -370,10 +392,10 @@ where
             send_to_party(setup, tag3, &wxzs, 1, relay).await?;
 
             // ((Block, Block), (Block, Block))
-            let msg2s_0: Vec<((Block, Block), (Block, Block))> =
+            let msg2s_0: Vec<CommitmentsWithWitnesses> =
                 receive_from_one_party(setup, tag2, 0, relay).await?;
 
-            let msg2s_1: Vec<((Block, Block), (Block, Block))> =
+            let msg2s_1: Vec<CommitmentsWithWitnesses> =
                 receive_from_one_party(setup, tag4, 1, relay).await?;
 
             if msg2s_0.len() != input.len() {
@@ -396,7 +418,11 @@ where
                     let (com01, com11) = &m1.0;
                     let (wit0, wit1) = &m0.1;
 
-                    if com0 != com01 || com1 != com11 || m0.1 != m1.1 {
+                    if !ct_eq(com0, com01)
+                        || !ct_eq(com1, com11)
+                        || !ct_eq(wit0, &m1.1 .0)
+                        || !ct_eq(wit1, &m1.1 .1)
+                    {
                         return Err(ProtocolError::InconsistentMessage);
                     }
 

@@ -77,7 +77,7 @@ impl From<YaoSetup> for SerializableYaoSetup {
         match value {
             YaoSetup::G(g) => SerializableYaoSetup::Garbler {
                 comm_crs: SerializableBlock(g.comm_crs),
-                prf: Box::new(g.prf),
+                prf: Box::new(g.prf.clone()),
                 delta: SerializableBlock(g.delta),
                 party_id: g.party_id as u8,
             },

@@ -12,24 +12,6 @@ use crate::utilities::{
     utils::xor_blocks,
 };
 
-pub fn double_gf2_128_bytes(x: &Block) -> Block {
-    let mut result = [0u8; 16];
-    let mut carry = 0u8;
-
-    for i in (0..16).rev() {
-        let byte = x[i];
-        result[i] = (byte << 1) | carry;
-        carry = (byte & 0x80) >> 7;
-    }
-
-    // If the MSB (bit 127) was set, reduce modulo x^128 + x^7 + x^2 + x + 1
-    if carry != 0 {
-        result[15] ^= 0x87;
-    }
-
-    result
-}
-
 /// Represents a structure of hash function based on AES-128 encryption.
 #[derive(Clone)]
 pub struct AesGarbleHash {
@@ -104,7 +86,7 @@ impl HashFunction for AesGarbleHash {
     }
 
     /// Tweakable circular correlation robust hash function (cf.
-    /// <https://eprint.iacr.org/2014/756.pdf>, §4.1).
+    /// <https://eprint.iacr.org/2019/074>, §7.4).
     ///
     /// The function computes `H(H(x) ⊕ i) ⊕ H(x)`.
     fn tccr_hash(&self, x: &Block, i: &Block) -> Block {

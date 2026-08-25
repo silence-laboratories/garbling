@@ -1,12 +1,32 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
+use subtle::ConstantTimeEq;
+
 use super::types::Block;
 
 /// Returns the bitwise xor, given two 128-bit blocks
 #[inline(always)]
 pub fn xor_blocks(array1: &Block, array2: &Block) -> Block {
     std::array::from_fn(|i| array1[i] ^ array2[i])
+}
+
+/// Compares two blocks in constant time.
+///
+/// Use this in place of `==` wherever one of the operands is a secret, such
+/// as a zero label or a commitment witness.
+#[inline]
+pub fn ct_eq(a: &Block, b: &Block) -> bool {
+    a.ct_eq(b).into()
+}
+
+/// Returns whether `x` equals `a` or `b`, in constant time.
+///
+/// Both comparisons are always performed and combined without branching, so
+/// neither the result nor which of the two matched is revealed by timing.
+#[inline]
+pub fn ct_eq_either(x: &Block, a: &Block, b: &Block) -> bool {
+    (x.ct_eq(a) | x.ct_eq(b)).into()
 }
 
 /// Converts a vector of boolean values to a hexadecimal string.

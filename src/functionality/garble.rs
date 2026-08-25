@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 
 use rand::RngCore;
+use zeroize::Zeroize;
 
 use crate::{
     circuit::{BinaryCircuit, BinaryGate},
@@ -120,6 +121,10 @@ where
             }),
         );
     }
+
+    // The table holds a zero label for every wire in the circuit, which is
+    // the bulk of the secret material this function touches.
+    w.zeroize();
 
     (f, outputs)
 }

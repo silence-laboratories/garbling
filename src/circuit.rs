@@ -217,12 +217,33 @@ impl BinaryCircuit {
             })
             .ok_or(FileParsingError::InputNoParsingError)?;
 
+        // Structural header checks. In the Bristol format every gate assigns
+        // exactly one wire, so the wire count is fully determined by the
+        // input widths and the gate count. Checking that here bounds
+        // `num_wires` by the number of gate lines the file must contain,
+        // which in turn makes the wire table allocated below safe.
+        let total_input_wires = input_sizes
+            .iter()
+            .try_fold(0u32, |acc, &width| acc.checked_add(width))
+            .ok_or(FileParsingError::InputNoParsingError)?;
+
+        if u32::try_from(num_gates)
+            .ok()
+            .and_then(|n| total_input_wires.checked_add(n))
+            != Some(num_wires)
+            || num_outputs > num_wires
+        {
+            return Err(FileParsingError::InputNoParsingError);
+        }
+
         let mut gates = Vec::with_capacity(num_gates);
         let num_inputs = input_sizes.len() as u32;
         let mut input_gate_ids = Vec::with_capacity(input_sizes.len());
         let output_gate_ids = (0..num_outputs)
             .map(|i| num_wires - num_outputs + i)
             .collect();
+
+        let mut defined = vec![false; num_wires as usize];
 
         let mut totalcount = 0;
         for (ipcnt, &width) in input_sizes.iter().enumerate() {
@@ -234,6 +255,7 @@ impl BinaryCircuit {
                     wire: totalcount,
                 });
                 ids.push(id);
+                defined[totalcount as usize] = true;
                 totalcount += 1;
             }
             input_gate_ids.push(ids);
@@ -248,19 +270,49 @@ impl BinaryCircuit {
                 .and_then(|mut parts| {
                     let num_input: u32 =
                         parts.next().and_then(|s| s.parse().ok())?;
-                    let _num_output: u32 =
+                    let num_output: u32 =
                         parts.next().and_then(|s| s.parse().ok())?;
-                    let input0 = parts.next().and_then(|s| s.parse().ok())?;
+                    let input0: u32 =
+                        parts.next().and_then(|s| s.parse().ok())?;
 
-                    let input1 = if num_input == 2 {
+                    let input1: u32 = if num_input == 2 {
                         parts.next().and_then(|s| s.parse().ok())?
                     } else {
                         0
                     };
 
-                    let output = parts.next().and_then(|s| s.parse().ok())?;
+                    let output: u32 =
+                        parts.next().and_then(|s| s.parse().ok())?;
+                    let op = parts.next()?;
 
-                    Some(match parts.next()? {
+                    // The arity has to match the operation. Without this a
+                    // line claiming one input for an AND gate would silently
+                    // read wire 0 as its second operand.
+                    let arity = match op {
+                        "AND" | "XOR" => 2,
+                        "INV" => 1,
+                        _ => return None,
+                    };
+
+                    if num_input != arity || num_output != 1 {
+                        return None;
+                    }
+
+                    // Inputs must be in range and already assigned.
+                    if defined.get(input0 as usize) != Some(&true)
+                        || (arity == 2
+                            && defined.get(input1 as usize) != Some(&true))
+                    {
+                        return None;
+                    }
+
+                    // The output must be in range and not yet assigned.
+                    match defined.get_mut(output as usize) {
+                        Some(slot) if !*slot => *slot = true,
+                        _ => return None,
+                    }
+
+                    Some(match op {
                         "AND" => {
                             let gate = BinaryGate::And {
                                 xid: input0,
@@ -1083,6 +1135,84 @@ mod tests {
         );
 
         BinaryCircuit::from_compact_bytes(&bytes);
+    }
+
+    /// A well formed Bristol file is a four gate circuit over ten wires:
+    /// four input wires, then one wire per gate.
+    fn well_formed_bristol() -> String {
+        [
+            "4 8",
+            "2 2 2",
+            "1 2",
+            "2 1 0 2 4 AND",
+            "2 1 1 3 5 XOR",
+            "1 1 4 6 INV",
+            "2 1 5 6 7 AND",
+        ]
+        .join("\n")
+    }
+
+    #[test]
+    fn test_parse_accepts_well_formed_circuit() {
+        let circuit = BinaryCircuit::parse(&well_formed_bristol())
+            .expect("well formed circuit should parse");
+
+        assert_eq!(circuit.num_wires(), 8);
+        assert_eq!(circuit.get_num_nonfree_gates(), 2);
+        assert_eq!(circuit.get_output_gate_ids(), &[6, 7]);
+    }
+
+    /// Malformed gate lines must be rejected rather than producing a circuit
+    /// that panics or silently evaluates against an unassigned wire.
+    #[test]
+    fn test_parse_rejects_malformed_circuits() {
+        // Each case replaces one gate line of the well formed circuit.
+        let cases: &[(&str, &str)] = &[
+            ("input wire out of range", "2 1 0 99 4 AND"),
+            ("output wire out of range", "2 1 0 2 99 AND"),
+            ("input wire not yet assigned", "2 1 0 7 4 AND"),
+            ("input wire is its own output", "2 1 0 4 4 AND"),
+            ("output wire assigned twice", "2 1 0 2 3 AND"),
+            ("arity does not match AND", "1 1 0 4 AND"),
+            ("arity does not match INV", "2 1 0 2 4 INV"),
+            ("more than one output", "2 2 0 2 4 AND"),
+            ("unknown operation", "2 1 0 2 4 NAND"),
+        ];
+
+        for (name, bad_line) in cases {
+            let mut lines: Vec<&str> = Vec::new();
+            let base = well_formed_bristol();
+            for (n, line) in base.lines().enumerate() {
+                lines.push(if n == 3 { bad_line } else { line });
+            }
+
+            assert!(
+                BinaryCircuit::parse(&lines.join("\n")).is_err(),
+                "parse should reject: {name}"
+            );
+        }
+    }
+
+    /// The header has to agree with itself: every gate assigns exactly one
+    /// wire, so the wire count is determined by the inputs and the gates.
+    #[test]
+    fn test_parse_rejects_inconsistent_header() {
+        let base = well_formed_bristol();
+
+        for bad_header in ["4 9", "4 7", "5 8"] {
+            let mut lines: Vec<&str> = base.lines().collect();
+            lines[0] = bad_header;
+
+            assert!(
+                BinaryCircuit::parse(&lines.join("\n")).is_err(),
+                "parse should reject header: {bad_header}"
+            );
+        }
+
+        // More outputs than wires must not underflow the output wire range.
+        let mut lines: Vec<&str> = base.lines().collect();
+        lines[2] = "1 99";
+        assert!(BinaryCircuit::parse(&lines.join("\n")).is_err());
     }
 
     #[test]
