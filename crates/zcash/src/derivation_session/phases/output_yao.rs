@@ -13,7 +13,7 @@ use garbled_circuit::{
     functionality::utils_dep::ProtocolError,
     utilities::{
         types::YaoShare,
-        utils::{lsb, xor_blocks},
+        utils::{lsb, label_matches_wire},
     },
 };
 
@@ -426,9 +426,7 @@ pub(crate) fn garbler_verify_one(
         return Err(ProtocolError::InvalidShare);
     };
     let wx = label.0;
-    let t1 = wx == share.f_label;
-    let t2 = wx == xor_blocks(&share.f_label, &share.delta);
-    if !(t1 || t2) {
+    if !label_matches_wire(&wx, &share.f_label, &share.delta) {
         return Err(ProtocolError::InvalidShare);
     }
     Ok((lsb(&wx) ^ lsb(&share.f_label)) != 0)

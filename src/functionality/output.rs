@@ -17,7 +17,7 @@ use crate::{
     },
     utilities::{
         types::{Block, YaoShare},
-        utils::{lsb, xor_blocks},
+        utils::{label_matches_wire, lsb},
     },
 };
 
@@ -43,10 +43,7 @@ where
         YaoShare::G(share) => {
             let out: Block =
                 receive_from_one_party(setup, tag1, 2, r).await?;
-            let val1 = share.f_label == out;
-            let val2 = xor_blocks(&share.f_label, &share.delta) == out;
-
-            Ok(val1 || val2)
+            Ok(label_matches_wire(&out, &share.f_label, &share.delta))
         }
     }
 }
@@ -68,10 +65,7 @@ where
             let wxs: Block =
                 receive_from_one_party(setup, tag1, 2, relay).await?;
 
-            let t1 = wxs == share.f_label;
-            let t2 = wxs == xor_blocks(&share.f_label, &share.delta);
-
-            if !(t1 || t2) {
+            if !label_matches_wire(&wxs, &share.f_label, &share.delta) {
                 return Err(ProtocolError::InvalidShare);
             }
 
@@ -129,10 +123,7 @@ where
 
             let wx = wxs[i];
 
-            let t1 = wx == share.f_label;
-            let t2 = wx == xor_blocks(&share.f_label, &share.delta);
-
-            if !(t1 || t2) {
+            if !label_matches_wire(&wx, &share.f_label, &share.delta) {
                 return Err(ProtocolError::InvalidShare);
             }
 
@@ -219,10 +210,7 @@ where
         let wxs: Block =
             receive_from_one_party(setup, tag1, 2, relay).await?;
 
-        let t1 = wxs == share.f_label;
-        let t2 = wxs == xor_blocks(&share.f_label, &share.delta);
-
-        if !(t1 || t2) {
+        if !label_matches_wire(&wxs, &share.f_label, &share.delta) {
             return Err(ProtocolError::InvalidShare);
         }
 
@@ -293,10 +281,7 @@ where
         for (i, (wx, share)) in wxs.into_iter().zip(input).enumerate() {
             let share = share.as_garbler();
 
-            let t1 = wx == share.f_label;
-            let t2 = wx == xor_blocks(&share.f_label, &share.delta);
-
-            if !(t1 || t2) {
+            if !label_matches_wire(&wx, &share.f_label, &share.delta) {
                 return Err(ProtocolError::InvalidShare);
             }
 
