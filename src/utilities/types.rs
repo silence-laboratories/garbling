@@ -1,9 +1,11 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use rand_chacha::ChaCha8Rng;
+use core::fmt;
 
-use crate::utilities::utils::xor_blocks;
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
+use crate::utilities::{label_prf::LabelPrf, utils::xor_blocks};
 
 pub const BLOCK_SIZE: usize = 16;
 
@@ -20,10 +22,34 @@ pub enum MapArg<'a, T> {
     Vector(&'a [T]),
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub struct YaoGarblerShare {
     pub delta: Block,
     pub f_label: Block,
+}
+
+impl Zeroize for YaoGarblerShare {
+    fn zeroize(&mut self) {
+        self.delta.zeroize();
+        self.f_label.zeroize();
+    }
+}
+
+impl Drop for YaoGarblerShare {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for YaoGarblerShare {}
+
+impl fmt::Debug for YaoGarblerShare {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("YaoGarblerShare")
+            .field("delta", &"[redacted]")
+            .field("f_label", &"[redacted]")
+            .finish()
+    }
 }
 
 impl YaoGarblerShare {
@@ -36,9 +62,31 @@ impl YaoGarblerShare {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub struct YaoEvaluatorShare {
     pub label: Block,
+}
+
+impl Zeroize for YaoEvaluatorShare {
+    fn zeroize(&mut self) {
+        self.label.zeroize();
+    }
+}
+
+impl Drop for YaoEvaluatorShare {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for YaoEvaluatorShare {}
+
+impl fmt::Debug for YaoEvaluatorShare {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("YaoEvaluatorShare")
+            .field("label", &"[redacted]")
+            .finish()
+    }
 }
 
 impl YaoEvaluatorShare {
@@ -49,7 +97,7 @@ impl YaoEvaluatorShare {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum YaoShare {
     G(YaoGarblerShare),
     E(YaoEvaluatorShare),
@@ -64,6 +112,32 @@ impl From<YaoGarblerShare> for YaoShare {
 impl From<YaoEvaluatorShare> for YaoShare {
     fn from(share: YaoEvaluatorShare) -> Self {
         YaoShare::E(share)
+    }
+}
+
+impl Zeroize for YaoShare {
+    fn zeroize(&mut self) {
+        match self {
+            YaoShare::G(share) => share.zeroize(),
+            YaoShare::E(share) => share.zeroize(),
+        }
+    }
+}
+
+impl Drop for YaoShare {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for YaoShare {}
+
+impl fmt::Debug for YaoShare {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            YaoShare::G(_) => f.write_str("YaoShare::G([redacted])"),
+            YaoShare::E(_) => f.write_str("YaoShare::E([redacted])"),
+        }
     }
 }
 
@@ -91,32 +165,58 @@ impl YaoShare {
     }
 
     pub fn into_garbler(self) -> Option<YaoGarblerShare> {
-        match self {
-            YaoShare::G(share) => Some(share),
+        match &self {
+            YaoShare::G(share) => Some(share.clone()),
             _ => None,
         }
     }
 
     pub fn into_evaluator(self) -> Option<YaoEvaluatorShare> {
-        match self {
-            YaoShare::E(share) => Some(share),
+        match &self {
+            YaoShare::E(share) => Some(share.clone()),
             _ => None,
         }
     }
 }
 
-#[derive(Debug)]
 pub struct GarblerSetup {
     /// Evaluator-chosen CRS used only for input commitments.
     pub comm_crs: Block,
     /// Garbler-shared key for circuit garbling / evaluation hashes.
     pub garble_key: Block,
-    pub prf: ChaCha8Rng,
+    pub prf: LabelPrf,
     pub delta: Block,
     pub party_id: usize,
 }
 
-#[derive(Debug)]
+impl fmt::Debug for GarblerSetup {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GarblerSetup")
+            .field("comm_crs", &"[redacted]")
+            .field("garble_key", &"[redacted]")
+            .field("prf", &self.prf)
+            .field("delta", &"[redacted]")
+            .field("party_id", &self.party_id)
+            .finish()
+    }
+}
+
+impl GarblerSetup {
+    /// Wipes key material held by the setup.
+    pub fn wipe(&mut self) {
+        self.comm_crs.zeroize();
+        self.garble_key.zeroize();
+        self.delta.zeroize();
+        self.prf.zeroize();
+    }
+}
+
+impl Drop for GarblerSetup {
+    fn drop(&mut self) {
+        self.wipe();
+    }
+}
+
 pub struct EvaluatorSetup {
     /// Evaluator-chosen CRS used only for input commitments.
     pub comm_crs: Block,
@@ -124,11 +224,41 @@ pub struct EvaluatorSetup {
     pub garble_key: Block,
 }
 
-#[derive(Debug)]
+impl fmt::Debug for EvaluatorSetup {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EvaluatorSetup")
+            .field("comm_crs", &"[redacted]")
+            .field("garble_key", &"[redacted]")
+            .finish()
+    }
+}
+
+impl EvaluatorSetup {
+    pub fn wipe(&mut self) {
+        self.comm_crs.zeroize();
+        self.garble_key.zeroize();
+    }
+}
+
+impl Drop for EvaluatorSetup {
+    fn drop(&mut self) {
+        self.wipe();
+    }
+}
+
 #[allow(clippy::large_enum_variant)]
 pub enum YaoSetup {
     G(GarblerSetup),
     E(EvaluatorSetup),
+}
+
+impl fmt::Debug for YaoSetup {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            YaoSetup::G(_) => f.write_str("YaoSetup::G([redacted])"),
+            YaoSetup::E(_) => f.write_str("YaoSetup::E([redacted])"),
+        }
+    }
 }
 
 impl YaoSetup {
@@ -169,7 +299,7 @@ impl YaoSetup {
         }
     }
 
-    pub fn rng(&mut self) -> Option<&mut ChaCha8Rng> {
+    pub fn rng(&mut self) -> Option<&mut LabelPrf> {
         match self {
             YaoSetup::G(g) => Some(&mut g.prf),
             _ => None,
@@ -186,5 +316,94 @@ impl From<GarblerSetup> for YaoSetup {
 impl From<EvaluatorSetup> for YaoSetup {
     fn from(value: EvaluatorSetup) -> Self {
         YaoSetup::E(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::{RngCore, SeedableRng};
+
+    use super::{
+        Block, EvaluatorSetup, GarblerSetup, YaoEvaluatorShare,
+        YaoGarblerShare, YaoShare, BLOCK_SIZE,
+    };
+    use crate::utilities::label_prf::LabelPrf;
+    use zeroize::{Zeroize, ZeroizeOnDrop};
+
+    fn assert_zeroize_on_drop<T: ZeroizeOnDrop>() {}
+
+    #[test]
+    fn yao_shares_zeroize_on_drop() {
+        assert_zeroize_on_drop::<YaoGarblerShare>();
+        assert_zeroize_on_drop::<YaoEvaluatorShare>();
+        assert_zeroize_on_drop::<YaoShare>();
+
+        let original = YaoShare::G(YaoGarblerShare {
+            delta: [0xa5; BLOCK_SIZE],
+            f_label: [0x5a; BLOCK_SIZE],
+        });
+        let clone = original.clone();
+        drop(original);
+        assert_eq!(
+            clone.as_garbler(),
+            &YaoGarblerShare {
+                delta: [0xa5; BLOCK_SIZE],
+                f_label: [0x5a; BLOCK_SIZE],
+            }
+        );
+    }
+
+    #[test]
+    fn zeroize_clears_yao_shares() {
+        let mut garbler = YaoGarblerShare {
+            delta: [0xa5; BLOCK_SIZE],
+            f_label: [0x5a; BLOCK_SIZE],
+        };
+        garbler.zeroize();
+        assert_eq!(garbler, YaoGarblerShare::default());
+
+        let mut evaluator = YaoEvaluatorShare {
+            label: [0x5a; BLOCK_SIZE],
+        };
+        evaluator.zeroize();
+        assert_eq!(evaluator, YaoEvaluatorShare::default());
+
+        let mut share = YaoShare::G(YaoGarblerShare {
+            delta: [0xa5; BLOCK_SIZE],
+            f_label: [0x5a; BLOCK_SIZE],
+        });
+        share.zeroize();
+        assert_eq!(share.as_garbler(), &YaoGarblerShare::default());
+    }
+
+    #[test]
+    fn wipe_clears_setup_key_material() {
+        let mut garbler = GarblerSetup {
+            comm_crs: [0x11; BLOCK_SIZE],
+            garble_key: [0x22; BLOCK_SIZE],
+            prf: LabelPrf::from_seed([7; 32]),
+            delta: [0xa5; BLOCK_SIZE],
+            party_id: 0,
+        };
+        garbler.wipe();
+        assert_eq!(garbler.comm_crs, Block::default());
+        assert_eq!(garbler.garble_key, Block::default());
+        assert_eq!(garbler.delta, Block::default());
+
+        let mut evaluator = EvaluatorSetup {
+            comm_crs: [0x33; BLOCK_SIZE],
+            garble_key: [0x44; BLOCK_SIZE],
+        };
+        evaluator.wipe();
+        assert_eq!(evaluator.comm_crs, Block::default());
+        assert_eq!(evaluator.garble_key, Block::default());
+
+        // Confirm the old label stream is unavailable after the setup is
+        // wiped.
+        let mut after = Block::default();
+        garbler.prf.fill_bytes(&mut after);
+        let mut original = Block::default();
+        LabelPrf::from_seed([7; 32]).fill_bytes(&mut original);
+        assert_ne!(after, original);
     }
 }

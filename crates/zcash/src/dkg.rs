@@ -654,12 +654,11 @@ mod tests {
                 queue.extend(outgoing);
             } else {
                 let sender = usize::from(msg.sender());
-                for pid in 0..parties.len() {
+                for (pid, party) in parties.iter_mut().enumerate() {
                     if pid == sender {
                         continue;
                     }
-                    let outgoing =
-                        parties[pid].recv_message(msg.clone()).unwrap();
+                    let outgoing = party.recv_message(msg.clone()).unwrap();
                     queue.extend(outgoing);
                 }
             }

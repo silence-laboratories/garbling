@@ -2,6 +2,7 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use zeroize::Zeroizing;
 
 use sl_compute_common::BinaryShare;
 use sl_messages::{relay::Relay, setup::ProtocolParticipant};
@@ -13,7 +14,7 @@ use crate::{
     functionality::{
         utils::{
             receive_from_one_party, receive_from_parties, send_to_party,
-            Byte, FilteredMsgRelay,
+            FilteredMsgRelay,
         },
         utils_dep::ProtocolError,
     },
@@ -26,18 +27,21 @@ use crate::{
     },
 };
 
+type SecretBlock = Zeroizing<Block>;
+type SecretBlockPair = (SecretBlock, SecretBlock);
+
 fn create_yao_to_binary_msg1(
     yao_setup: &GarblerSetup,
-) -> (bool, Block, Block) {
+) -> (bool, SecretBlock, SecretBlock) {
     let mut rng = rand::rngs::StdRng::from_entropy();
     let y = rng.gen_bool(0.5);
-    let wyr = rng.gen();
+    let wyr = Zeroizing::new(rng.gen::<Block>());
 
-    let wr0 = if y {
+    let wr0 = Zeroizing::new(if y {
         xor_blocks(&wyr, &yao_setup.delta)
     } else {
-        wyr
-    };
+        *wyr
+    });
 
     (y, wyr, wr0)
 }
@@ -47,29 +51,33 @@ fn create_yao_to_binary_msg2<C, G>(
     comm: &C,
     rng: &mut G,
     input: &YaoGarblerShare,
-) -> (Block, Block, Block, Block, Block, Block)
+) -> (Block, Block, SecretBlockPair, SecretBlockPair)
 where
     C: Commitment,
     G: RngCore + CryptoRng,
 {
     let p = lsb(&input.f_label);
 
-    let wz0 = xor_blocks(wr0, &input.f_label);
-    let mut wit0 = Block::default();
-    rng.fill_bytes(&mut wit0);
+    let wz0 = Zeroizing::new(xor_blocks(wr0, &input.f_label));
+    let wz1 = Zeroizing::new(xor_blocks(&wz0, &input.delta));
 
-    let wz1 = xor_blocks(&wz0, &input.delta);
-    let mut wit1 = Block::default();
-    rng.fill_bytes(&mut wit1);
+    let mut witness0 = Zeroizing::new(Block::default());
+    let mut witness1 = Zeroizing::new(Block::default());
+    rng.fill_bytes(&mut *witness0);
+    rng.fill_bytes(&mut *witness1);
 
     let (com0, com1) = if p == 0 {
-        (comm.commit(&wz0, &wit0), comm.commit(&wz1, &wit1))
+        (comm.commit(&wz0, &witness0), comm.commit(&wz1, &witness1))
     } else {
-        (comm.commit(&wz1, &wit0), comm.commit(&wz0, &wit1))
+        (comm.commit(&wz1, &witness0), comm.commit(&wz0, &witness1))
     };
 
-    (com0, com1, wz0, wz1, wit0, wit1)
+    (com0, com1, (wz0, wz1), (witness0, witness1))
 }
+
+/// Commitment messages contain witnesses that must not remain in heap memory
+/// after the transport has serialized them.
+type CommitmentsWithWitnesses = ((Block, Block), (Block, Block));
 
 pub async fn yao_to_binary_functionality<T, C, R>(
     setup: &T,
@@ -93,25 +101,23 @@ where
 
             if g.party_id == 0 {
                 let (y, wyr, wr0) = create_yao_to_binary_msg1(g);
-                send_to_party(setup, tag1, &(wyr, y as u8), 2, relay).await?;
-                send_to_party(setup, tag1, &wr0, 1, relay).await?;
+                let message = Zeroizing::new((*wyr, y as u8));
+                send_to_party(setup, tag1, &*message, 2, relay).await?;
+                let message = Zeroizing::new(*wr0);
+                send_to_party(setup, tag1, &*message, 1, relay).await?;
 
-                let (com0, com1, _, _, wit0, wit1) =
-                    create_yao_to_binary_msg2(
-                        &wr0,
-                        comm,
-                        &mut g.prf,
-                        garbler_share,
-                    );
+                let (com0, com1, _wz, witnesses) = create_yao_to_binary_msg2(
+                    &wr0,
+                    comm,
+                    &mut g.prf,
+                    garbler_share,
+                );
+                let message = Zeroizing::new((
+                    (com0, com1),
+                    (*witnesses.0, *witnesses.1),
+                ));
 
-                send_to_party(
-                    setup,
-                    tag2,
-                    &((com0, com1), (wit0, wit1)),
-                    2,
-                    relay,
-                )
-                .await?;
+                send_to_party(setup, tag2, &*message, 2, relay).await?;
 
                 let p = lsb(&garbler_share.f_label) != 0;
                 Ok(BinaryShare {
@@ -119,15 +125,22 @@ where
                     value2: p,
                 })
             } else {
-                let wr0: Block =
-                    receive_from_one_party(setup, tag1, 0, relay).await?;
+                let wr0 = Zeroizing::new(
+                    receive_from_one_party::<Block, _, _>(
+                        setup, tag1, 0, relay,
+                    )
+                    .await?,
+                );
 
-                let (com0, com1, wz0, wz1, _, _) = create_yao_to_binary_msg2(
+                let (com0, com1, wz, witnesses) = create_yao_to_binary_msg2(
                     &wr0,
                     comm,
                     &mut g.prf,
                     garbler_share,
                 );
+                // Party 1 sends only matching commitments, so its locally
+                // generated witnesses can be discarded before the await.
+                drop(witnesses);
 
                 send_to_party(
                     setup,
@@ -138,14 +151,18 @@ where
                 )
                 .await?;
 
-                let wxz: Block =
-                    receive_from_one_party(setup, tag3, 2, relay).await?;
+                let wxz = Zeroizing::new(
+                    receive_from_one_party::<Block, _, _>(
+                        setup, tag3, 2, relay,
+                    )
+                    .await?,
+                );
 
                 if g.delta != garbler_share.delta {
                     return Err(ProtocolError::InvalidShare);
                 }
 
-                if !label_in_pair(&wxz, &wz0, &wz1) {
+                if !label_in_pair(&wxz, &wz.0, &wz.1) {
                     return Err(ProtocolError::InvalidShare);
                 }
 
@@ -160,19 +177,28 @@ where
         }
 
         YaoSetup::E(_e) => {
-            let (wyr, Byte(y)): (Block, Byte) =
+            let message: Zeroizing<(Block, u8)> =
                 receive_from_one_party(setup, tag1, 0, relay).await?;
+            let (wyr, y) = &*message;
+            let wyr = Zeroizing::new(*wyr);
 
-            let y = y != 0;
+            let y = *y != 0;
 
             let yaoshare = input.as_evaluator();
 
-            let wxz = xor_blocks(&yaoshare.label, &wyr);
+            let wxz = Zeroizing::new(xor_blocks(&yaoshare.label, &wyr));
 
-            send_to_party(setup, tag3, &wxz, 1, relay).await?;
+            send_to_party(setup, tag3, &*wxz, 1, relay).await?;
 
-            let msg2s: Vec<((Block, Block), (Block, Block))> =
-                receive_from_parties(setup, tag2, &[0, 1], relay).await?;
+            let msg2s = Zeroizing::new(
+                receive_from_parties::<CommitmentsWithWitnesses, _, _>(
+                    setup,
+                    tag2,
+                    &[0, 1],
+                    relay,
+                )
+                .await?,
+            );
 
             if msg2s.len() != 2 {
                 return Err(ProtocolError::MissingMessage);
@@ -226,9 +252,9 @@ where
     match yao_setup {
         YaoSetup::G(yaosetup) => {
             if yaosetup.party_id == 0 {
-                let mut msgs = Vec::new();
-                let mut wr0msgs = Vec::new();
-                let mut msg2s = Vec::new();
+                let mut msgs = Zeroizing::new(Vec::new());
+                let mut wr0msgs = Zeroizing::new(Vec::new());
+                let mut msg2s = Zeroizing::new(Vec::new());
 
                 let outputs = input
                     .iter()
@@ -237,11 +263,10 @@ where
                         let (y, wyr, wr0) =
                             create_yao_to_binary_msg1(yaosetup);
 
-                        msgs.push((wyr, y as u8));
+                        msgs.push((*wyr, y as u8));
+                        wr0msgs.push(*wr0);
 
-                        wr0msgs.push(wr0);
-
-                        let (com0, com1, _, _, wit0, wit1) =
+                        let (com0, com1, _wz, witnesses) =
                             create_yao_to_binary_msg2(
                                 &wr0,
                                 comm,
@@ -249,7 +274,10 @@ where
                                 share,
                             );
 
-                        msg2s.push(((com0, com1), (wit0, wit1)));
+                        msg2s.push((
+                            (com0, com1),
+                            (*witnesses.0, *witnesses.1),
+                        ));
 
                         let p = lsb(&share.f_label) != 0;
 
@@ -260,28 +288,33 @@ where
                     })
                     .collect::<Vec<_>>();
 
-                send_to_party(setup, tag1, &msgs, 2, relay).await?;
-                send_to_party(setup, tag1, &wr0msgs, 1, relay).await?;
-                send_to_party(setup, tag2, &msg2s, 2, relay).await?;
+                send_to_party(setup, tag1, &*msgs, 2, relay).await?;
+                send_to_party(setup, tag1, &*wr0msgs, 1, relay).await?;
+                send_to_party(setup, tag2, &*msg2s, 2, relay).await?;
 
                 Ok(outputs)
             } else {
-                let msg1s: Vec<Block> =
-                    receive_from_one_party(setup, tag1, 0, relay).await?;
+                let msg1s = Zeroizing::new(
+                    receive_from_one_party::<Vec<Block>, _, _>(
+                        setup, tag1, 0, relay,
+                    )
+                    .await?,
+                );
 
                 if msg1s.len() != input.len() {
                     return Err(ProtocolError::InvalidMessage);
                 }
 
                 let mut msgs = Vec::new();
-                let mut wr0s = Vec::with_capacity(input.len());
-                let mut wz0s = Vec::with_capacity(input.len());
-                let mut wz1s = Vec::with_capacity(input.len());
+                let mut wz0s =
+                    Zeroizing::new(Vec::with_capacity(input.len()));
+                let mut wz1s =
+                    Zeroizing::new(Vec::with_capacity(input.len()));
 
                 for (share, &wr0) in
-                    input.iter().map(YaoShare::as_garbler).zip(&msg1s)
+                    input.iter().map(YaoShare::as_garbler).zip(msg1s.iter())
                 {
-                    let (com0, com1, wz0, wz1, _, _) =
+                    let (com0, com1, wz, witnesses) =
                         create_yao_to_binary_msg2(
                             &wr0,
                             comm,
@@ -290,16 +323,20 @@ where
                         );
 
                     msgs.push((com0, com1));
+                    drop(witnesses);
 
-                    wr0s.push(wr0);
-                    wz0s.push(wz0);
-                    wz1s.push(wz1);
+                    wz0s.push(*wz.0);
+                    wz1s.push(*wz.1);
                 }
 
                 send_to_party(setup, tag4, &msgs, 2, relay).await?;
 
-                let msg2s: Vec<Block> =
-                    receive_from_one_party(setup, tag3, 2, relay).await?;
+                let msg2s = Zeroizing::new(
+                    receive_from_one_party::<Vec<Block>, _, _>(
+                        setup, tag3, 2, relay,
+                    )
+                    .await?,
+                );
 
                 if msg2s.len() != input.len() {
                     return Err(ProtocolError::InvalidMessage);
@@ -308,10 +345,10 @@ where
                 input
                     .iter()
                     .map(YaoShare::as_garbler)
-                    .zip(&msg2s)
-                    .zip(&wr0s)
-                    .zip(&wz0s)
-                    .zip(&wz1s)
+                    .zip(msg2s.iter())
+                    .zip(msg1s.iter())
+                    .zip(wz0s.iter())
+                    .zip(wz1s.iter())
                     .map(|((((share, wxz), wr0s_i), wz0s_i), wz1s_i)| {
                         if !label_in_pair(wxz, wz0s_i, wz1s_i) {
                             return Err(ProtocolError::InvalidShare);
@@ -330,36 +367,48 @@ where
         }
 
         YaoSetup::E(_e) => {
-            let msg1s: Vec<(Block, u8)> =
-                receive_from_one_party(setup, tag1, 0, relay).await?;
+            let msg1s = Zeroizing::new(
+                receive_from_one_party::<Vec<(Block, u8)>, _, _>(
+                    setup, tag1, 0, relay,
+                )
+                .await?,
+            );
 
             if msg1s.len() != input.len() {
                 return Err(ProtocolError::InvalidMessage);
             }
 
-            let mut ys = Vec::with_capacity(input.len());
-            let mut wxzs_store = Vec::with_capacity(input.len());
+            let mut ys = Zeroizing::new(Vec::with_capacity(input.len()));
 
-            let wxzs = input
-                .iter()
-                .map(YaoShare::as_evaluator)
-                .zip(&msg1s)
-                .map(|(share, (wyr, y))| {
-                    let y = y != &0;
-                    let wxz = xor_blocks(&share.label, wyr);
+            let wxzs = Zeroizing::new(
+                input
+                    .iter()
+                    .map(YaoShare::as_evaluator)
+                    .zip(msg1s.iter())
+                    .map(|(share, (wyr, y))| {
+                        let y = y != &0;
+                        let wxz =
+                            Zeroizing::new(xor_blocks(&share.label, wyr));
 
-                    wxzs_store.push(wxz);
-                    ys.push(y);
+                        ys.push(y);
 
-                    wxz
-                })
-                .collect::<Vec<_>>();
+                        *wxz
+                    })
+                    .collect::<Vec<_>>(),
+            );
 
-            send_to_party(setup, tag3, &wxzs, 1, relay).await?;
+            send_to_party(setup, tag3, &*wxzs, 1, relay).await?;
 
             // ((Block, Block), (Block, Block))
-            let msg2s_0: Vec<((Block, Block), (Block, Block))> =
-                receive_from_one_party(setup, tag2, 0, relay).await?;
+            let msg2s_0 =
+                Zeroizing::new(
+                    receive_from_one_party::<
+                        Vec<CommitmentsWithWitnesses>,
+                        _,
+                        _,
+                    >(setup, tag2, 0, relay)
+                    .await?,
+                );
 
             let msg2s_1: Vec<(Block, Block)> =
                 receive_from_one_party(setup, tag4, 1, relay).await?;
@@ -375,11 +424,11 @@ where
             input
                 .iter()
                 .map(YaoShare::as_evaluator)
-                .zip(&msg2s_0)
+                .zip(msg2s_0.iter())
                 .zip(&msg2s_1)
-                .zip(&ys)
-                .zip(&wxzs_store)
-                .map(|((((share, m0), m1), &ys_i), wxzs_store_i)| {
+                .zip(ys.iter())
+                .zip(wxzs.iter())
+                .map(|((((share, m0), m1), &ys_i), wxz)| {
                     let (com0, com1) = &m0.0;
                     let (com01, com11) = &m1;
                     let (wit0, wit1) = &m0.1;
@@ -390,9 +439,9 @@ where
 
                     let px = lsb(&share.label) != 0;
                     let verified = if px ^ ys_i {
-                        comm.verify(wxzs_store_i, wit1, com1)
+                        comm.verify(wxz, wit1, com1)
                     } else {
-                        comm.verify(wxzs_store_i, wit0, com0)
+                        comm.verify(wxz, wit0, com0)
                     };
 
                     if !verified {

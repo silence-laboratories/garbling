@@ -6,6 +6,7 @@ use std::{marker::PhantomData, time::Duration};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use signature::{SignatureEncoding, Signer, Verifier};
+use zeroize::{Zeroize, Zeroizing};
 
 use sl_compute_common::{BinaryString, CommonRandomness};
 use sl_messages::{
@@ -352,6 +353,32 @@ where
     }
 
     Ok(CommonRandomness::new(key_prev, key_next))
+}
+
+/// A zeroizing wrapper preserves the wire representation of the wrapped
+/// value while clearing it when the wrapper is dropped.
+impl<T> FixedExternalSize for Zeroizing<T>
+where
+    T: FixedExternalSize + Zeroize,
+{
+    const SIZE: usize = T::SIZE;
+}
+
+impl<T> Wrap for Zeroizing<T>
+where
+    T: Wrap + Zeroize,
+{
+    fn external_size(&self) -> usize {
+        (**self).external_size()
+    }
+
+    fn write(&self, buffer: &mut [u8]) {
+        (**self).write(buffer)
+    }
+
+    fn read(buffer: &[u8]) -> Option<Self> {
+        T::read(buffer).map(Zeroizing::new)
+    }
 }
 
 /// A type with fixed size of external representation.

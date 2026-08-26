@@ -1,7 +1,9 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
-use super::serde_types::{SerializableBlock, SerializableScalar};
+use super::serde_types::{
+    SecretBytes32, SecretVecU8, SerializableBlock, SerializableScalar,
+};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
@@ -57,7 +59,7 @@ pub(crate) enum MessageBody {
 pub(crate) enum SetupYaoMessage {
     CommCrs(SerializableBlock),
     PrfSeed {
-        seed: [u8; 32],
+        seed: SecretBytes32,
         comm_crs: SerializableBlock,
     },
     /// Garbler-shared circuit-hash key, sent from party 0 to the evaluator.
@@ -67,17 +69,17 @@ pub(crate) enum SetupYaoMessage {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum CommonRandomnessMessage {
-    KeyNext([u8; 32]),
+    KeyNext(SecretBytes32),
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ShamirToRssMessage(pub SerializableScalar);
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BatchInputYaoMessage {
-    EvaluatorBits(Vec<u8>),
+    EvaluatorBits(SecretVecU8),
     GarblerInputCommit(InputYaoAllMsg1),
     GarblerI3Commit(InputYaoAllMsg2),
 }
@@ -95,7 +97,7 @@ pub(crate) enum OutputYaoMessage {
     Label(SerializableBlock),
     Labels(Vec<SerializableBlock>),
     Bit(bool),
-    Bits(Vec<u8>),
+    Bits(SecretVecU8),
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -118,4 +120,27 @@ pub(crate) struct InputYaoAllMsg2 {
     pub comm_2t: Vec<SerializableBlock>,
     pub w: Vec<SerializableBlock>,
     pub wit: Vec<SerializableBlock>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::derivation_session::serde_types::SecretVecU8;
+
+    #[test]
+    fn secret_message_debug_output_is_redacted() {
+        let message = Message {
+            from: 2,
+            to: 0,
+            body: MessageBody::BatchInputYao(
+                BatchInputYaoMessage::EvaluatorBits(SecretVecU8::from(vec![
+                    0xde, 0xad, 0xbe, 0xef,
+                ])),
+            ),
+        };
+        let debug = format!("{message:?}");
+        assert!(!debug.contains("de"));
+        assert!(!debug.contains("deadbeef"));
+        assert!(debug.contains("SecretVecU8(..)"));
+    }
 }

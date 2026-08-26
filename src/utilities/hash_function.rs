@@ -5,6 +5,7 @@ use aes::{
     cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit},
     Aes128,
 };
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::utilities::types::BLOCK_SIZE;
 
@@ -33,7 +34,7 @@ pub trait HashFunction {
 }
 
 /// Represents a structure of hash function based on AES-128 encryption.
-#[derive(Clone, Copy)]
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct AesHash {
     /// `Aes128` object used for hashing.
     key: Block,
@@ -46,10 +47,10 @@ impl AesHash {
         AesHash { key }
     }
 
-    fn aes_call(key: Block, msg: [u8; 16]) -> [u8; 16] {
-        let keyar = GenericArray::from(key);
+    fn aes_call(key: &Block, msg: &Block) -> Block {
+        let keyar = GenericArray::clone_from_slice(key);
         let aes = Aes128::new(&keyar);
-        let mut msgar = GenericArray::from(msg);
+        let mut msgar = GenericArray::clone_from_slice(msg);
         aes.encrypt_block(&mut msgar);
         msgar.into()
     }
@@ -84,18 +85,19 @@ impl AesHash {
     // to be changed for reduce block size
     /// Davies–Meyer hash: H_i = E(M_i, H_{i-1}) ⊕ H_{i-1}
     pub fn hash(&self, input: &[u8]) -> Block {
-        let padded_blocks = AesHash::md_pad(input);
+        let padded_blocks = Zeroizing::new(AesHash::md_pad(input));
 
-        let mut h = self.key;
+        let mut h = Zeroizing::new(self.key);
 
-        for block in padded_blocks {
-            let cipher_output = AesHash::aes_call(block, h);
+        for block in padded_blocks.iter() {
+            let h_ref: &Block = &h;
+            let cipher_output = AesHash::aes_call(block, h_ref);
             for i in 0..16 {
                 h[i] ^= cipher_output[i]; // XOR output with previous hash
             }
         }
         let mut out = Block::default();
-        out.copy_from_slice(&h);
+        out.copy_from_slice(&*h);
         out
     }
 }
@@ -143,6 +145,7 @@ impl HashFunction for AesHash {
 
     /// Implementation of the `initialize` function for a `AesHash`.
     fn initialize(&mut self, key: Block) {
+        self.key.zeroize();
         self.key = key;
     }
 }

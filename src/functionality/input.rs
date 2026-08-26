@@ -2,6 +2,7 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use rand::{rngs::StdRng, Rng, RngCore, SeedableRng};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use sl_compute_common::BinaryString;
 use sl_messages::{relay::Relay, setup::ProtocolParticipant};
@@ -32,20 +33,20 @@ use crate::{
 fn input_yao_functionality_create_msg1(
     input: bool,
     yao_setup: &mut GarblerSetup,
-) -> (Block, YaoGarblerShare) {
-    let w0 = yao_setup.prf.gen();
+) -> (Zeroizing<Block>, YaoGarblerShare) {
+    let w0 = Zeroizing::new(yao_setup.prf.gen::<Block>());
 
-    let wi = if input {
+    let wi = Zeroizing::new(if input {
         xor_blocks(&w0, &yao_setup.delta)
     } else {
-        w0
-    };
+        *w0
+    });
 
     (
         wi,
         YaoGarblerShare {
             delta: yao_setup.delta,
-            f_label: w0,
+            f_label: *w0,
         },
     )
 }
@@ -72,14 +73,14 @@ where
         }
 
         _ => {
-            let msg1s: Vec<Block> =
+            let msg1s: Vec<Zeroizing<Block>> =
                 receive_from_parties(setup, tag1, &[0, 1], relay).await?;
 
             if msg1s.len() != 2 || msg1s[0] != msg1s[1] {
                 return Err(ProtocolError::InconsistentMessage);
             }
 
-            Ok(YaoShare::E(YaoEvaluatorShare { label: msg1s[0] }))
+            Ok(YaoShare::E(YaoEvaluatorShare { label: *msg1s[0] }))
         }
     }
 }
@@ -98,11 +99,12 @@ where
 
     match yao_setup {
         YaoSetup::G(g) => {
-            let (msg1, output): (Vec<Block>, Vec<YaoShare>) = input
-                .iter()
-                .map(|&i| input_yao_functionality_create_msg1(i, g))
-                .map(|(m, s)| (m, YaoShare::G(s)))
-                .unzip();
+            let (msg1, output): (Vec<Zeroizing<Block>>, Vec<YaoShare>) =
+                input
+                    .iter()
+                    .map(|&i| input_yao_functionality_create_msg1(i, g))
+                    .map(|(m, s)| (m, YaoShare::G(s)))
+                    .unzip();
 
             send_to_party(setup, tag1, &msg1, 2, relay).await?;
 
@@ -110,7 +112,7 @@ where
         }
 
         YaoSetup::E(_) => {
-            let msg1s: Vec<Vec<Block>> =
+            let msg1s: Vec<Vec<Zeroizing<Block>>> =
                 receive_from_parties(setup, tag1, &[0, 1], relay).await?;
 
             if msg1s.len() != 2
@@ -122,7 +124,9 @@ where
 
             Ok(msg1s[0]
                 .iter()
-                .map(|&label| YaoShare::E(YaoEvaluatorShare { label }))
+                .map(|label| {
+                    YaoShare::E(YaoEvaluatorShare { label: **label })
+                })
                 .collect())
         }
     }
@@ -131,43 +135,40 @@ where
 fn input_yao_from_functionality_12_create_msg1<C>(
     comm: &C,
     yao_setup: &mut GarblerSetup,
-) -> (Block, Block, (Block, Block), (Block, Block), bool)
+) -> Zeroizing<InputYaoFromFunctionality12Secrets>
 where
     C: Commitment,
 {
     let rng = &mut yao_setup.prf;
 
     let b = rng.next_u32() % 2 == 0;
-    let mut w0 = Block::default();
-    rng.fill_bytes(&mut w0);
-
-    let mut witness_0 = Block::default();
-    rng.fill_bytes(&mut witness_0);
-
-    let mut witness_1 = Block::default();
-    rng.fill_bytes(&mut witness_1);
+    let w0 = next_secret_block(rng);
+    let witness_0 = next_secret_block(rng);
+    let witness_1 = next_secret_block(rng);
 
     // a = 0 => c0 = Com(Wb) => c0 = w0 if b=0 and w1 if b=1 => c0 = if not b {w0} else {w1}
     // a = 1 => c1 = Com(W!b) => c1 = w1 if b=0 and w0 if b=0 => c1 = if not b {w1} else {w0}
     let comm_0 = if !b {
         comm.commit(&w0, &witness_0)
     } else {
-        comm.commit(&xor_blocks(&w0, &yao_setup.delta), &witness_1)
+        let label = Zeroizing::new(xor_blocks(&w0, &yao_setup.delta));
+        comm.commit(&label, &witness_1)
     };
 
     let comm_1 = if b {
         comm.commit(&w0, &witness_0)
     } else {
-        comm.commit(&xor_blocks(&w0, &yao_setup.delta), &witness_1)
+        let label = Zeroizing::new(xor_blocks(&w0, &yao_setup.delta));
+        comm.commit(&label, &witness_1)
     };
 
-    (
+    Zeroizing::new((
         comm_0,
         comm_1,
-        (w0, witness_0),
-        (xor_blocks(&w0, &yao_setup.delta), witness_1),
+        (*w0, *witness_0),
+        (xor_blocks(&w0, &yao_setup.delta), *witness_1),
         b,
-    )
+    ))
 }
 
 fn input_yao_from_functionality_3_create_msg1(input: bool) -> (bool, bool) {
@@ -180,41 +181,39 @@ fn input_yao_from_functionality_3_create_msg1(input: bool) -> (bool, bool) {
 fn input_yao_from_functionality_3_create_msg2<C>(
     comm: &C,
     yao_setup: &mut GarblerSetup,
-) -> [Block; 10]
+) -> Zeroizing<[Block; 10]>
 where
     C: Commitment,
 {
     let rng = &mut yao_setup.prf;
 
-    let mut w01 = Block::default();
-    rng.fill_bytes(&mut w01);
+    let w01 = next_secret_block(rng);
+    let w02 = next_secret_block(rng);
 
-    let mut w02 = Block::default();
-    rng.fill_bytes(&mut w02);
-
-    let mut witness1f = Block::default();
-    rng.fill_bytes(&mut witness1f);
+    let witness1f = next_secret_block(rng);
     let comm1f = comm.commit(&w01, &witness1f);
 
-    let mut witness1t = Block::default();
-    rng.fill_bytes(&mut witness1t);
-    let comm1t = comm.commit(&xor_blocks(&yao_setup.delta, &w01), &witness1t);
+    let witness1t = next_secret_block(rng);
+    let label1t = Zeroizing::new(xor_blocks(&yao_setup.delta, &w01));
+    let comm1t = comm.commit(&label1t, &witness1t);
 
-    let mut witness2f = Block::default();
-    rng.fill_bytes(&mut witness2f);
+    let witness2f = next_secret_block(rng);
     let comm2f = comm.commit(&w02, &witness2f);
 
-    let mut witness2t = Block::default();
-    rng.fill_bytes(&mut witness2t);
-    let comm2t = comm.commit(&xor_blocks(&yao_setup.delta, &w02), &witness2t);
+    let witness2t = next_secret_block(rng);
+    let label2t = Zeroizing::new(xor_blocks(&yao_setup.delta, &w02));
+    let comm2t = comm.commit(&label2t, &witness2t);
 
-    [
-        comm1f, comm1t, comm2f, comm2t, w01, w02, witness1f, witness1t,
-        witness2f, witness2t,
-    ]
+    Zeroizing::new([
+        comm1f, comm1t, comm2f, comm2t, *w01, *w02, *witness1f, *witness1t,
+        *witness2f, *witness2t,
+    ])
 }
 
 type Block42 = ((Block, Block, Block, Block), (Block, Block));
+type InputYaoCommitments = Vec<((Block, Block), (Block, Block))>;
+type InputYaoFromFunctionality12Secrets =
+    (Block, Block, (Block, Block), (Block, Block), bool);
 
 #[cfg(test)]
 type Block22 = ((Block, Block), (Block, Block));
@@ -240,33 +239,37 @@ where
     if pid == 0 || pid == 1 {
         match yao_setup {
             YaoSetup::G(g) => {
-                let (com0, com1, (w0, wit0), (w1, wit1), _b) =
+                let secrets =
                     input_yao_from_functionality_12_create_msg1(comm, g);
+                let (com0, com1, (w0, wit0), (w1, wit1), _b) = &*secrets;
 
-                let send = (
-                    (com0, com1),
+                let send = Zeroizing::new((
+                    (*com0, *com1),
                     if g.party_id == pid {
                         if input {
-                            (w1, wit1)
+                            (*w1, *wit1)
                         } else {
-                            (w0, wit0)
+                            (*w0, *wit0)
                         }
                     } else {
                         (ZBLOCK, ZBLOCK)
                     },
-                );
+                ));
 
                 send_to_party(setup, tag1, &send, 2, relay).await?;
 
                 Ok(YaoShare::G(YaoGarblerShare {
                     delta: g.delta,
-                    f_label: w0,
+                    f_label: *w0,
                 }))
             }
 
             YaoSetup::E(_e) => {
-                let com_decom: Vec<((Block, Block), (Block, Block))> =
-                    receive_from_parties(setup, tag1, &[0, 1], relay).await?;
+                let com_decom: Zeroizing<InputYaoCommitments> =
+                    Zeroizing::new(
+                        receive_from_parties(setup, tag1, &[0, 1], relay)
+                            .await?,
+                    );
 
                 if com_decom.len() != 2 {
                     return Err(ProtocolError::MissingMessage);
@@ -302,8 +305,9 @@ where
         send_to_party(setup, tag1, &Byte(x1 as u8), 0, relay).await?;
         send_to_party(setup, tag1, &Byte(x2 as u8), 1, relay).await?;
 
-        let msg: Vec<Block42> =
-            receive_from_parties(setup, tag2, &[0, 1], relay).await?;
+        let msg: Zeroizing<Vec<Block42>> = Zeroizing::new(
+            receive_from_parties(setup, tag2, &[0, 1], relay).await?,
+        );
 
         if msg.len() != 2 {
             return Err(ProtocolError::MissingMessage);
@@ -352,7 +356,7 @@ where
         let msg2vals =
             input_yao_from_functionality_3_create_msg2(comm, ysetup);
 
-        let (label, wit) = if party_id == 0 {
+        let selected = Zeroizing::new(if party_id == 0 {
             if x_val {
                 (xor_blocks(&msg2vals[4], &ysetup.delta), msg2vals[7])
             } else {
@@ -362,12 +366,12 @@ where
             (xor_blocks(&msg2vals[5], &ysetup.delta), msg2vals[9])
         } else {
             (msg2vals[5], msg2vals[8])
-        };
+        });
 
-        let msg = (
+        let msg = Zeroizing::new((
             (msg2vals[0], msg2vals[1], msg2vals[2], msg2vals[3]),
-            (label, wit),
-        );
+            *selected,
+        ));
 
         send_to_party(setup, tag2, &msg, 2, relay).await?;
 
@@ -411,40 +415,45 @@ where
     if pid == 0 || pid == 1 {
         match yao_setup {
             YaoSetup::G(g) => {
-                let send = input
-                    .iter()
-                    .map(|i| {
-                        let (com0, com1, (w0, wit0), (w1, wit1), _b) =
-                            input_yao_from_functionality_12_create_msg1(
-                                comm, g,
-                            );
+                let send = Zeroizing::new(
+                    input
+                        .iter()
+                        .map(|i| {
+                            let secrets =
+                                input_yao_from_functionality_12_create_msg1(
+                                    comm, g,
+                                );
+                            let (com0, com1, (w0, wit0), (w1, wit1), _b) =
+                                &*secrets;
 
-                        output.push(YaoShare::G(YaoGarblerShare {
-                            delta: g.delta,
-                            f_label: w0,
-                        }));
+                            output.push(YaoShare::G(YaoGarblerShare {
+                                delta: g.delta,
+                                f_label: *w0,
+                            }));
 
-                        (
-                            (com0, com1),
-                            if party_id == pid {
-                                if i.unwrap() {
-                                    (w1, wit1)
+                            (
+                                (*com0, *com1),
+                                if party_id == pid {
+                                    if i.unwrap() {
+                                        (*w1, *wit1)
+                                    } else {
+                                        (*w0, *wit0)
+                                    }
                                 } else {
-                                    (w0, wit0)
-                                }
-                            } else {
-                                (ZBLOCK, ZBLOCK)
-                            },
-                        )
-                    })
-                    .collect::<Vec<_>>();
+                                    (ZBLOCK, ZBLOCK)
+                                },
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                );
 
                 send_to_party(setup, tag1, &send, 2, relay).await?;
             }
 
             YaoSetup::E(_) => {
-                let com_decom: Vec<Vec<Block22>> =
-                    receive_from_parties(setup, tag1, &[0, 1], relay).await?;
+                let com_decom: Zeroizing<Vec<Vec<Block22>>> = Zeroizing::new(
+                    receive_from_parties(setup, tag1, &[0, 1], relay).await?,
+                );
 
                 if com_decom.len() != 2 {
                     return Err(ProtocolError::MissingMessage);
@@ -493,8 +502,9 @@ where
         send_to_party(setup, tag1, &val1, 0, relay).await?;
         send_to_party(setup, tag1, &val2, 1, relay).await?;
 
-        let msg: Vec<Vec<Block42>> =
-            receive_from_parties(setup, tag2, &[0, 1], relay).await?;
+        let msg: Zeroizing<Vec<Vec<Block42>>> = Zeroizing::new(
+            receive_from_parties(setup, tag2, &[0, 1], relay).await?,
+        );
 
         if msg.len() != 2 {
             return Err(ProtocolError::MissingMessage);
@@ -546,7 +556,7 @@ where
         let recv: BinaryString =
             receive_from_one_party(setup, tag1, 2, relay).await?;
 
-        let mut msg = vec![];
+        let mut msg = Zeroizing::new(Vec::new());
 
         for (i, output) in output.iter_mut().enumerate() {
             let x_val = recv.get(i);
@@ -554,21 +564,19 @@ where
             let msg2vals =
                 input_yao_from_functionality_3_create_msg2(comm, ysetup);
 
-            let (label, wit) = if party_id == 0 {
-                if x_val {
-                    (xor_blocks(&msg2vals[4], &ysetup.delta), msg2vals[7])
-                } else {
-                    (msg2vals[4], msg2vals[6])
-                }
-            } else if x_val {
-                (xor_blocks(&msg2vals[5], &ysetup.delta), msg2vals[9])
-            } else {
-                (msg2vals[5], msg2vals[8])
-            };
-
             msg.push((
                 (msg2vals[0], msg2vals[1], msg2vals[2], msg2vals[3]),
-                (label, wit),
+                if party_id == 0 {
+                    if x_val {
+                        (xor_blocks(&msg2vals[4], &ysetup.delta), msg2vals[7])
+                    } else {
+                        (msg2vals[4], msg2vals[6])
+                    }
+                } else if x_val {
+                    (xor_blocks(&msg2vals[5], &ysetup.delta), msg2vals[9])
+                } else {
+                    (msg2vals[5], msg2vals[8])
+                },
             ));
 
             let sh1 = YaoGarblerShare {
@@ -593,6 +601,7 @@ where
 }
 
 /// Msg1 for Input Yao from all protocol generated by garblers
+#[derive(Zeroize, ZeroizeOnDrop)]
 struct InputYaoAllMsg1p22 {
     com_i1_0: Vec<Block>,
     com_i2_0: Vec<Block>,
@@ -656,6 +665,12 @@ fn decode_vec_bool(input: Vec<u8>, length: usize) -> Vec<bool> {
     (0..length).map(|j| x.get(j)).collect()
 }
 
+fn next_secret_block<R: RngCore>(rng: &mut R) -> Zeroizing<Block> {
+    let mut block = Zeroizing::new(Block::default());
+    rng.fill_bytes(&mut *block);
+    block
+}
+
 fn input_yao_from_all_functionality_12_create_msg1<C, T>(
     comm: &C,
     yao_setup: &mut GarblerSetup,
@@ -683,27 +698,24 @@ where
         // FIXME: random bit???
         let b = rng.next_u32() % 2 == 0;
 
-        let mut w0 = Block::default();
-        rng.fill_bytes(&mut w0);
-
-        let mut witness_0 = Block::default();
-        rng.fill_bytes(&mut witness_0);
-
-        let mut witness_1 = Block::default();
-        rng.fill_bytes(&mut witness_1);
+        let w0 = next_secret_block(rng);
+        let witness_0 = next_secret_block(rng);
+        let witness_1 = next_secret_block(rng);
 
         // a = 0 => c0 = Com(Wb)  => c0 = w0 if b=0 and w1 if b=1 => c0 = if not b {w0} else {w1}
         // a = 1 => c1 = Com(W!b) => c1 = w1 if b=0 and w0 if b=0 => c1 = if not b {w1} else {w0}
         let comm_0 = if !b {
             comm.commit(&w0, &witness_0)
         } else {
-            comm.commit(&xor_blocks(&w0, &yao_setup.delta), &witness_1)
+            let label = Zeroizing::new(xor_blocks(&w0, &yao_setup.delta));
+            comm.commit(&label, &witness_1)
         };
 
         let comm_1 = if b {
             comm.commit(&w0, &witness_0)
         } else {
-            comm.commit(&xor_blocks(&w0, &yao_setup.delta), &witness_1)
+            let label = Zeroizing::new(xor_blocks(&w0, &yao_setup.delta));
+            comm.commit(&label, &witness_1)
         };
 
         com_i1_0.push(comm_0);
@@ -712,18 +724,19 @@ where
         i1_shares.push(
             YaoGarblerShare {
                 delta: yao_setup.delta,
-                f_label: w0,
+                f_label: *w0,
             }
             .into(),
         );
 
         if yao_setup.party_id == 0 {
             if input[i] {
-                w.push(xor_blocks(&w0, &yao_setup.delta));
-                wit.push(witness_1);
+                let label = Zeroizing::new(xor_blocks(&w0, &yao_setup.delta));
+                w.push(*label);
+                wit.push(*witness_1);
             } else {
-                w.push(w0);
-                wit.push(witness_0);
+                w.push(*w0);
+                wit.push(*witness_0);
             }
         }
     });
@@ -732,27 +745,24 @@ where
         // FIXME: random bit???
         let b = rng.next_u32() % 2 == 0;
 
-        let mut w0 = Block::default();
-        rng.fill_bytes(&mut w0);
-
-        let mut witness_0 = Block::default();
-        rng.fill_bytes(&mut witness_0);
-
-        let mut witness_1 = Block::default();
-        rng.fill_bytes(&mut witness_1);
+        let w0 = next_secret_block(rng);
+        let witness_0 = next_secret_block(rng);
+        let witness_1 = next_secret_block(rng);
 
         // a = 0 => c0 = Com(Wb)  => c0 = w0 if b=0 and w1 if b=1 => c0 = if not b {w0} else {w1}
         // a = 1 => c1 = Com(W!b) => c1 = w1 if b=0 and w0 if b=0 => c1 = if not b {w1} else {w0}
         let comm_0 = if !b {
             comm.commit(&w0, &witness_0)
         } else {
-            comm.commit(&xor_blocks(&w0, &yao_setup.delta), &witness_1)
+            let label = Zeroizing::new(xor_blocks(&w0, &yao_setup.delta));
+            comm.commit(&label, &witness_1)
         };
 
         let comm_1 = if b {
             comm.commit(&w0, &witness_0)
         } else {
-            comm.commit(&xor_blocks(&w0, &yao_setup.delta), &witness_1)
+            let label = Zeroizing::new(xor_blocks(&w0, &yao_setup.delta));
+            comm.commit(&label, &witness_1)
         };
 
         com_i2_0.push(comm_0);
@@ -761,18 +771,19 @@ where
         i2_shares.push(
             YaoGarblerShare {
                 delta: yao_setup.delta,
-                f_label: w0,
+                f_label: *w0,
             }
             .into(),
         );
 
         if yao_setup.party_id == 1 {
             if input[i] {
-                w.push(xor_blocks(&w0, &yao_setup.delta));
-                wit.push(witness_1);
+                let label = Zeroizing::new(xor_blocks(&w0, &yao_setup.delta));
+                w.push(*label);
+                wit.push(*witness_1);
             } else {
-                w.push(w0);
-                wit.push(witness_0);
+                w.push(*w0);
+                wit.push(*witness_0);
             }
         }
     });
@@ -792,6 +803,7 @@ where
 }
 
 /// Msg2 for Input Yao from all protocol generated by garblers
+#[derive(Zeroize, ZeroizeOnDrop)]
 struct InputYaoAllMsg2p22 {
     comm_1f: Vec<Block>,
     comm_1t: Vec<Block>,
@@ -863,42 +875,46 @@ where
     let mut w = Vec::with_capacity(i3_len);
     let mut wit = Vec::with_capacity(i3_len);
 
-    for i in 0..i3_len {
-        let mut w01 = Block::default();
-        rng.fill_bytes(&mut w01);
+    for &msg1 in msg1_recv {
+        let w01 = next_secret_block(rng);
+        let w02 = next_secret_block(rng);
 
-        let mut w02 = Block::default();
-        rng.fill_bytes(&mut w02);
-
-        let mut witness1f = Block::default();
-        rng.fill_bytes(&mut witness1f);
+        let witness1f = next_secret_block(rng);
         let comm1f = comm.commit(&w01, &witness1f);
 
-        let mut witness1t = Block::default();
-        rng.fill_bytes(&mut witness1t);
-        let comm1t =
-            comm.commit(&xor_blocks(&yao_setup.delta, &w01), &witness1t);
+        let witness1t = next_secret_block(rng);
+        let label1t = Zeroizing::new(xor_blocks(&yao_setup.delta, &w01));
+        let comm1t = comm.commit(&label1t, &witness1t);
 
-        let mut witness2f = Block::default();
-        rng.fill_bytes(&mut witness2f);
+        let witness2f = next_secret_block(rng);
         let comm2f = comm.commit(&w02, &witness2f);
 
-        let mut witness2t = Block::default();
-        rng.fill_bytes(&mut witness2t);
-        let comm2t =
-            comm.commit(&xor_blocks(&yao_setup.delta, &w02), &witness2t);
+        let witness2t = next_secret_block(rng);
+        let label2t = Zeroizing::new(xor_blocks(&yao_setup.delta, &w02));
+        let comm2t = comm.commit(&label2t, &witness2t);
 
-        let (msg, witness) = if yao_setup.party_id == 0 {
-            if msg1_recv[i] {
-                (xor_blocks(&w01, &yao_setup.delta), witness1t)
+        let msg = Zeroizing::new(if yao_setup.party_id == 0 {
+            if msg1 {
+                xor_blocks(&w01, &yao_setup.delta)
             } else {
-                (w01, witness1f)
+                *w01
             }
-        } else if msg1_recv[i] {
-            (xor_blocks(&w02, &yao_setup.delta), witness2t)
+        } else if msg1 {
+            xor_blocks(&w02, &yao_setup.delta)
         } else {
-            (w02, witness2f)
-        };
+            *w02
+        });
+        let witness = Zeroizing::new(if yao_setup.party_id == 0 {
+            if msg1 {
+                *witness1t
+            } else {
+                *witness1f
+            }
+        } else if msg1 {
+            *witness2t
+        } else {
+            *witness2f
+        });
 
         i3_shares.push(
             YaoGarblerShare {
@@ -912,8 +928,8 @@ where
         comm_1t.push(comm1t);
         comm_2f.push(comm2f);
         comm_2t.push(comm2t);
-        w.push(msg);
-        wit.push(witness);
+        w.push(*msg);
+        wit.push(*witness);
     }
 
     Ok((

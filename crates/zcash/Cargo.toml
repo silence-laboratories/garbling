@@ -12,6 +12,7 @@ include = [
 
 
 [dependencies]
+chacha20 = { workspace = true }
 ff = { workspace = true }
 garbled-circuit = { workspace = true, features = ["circuit-blake2b"] }
 group = { workspace = true }
@@ -21,6 +22,7 @@ rand_chacha = { workspace = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_bytes = { version = "0.11.15", optional = true }
 sha2 = { workspace = true }
+zeroize = { workspace = true }
 sl-compute-common = { workspace = true }
 sl-messages = { workspace = true }
 sl-secret-sharing = { workspace = true }

@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 
 use rand::RngCore;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
     circuit::{BinaryCircuit, BinaryGate},
@@ -24,7 +25,8 @@ where
     H: HashFunction,
     T: From<YaoGarblerShare>,
 {
-    let mut w = vec![[0; BLOCK_SIZE]; circuit.num_wires() as usize];
+    let mut w =
+        Zeroizing::new(vec![[0; BLOCK_SIZE]; circuit.num_wires() as usize]);
 
     let mut f: Vec<Block> = vec![];
 
@@ -121,18 +123,21 @@ where
         );
     }
 
+    // Wire labels are intermediate key material and are no longer needed once
+    // the output shares have been constructed.
+    w.zeroize();
+
     (f, outputs)
 }
 
 #[cfg(test)]
 mod tests {
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use crate::{
         circuit::prebuilt,
         customcircuits::comparison::build_comparison_circuit,
-        utilities::garble_hash::AesGarbleHash,
+        utilities::{garble_hash::AesGarbleHash, label_prf::LabelPrf},
     };
 
     use super::*;
@@ -151,7 +156,7 @@ mod tests {
         let mut setup = GarblerSetup {
             comm_crs: Block::default(),
             garble_key: Block::default(),
-            prf: ChaCha8Rng::from_seed([0; 32]),
+            prf: LabelPrf::from_seed([0; 32]),
             delta: Block::default(),
             party_id: 0,
         };
@@ -191,7 +196,7 @@ mod tests {
         let mut setup = GarblerSetup {
             comm_crs: Block::default(),
             garble_key: Block::default(),
-            prf: ChaCha8Rng::from_seed([0; 32]),
+            prf: LabelPrf::from_seed([0; 32]),
             delta: Block::default(),
             party_id: 0,
         };

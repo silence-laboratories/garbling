@@ -3,6 +3,7 @@
 
 use ff::{Field, FromUniformBytes, PrimeField};
 use pasta_curves::pallas::{Base, Scalar};
+use zeroize::Zeroizing;
 
 use orchard::{
     keys::FullViewingKey,
@@ -11,10 +12,7 @@ use orchard::{
 
 use garbled_circuit::{
     functionality::utils_dep::ProtocolError,
-    utilities::{
-        types::YaoShare,
-        utils::{lsb, label_matches_wire},
-    },
+    utilities::utils::{label_matches_wire, lsb},
 };
 
 use crate::{
@@ -22,7 +20,10 @@ use crate::{
         Context, DerivedOrchardKeys,
         message::{Message, MessageBody, OutputYaoMessage},
         phase::{Phase, PhaseHandleResult},
-        serde_types::{SerializableBlock, SerializableYaoShare},
+        serde_types::{
+            SecretVecBool, SecretVecU8, SerializableBlock,
+            SerializableYaoShare,
+        },
     },
     utils::bits_to_bytes_le,
 };
@@ -59,7 +60,7 @@ pub(crate) enum BatchOutputYaoState {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DecodeOutputState {
-    bits: Vec<bool>,
+    bits: SecretVecBool,
 }
 
 impl OutputVerificationState {
@@ -83,13 +84,13 @@ impl OutputVerificationState {
             .split_first()
             .expect("zcash import circuit should produce a verification bit");
         if ctx.party_id() == 2 {
-            let label = verification_label(*verification)?;
+            let label = verification_label(verification)?;
             for to in [0, 1] {
                 outgoing.push(Message {
                     from: ctx.party_id(),
                     to,
                     body: MessageBody::OutputVerification(
-                        OutputYaoMessage::Label(label),
+                        OutputYaoMessage::Label(label.clone()),
                     ),
                 });
             }
@@ -103,7 +104,7 @@ impl OutputVerificationState {
         } else {
             Ok(Phase::OutputVerification(
                 OutputVerificationState::GarblerWaitLabel {
-                    verification: *verification,
+                    verification: verification.clone(),
                     component_bits: component_bits.to_vec(),
                 },
             ))
@@ -140,7 +141,7 @@ impl OutputVerificationState {
                 else {
                     return Err(ProtocolError::InvalidMessage);
                 };
-                let bit = garbler_verify_one(*verification, label)?;
+                let bit = garbler_verify_one(verification, &label)?;
                 outgoing.push(Message {
                     from: ctx.party_id(),
                     to: 2,
@@ -195,7 +196,7 @@ impl BatchOutputYaoState {
         if ctx.party_id() == 2 {
             let labels = component_bits
                 .iter()
-                .map(|share| verification_label(*share))
+                .map(verification_label)
                 .collect::<Result<Vec<_>, _>>()?;
             for to in [0, 1] {
                 outgoing.push(Message {
@@ -277,19 +278,23 @@ impl DecodeOutputState {
 
         let (ask_bits, rem) = self.bits.split_at(COMPONENT_BITS);
         let (nk_bits, rivk_bits) = rem.split_at(COMPONENT_BITS);
-        let ask_i = bits_to_bytes_le(ask_bits);
-        let nk_i = bits_to_bytes_le(nk_bits);
-        let rivk_i = bits_to_bytes_le(rivk_bits);
-        let ask = Scalar::from_uniform_bytes(&ask_i.try_into().unwrap());
-        let nk = Base::from_uniform_bytes(&nk_i.try_into().unwrap());
-        let rivk = Scalar::from_uniform_bytes(&rivk_i.try_into().unwrap());
+        let ask_i = Zeroizing::new(bits_to_bytes_le(ask_bits));
+        let nk_i = Zeroizing::new(bits_to_bytes_le(nk_bits));
+        let rivk_i = Zeroizing::new(bits_to_bytes_le(rivk_bits));
+        let ask_bytes = Zeroizing::new(ask_i.as_slice().try_into().unwrap());
+        let nk_bytes = Zeroizing::new(nk_i.as_slice().try_into().unwrap());
+        let rivk_bytes =
+            Zeroizing::new(rivk_i.as_slice().try_into().unwrap());
+        let ask = Scalar::from_uniform_bytes(&ask_bytes);
+        let nk = Base::from_uniform_bytes(&nk_bytes);
+        let rivk = Scalar::from_uniform_bytes(&rivk_bytes);
 
         let mut ask_eff = ask;
         let ak_bytes = loop {
             let signing_key: SigningKey<SpendAuth> =
                 ask_eff.to_repr().try_into().unwrap();
             let vk: VerificationKey<SpendAuth> = (&signing_key).into();
-            let ak_bytes: [u8; 32] = (&vk).into();
+            let ak_bytes = Zeroizing::new(<[u8; 32]>::from(&vk));
 
             if (ak_bytes[31] >> 7) == 1 {
                 ask_eff = -ask_eff;
@@ -303,8 +308,8 @@ impl DecodeOutputState {
             return Err(ProtocolError::VerificationError);
         }
 
-        let mut fvk_bytes = [0u8; 96];
-        fvk_bytes[0..32].copy_from_slice(&ak_bytes);
+        let mut fvk_bytes = Zeroizing::new([0u8; 96]);
+        fvk_bytes[0..32].copy_from_slice(&*ak_bytes);
         fvk_bytes[32..64].copy_from_slice(&nk.to_repr());
         fvk_bytes[64..96].copy_from_slice(&rivk.to_repr());
 
@@ -315,9 +320,9 @@ impl DecodeOutputState {
         let external_ivk = fvk.to_ivk(orchard::keys::Scope::External);
 
         for ivk in [&internal_ivk, &external_ivk] {
-            let ivk_bytes = ivk.to_bytes();
+            let ivk_bytes = Zeroizing::new(ivk.to_bytes());
 
-            if ivk_bytes == [0; 64] {
+            if *ivk_bytes == [0; 64] {
                 return Err(ProtocolError::VerificationError);
             }
 
@@ -340,10 +345,12 @@ impl DecodeOutputState {
 }
 
 fn verification_label(
-    share: SerializableYaoShare,
+    share: &SerializableYaoShare,
 ) -> Result<SerializableBlock, ProtocolError> {
-    match YaoShare::from(share) {
-        YaoShare::E(e) => Ok(SerializableBlock(e.label)),
+    match share {
+        SerializableYaoShare::Evaluator { label } => {
+            Ok(SerializableBlock(label.0))
+        }
         _ => Err(ProtocolError::InvalidShare),
     }
 }
@@ -411,7 +418,7 @@ fn extract_bit(
 
 fn extract_bits(
     pending: &mut Option<OutputYaoMessage>,
-) -> Result<Vec<u8>, ProtocolError> {
+) -> Result<SecretVecU8, ProtocolError> {
     let Some(OutputYaoMessage::Bits(bits)) = pending.take() else {
         return Err(ProtocolError::InvalidMessage);
     };
@@ -419,55 +426,71 @@ fn extract_bits(
 }
 
 pub(crate) fn garbler_verify_one(
-    share: SerializableYaoShare,
-    label: SerializableBlock,
+    share: &SerializableYaoShare,
+    label: &SerializableBlock,
 ) -> Result<bool, ProtocolError> {
-    let YaoShare::G(share) = YaoShare::from(share) else {
+    let SerializableYaoShare::Garbler { delta, f_label } = share else {
         return Err(ProtocolError::InvalidShare);
     };
-    let wx = label.0;
-    if !label_matches_wire(&wx, &share.f_label, &share.delta) {
+    if !label_matches_wire(&label.0, &f_label.0, &delta.0) {
         return Err(ProtocolError::InvalidShare);
     }
-    Ok((lsb(&wx) ^ lsb(&share.f_label)) != 0)
+    Ok((lsb(&label.0) ^ lsb(&f_label.0)) != 0)
 }
 
 pub(crate) fn garbler_verify_many(
     shares: &[SerializableYaoShare],
     labels: &[SerializableBlock],
-) -> Result<Vec<bool>, ProtocolError> {
+) -> Result<SecretVecBool, ProtocolError> {
     if shares.len() != labels.len() {
         return Err(ProtocolError::InvalidMessage);
     }
-    shares
-        .iter()
-        .zip(labels)
-        .map(|(share, label)| garbler_verify_one(*share, *label))
-        .collect()
+    Ok(SecretVecBool::from(
+        shares
+            .iter()
+            .zip(labels)
+            .map(|(share, label)| garbler_verify_one(share, label))
+            .collect::<Result<Vec<_>, _>>()?,
+    ))
 }
 
-pub(crate) fn encode_bits(input: &[bool]) -> Vec<u8> {
-    let mut value = vec![0u8; input.len().div_ceil(8)];
+pub(crate) fn encode_bits(input: &[bool]) -> SecretVecU8 {
+    let mut value = SecretVecU8::from(vec![0u8; input.len().div_ceil(8)]);
     for (idx, bit) in input.iter().copied().enumerate() {
         if bit {
-            value[idx / 8] |= 1 << (idx % 8);
+            value.0[idx / 8] |= 1 << (idx % 8);
         }
     }
     value
 }
 
-fn decode_bits(input: &[u8], len: usize) -> Result<Vec<bool>, ProtocolError> {
+fn decode_bits(
+    input: &[u8],
+    len: usize,
+) -> Result<SecretVecBool, ProtocolError> {
     if input.len() != len.div_ceil(8) {
         return Err(ProtocolError::InvalidMessage);
     }
-    Ok((0..len)
-        .map(|idx| (input[idx / 8] >> (idx % 8)) & 1 == 1)
-        .collect())
+    Ok(SecretVecBool::from(
+        (0..len)
+            .map(|idx| (input[idx / 8] >> (idx % 8)) & 1 == 1)
+            .collect::<Vec<_>>(),
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decode_output_state_debug_output_is_redacted() {
+        let state = DecodeOutputState {
+            bits: SecretVecBool::from(vec![true, false]),
+        };
+        let debug = format!("{state:?}");
+        assert!(!debug.contains("true"));
+        assert!(debug.contains("SecretVecBool(..)"));
+    }
 
     #[test]
     fn rejects_wrong_output_bit_lengths() {
@@ -480,7 +503,9 @@ mod tests {
 
     #[test]
     fn decode_rejects_corrupt_persisted_bit_count() {
-        let state = DecodeOutputState { bits: Vec::new() };
+        let state = DecodeOutputState {
+            bits: SecretVecBool::default(),
+        };
         let err = state.decode().unwrap_err();
         assert!(matches!(err, ProtocolError::InvalidMessage));
     }

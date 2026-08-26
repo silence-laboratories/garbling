@@ -2,11 +2,13 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use sha2::{Digest, Sha256};
+use zeroize::{Zeroize, Zeroizing};
 
 use garbled_circuit::functionality::utils_dep::ProtocolError;
 
 use super::serde_types::{
-    SerializableBlock, SerializableScalar, SerializableYaoSetup,
+    SecretBytes32, SerializableBlock, SerializableLabelPrf,
+    SerializableScalar, SerializableYaoSetup,
 };
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -14,7 +16,7 @@ use super::serde_types::{
 pub(crate) struct Context {
     pub(crate) party_id: u8,
     pub(crate) shamir_share: SerializableScalar,
-    pub(crate) seed: [u8; 32],
+    pub(crate) seed: SecretBytes32,
     pub(crate) yao_setup: Option<SerializableYaoSetup>,
 }
 
@@ -37,7 +39,7 @@ impl Context {
         {
             SerializableYaoSetup::Garbler { comm_crs, .. }
             | SerializableYaoSetup::Evaluator { comm_crs, .. } => {
-                Ok(*comm_crs)
+                Ok(comm_crs.clone())
             }
         }
     }
@@ -52,7 +54,7 @@ impl Context {
         {
             SerializableYaoSetup::Garbler { garble_key, .. }
             | SerializableYaoSetup::Evaluator { garble_key, .. } => {
-                Ok(*garble_key)
+                Ok(garble_key.clone())
             }
         }
     }
@@ -62,7 +64,7 @@ impl Context {
         hasher.update(b"zcash-derivation-session-rng-v1");
         hasher.update(domain);
         hasher.update([self.party_id]);
-        hasher.update(self.seed);
+        hasher.update(self.seed.expose());
         hasher.update(counter.to_le_bytes());
         hasher.finalize().into()
     }
@@ -72,7 +74,7 @@ impl Context {
         domain: &[u8],
         counter: u32,
     ) -> SerializableBlock {
-        let bytes = self.derive_32(domain, counter);
+        let bytes = Zeroizing::new(self.derive_32(domain, counter));
         let mut out = [0u8; 16];
         out.copy_from_slice(&bytes[..16]);
         SerializableBlock(out)
@@ -86,11 +88,59 @@ impl Context {
         let (delta, prf, garble_key) = super::setup_delta_from_seed(prf_seed);
         self.yao_setup = Some(SerializableYaoSetup::Garbler {
             comm_crs,
-            garble_key,
-            prf: Box::new(prf),
+            garble_key: garble_key.clone(),
+            prf: Box::new(SerializableLabelPrf::from_prf(&prf)),
             delta,
             party_id: self.party_id,
         });
         garble_key
+    }
+}
+
+impl Zeroize for Context {
+    fn zeroize(&mut self) {
+        self.shamir_share.zeroize();
+        self.seed.zeroize();
+        if let Some(setup) = &mut self.yao_setup {
+            setup.zeroize();
+        }
+    }
+}
+
+impl Drop for Context {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn context_zeroizes_persisted_secrets() {
+        let mut context = Context {
+            party_id: 2,
+            shamir_share: SerializableScalar([0x11; 32]),
+            seed: SecretBytes32([0x22; 32]),
+            yao_setup: Some(SerializableYaoSetup::Evaluator {
+                comm_crs: SerializableBlock([0x33; 16]),
+                garble_key: SerializableBlock([0x44; 16]),
+            }),
+        };
+
+        context.zeroize();
+
+        assert_eq!(context.shamir_share.0, [0; 32]);
+        assert_eq!(context.seed.0, [0; 32]);
+        let Some(SerializableYaoSetup::Evaluator {
+            comm_crs,
+            garble_key,
+        }) = &context.yao_setup
+        else {
+            unreachable!();
+        };
+        assert_eq!(comm_crs.0, [0; 16]);
+        assert_eq!(garble_key.0, [0; 16]);
     }
 }

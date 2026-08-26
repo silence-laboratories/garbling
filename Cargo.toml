@@ -34,12 +34,14 @@ sl-compute-common = { workspace = true }
 sl-messages = { workspace = true }
 
 aes = { workspace = true }
+chacha20 = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 generic-array = { workspace = true }
 sha2 = { workspace = true }
 signature = { workspace = true }
 subtle = { workspace = true }
+zeroize = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
@@ -49,7 +51,8 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 
 [workspace.dependencies]
-aes = "0.8.4"
+aes = { version = "0.8.4", features = ["zeroize"] }
+chacha20 = { version = "0.9.1", features = ["zeroize"] }
 derivation-path = "0.2.0"
 ff = "0.13.0"
 generic-array = { version = "=0.14.7" }
@@ -61,6 +64,7 @@ rand_chacha = "0.3"
 sha2 = "0.10.8"
 signature = { version = "2.2.0" }
 subtle = "2.6"
+zeroize = { version = "1.8", features = ["derive"] }
 thiserror = "1.0"
 tokio = "1.43.0"
 
