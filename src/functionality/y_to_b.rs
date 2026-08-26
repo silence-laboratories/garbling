@@ -23,7 +23,7 @@ use crate::{
         types::{
             Block, GarblerSetup, YaoGarblerShare, YaoSetup, YaoShare, ZBLOCK,
         },
-        utils::{label_in_pair, lsb, xor_blocks},
+        utils::{blocks_ct_eq, label_in_pair, lsb, xor_blocks},
     },
 };
 
@@ -158,7 +158,7 @@ where
                     .await?,
                 );
 
-                if g.delta != garbler_share.delta {
+                if !bool::from(blocks_ct_eq(&g.delta, &garbler_share.delta)) {
                     return Err(ProtocolError::InvalidShare);
                 }
 
