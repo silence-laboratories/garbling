@@ -2,7 +2,7 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use rand::{Rng, RngCore, SeedableRng};
-use rand_chacha::ChaCha8Rng;
+use zeroize::Zeroizing;
 
 use ff::PrimeField;
 use garbled_circuit::{
@@ -27,7 +27,8 @@ use crate::{
         phase::{Phase, PhaseHandleResult},
         phases::circuit_eval::CircuitEvalState,
         serde_types::{
-            SerializableBlock, SerializableScalar, SerializableYaoShare,
+            SecretVecBool, SecretVecU8, SerializableBlock,
+            SerializableScalar, SerializableYaoShare,
         },
     },
     utils::bytes_to_bits_le,
@@ -40,21 +41,21 @@ const INPUT_BITS: usize = SHARE_BITS * 2;
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BatchInputYaoState {
     GarblerWaitEvalBits {
-        all_ip: Vec<bool>,
+        all_ip: SecretVecBool,
         i1: Vec<SerializableYaoShare>,
         i2: Vec<SerializableYaoShare>,
     },
     EvaluatorWaitMsg1 {
         all_ip_len: usize,
-        msg1_to_p0: Vec<bool>,
-        msg1_to_p1: Vec<bool>,
+        msg1_to_p0: SecretVecBool,
+        msg1_to_p1: SecretVecBool,
         from_p0: Option<BatchInputYaoMessage>,
         from_p1: Option<BatchInputYaoMessage>,
     },
     EvaluatorWaitMsg2 {
         all_ip_len: usize,
-        msg1_to_p0: Vec<bool>,
-        msg1_to_p1: Vec<bool>,
+        msg1_to_p0: SecretVecBool,
+        msg1_to_p1: SecretVecBool,
         i1: Vec<SerializableYaoShare>,
         i2: Vec<SerializableYaoShare>,
         from_p0: Option<BatchInputYaoMessage>,
@@ -220,7 +221,7 @@ impl BatchInputYaoState {
     fn start_garbler(
         ctx: &mut Context,
         outgoing: &mut Vec<Message>,
-        all_ip: Vec<bool>,
+        all_ip: SecretVecBool,
     ) -> Result<Phase, ProtocolError> {
         let mut yao_setup = ctx
             .yao_setup
@@ -248,7 +249,7 @@ impl BatchInputYaoState {
     fn start_evaluator(
         ctx: &mut Context,
         outgoing: &mut Vec<Message>,
-        all_ip: Vec<bool>,
+        all_ip: SecretVecBool,
     ) -> Result<Phase, ProtocolError> {
         let (msg1_to_p0, msg1_to_p1) = evaluator_bits(&all_ip);
         outgoing.push(Message {
@@ -286,13 +287,15 @@ fn commitment(
 fn all_input_bits(
     rss_prev: SerializableScalar,
     rss_next: SerializableScalar,
-) -> Result<Vec<bool>, ProtocolError> {
-    Ok(bytes_to_bits_le(&rss_prev.to_scalar()?.to_repr())
-        .chain(bytes_to_bits_le(&rss_next.to_scalar()?.to_repr()))
-        .collect())
+) -> Result<SecretVecBool, ProtocolError> {
+    Ok(SecretVecBool::from(
+        bytes_to_bits_le(&rss_prev.to_scalar()?.to_repr())
+            .chain(bytes_to_bits_le(&rss_next.to_scalar()?.to_repr()))
+            .collect::<Vec<_>>(),
+    ))
 }
 
-fn evaluator_bits(input: &[bool]) -> (Vec<bool>, Vec<bool>) {
+fn evaluator_bits(input: &[bool]) -> (SecretVecBool, SecretVecBool) {
     // Sampled independently of the session seed so a reused seed cannot
     // repeat this one-time pad. Matches `run_batch_input_from_all_yao`.
     let mut rng = rand::rngs::StdRng::from_entropy();
@@ -303,7 +306,7 @@ fn evaluator_bits(input: &[bool]) -> (Vec<bool>, Vec<bool>) {
         p0.push(x0);
         p1.push(x0 ^ bit);
     }
-    (p0, p1)
+    (SecretVecBool::from(p0), SecretVecBool::from(p1))
 }
 
 fn create_msg1<C: Commitment>(
@@ -333,12 +336,14 @@ fn create_msg1<C: Commitment>(
             let comm_0 = if !b {
                 comm.commit(&w0, &witness_0)
             } else {
-                comm.commit(&xor_blocks(&w0, &yao_setup.delta), &witness_1)
+                let label = Zeroizing::new(xor_blocks(&w0, &yao_setup.delta));
+                comm.commit(&label, &witness_1)
             };
             let comm_1 = if b {
                 comm.commit(&w0, &witness_0)
             } else {
-                comm.commit(&xor_blocks(&w0, &yao_setup.delta), &witness_1)
+                let label = Zeroizing::new(xor_blocks(&w0, &yao_setup.delta));
+                comm.commit(&label, &witness_1)
             };
             if pass == 0 {
                 com_i1_0.push(SerializableBlock(comm_0));
@@ -346,7 +351,7 @@ fn create_msg1<C: Commitment>(
                 i1.push(
                     YaoShare::G(YaoGarblerShare {
                         delta: yao_setup.delta,
-                        f_label: w0,
+                        f_label: *w0,
                     })
                     .into(),
                 );
@@ -356,7 +361,7 @@ fn create_msg1<C: Commitment>(
                 i2.push(
                     YaoShare::G(YaoGarblerShare {
                         delta: yao_setup.delta,
-                        f_label: w0,
+                        f_label: *w0,
                     })
                     .into(),
                 );
@@ -367,10 +372,10 @@ fn create_msg1<C: Commitment>(
                         &w0,
                         &yao_setup.delta,
                     )));
-                    wit.push(SerializableBlock(witness_1));
+                    wit.push(SerializableBlock(*witness_1));
                 } else {
-                    w.push(SerializableBlock(w0));
-                    wit.push(SerializableBlock(witness_0));
+                    w.push(SerializableBlock(*w0));
+                    wit.push(SerializableBlock(*witness_0));
                 }
             }
         }
@@ -414,24 +419,31 @@ fn create_msg2<C: Commitment>(
         let witness1f = next_block(&mut yao_setup.prf);
         let comm1f = comm.commit(&w01, &witness1f);
         let witness1t = next_block(&mut yao_setup.prf);
-        let comm1t =
-            comm.commit(&xor_blocks(&yao_setup.delta, &w01), &witness1t);
+        let label1t = Zeroizing::new(xor_blocks(&yao_setup.delta, &w01));
+        let comm1t = comm.commit(&label1t, &witness1t);
         let witness2f = next_block(&mut yao_setup.prf);
         let comm2f = comm.commit(&w02, &witness2f);
         let witness2t = next_block(&mut yao_setup.prf);
-        let comm2t =
-            comm.commit(&xor_blocks(&yao_setup.delta, &w02), &witness2t);
-        let (msg, witness) = if yao_setup.party_id == 0 {
+        let label2t = Zeroizing::new(xor_blocks(&yao_setup.delta, &w02));
+        let comm2t = comm.commit(&label2t, &witness2t);
+        let msg = Zeroizing::new(if yao_setup.party_id == 0 {
             if choice {
-                (xor_blocks(&w01, &yao_setup.delta), witness1t)
+                xor_blocks(&w01, &yao_setup.delta)
             } else {
-                (w01, witness1f)
+                *w01
             }
         } else if choice {
-            (xor_blocks(&w02, &yao_setup.delta), witness2t)
+            xor_blocks(&w02, &yao_setup.delta)
         } else {
-            (w02, witness2f)
-        };
+            *w02
+        });
+        let witness = Zeroizing::new(if yao_setup.party_id == 0 {
+            if choice { *witness1t } else { *witness1f }
+        } else if choice {
+            *witness2t
+        } else {
+            *witness2f
+        });
         shares.push(
             YaoShare::G(YaoGarblerShare {
                 delta: yao_setup.delta,
@@ -443,8 +455,8 @@ fn create_msg2<C: Commitment>(
         out.comm_1t.push(SerializableBlock(comm1t));
         out.comm_2f.push(SerializableBlock(comm2f));
         out.comm_2t.push(SerializableBlock(comm2t));
-        out.w.push(SerializableBlock(msg));
-        out.wit.push(SerializableBlock(witness));
+        out.w.push(SerializableBlock(*msg));
+        out.wit.push(SerializableBlock(*witness));
     }
     Ok((out, shares))
 }
@@ -643,29 +655,34 @@ fn route_batch(
     }
 }
 
-fn next_block(rng: &mut ChaCha8Rng) -> Block {
-    let mut out = [0u8; 16];
-    rng.fill_bytes(&mut out);
+fn next_block(rng: &mut impl RngCore) -> Zeroizing<Block> {
+    let mut out = Zeroizing::new(Block::default());
+    rng.fill_bytes(out.as_mut());
     out
 }
 
-fn encode_bits(input: &[bool]) -> Vec<u8> {
-    let mut value = vec![0u8; input.len().div_ceil(8)];
+fn encode_bits(input: &[bool]) -> SecretVecU8 {
+    let mut value = SecretVecU8::from(vec![0u8; input.len().div_ceil(8)]);
     for (idx, bit) in input.iter().copied().enumerate() {
         if bit {
-            value[idx / 8] |= 1 << (idx % 8);
+            value.0[idx / 8] |= 1 << (idx % 8);
         }
     }
     value
 }
 
-fn decode_bits(input: &[u8], len: usize) -> Result<Vec<bool>, ProtocolError> {
+fn decode_bits(
+    input: &[u8],
+    len: usize,
+) -> Result<SecretVecBool, ProtocolError> {
     if input.len() != len.div_ceil(8) {
         return Err(ProtocolError::InvalidMessage);
     }
-    Ok((0..len)
-        .map(|idx| (input[idx / 8] >> (idx % 8)) & 1 == 1)
-        .collect())
+    Ok(SecretVecBool::from(
+        (0..len)
+            .map(|idx| (input[idx / 8] >> (idx % 8)) & 1 == 1)
+            .collect::<Vec<_>>(),
+    ))
 }
 
 #[cfg(test)]
@@ -692,6 +709,18 @@ mod tests {
             w: vec![SerializableBlock([0; 16]); len],
             wit: vec![SerializableBlock([0; 16]); len],
         }
+    }
+
+    #[test]
+    fn batch_input_state_debug_output_is_redacted() {
+        let state = BatchInputYaoState::GarblerWaitEvalBits {
+            all_ip: SecretVecBool::from(vec![true, false]),
+            i1: Vec::new(),
+            i2: Vec::new(),
+        };
+        let debug = format!("{state:?}");
+        assert!(!debug.contains("true"));
+        assert!(debug.contains("SecretVecBool(..)"));
     }
 
     #[test]

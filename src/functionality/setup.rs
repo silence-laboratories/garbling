@@ -3,7 +3,7 @@
 
 use rand::prelude::*;
 use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha8Rng;
+use zeroize::Zeroizing;
 
 use sl_messages::{relay::Relay, setup::ProtocolParticipant};
 
@@ -18,6 +18,7 @@ use crate::{
     utilities::{
         commitments::HashCommitment,
         hash_function::AesHash,
+        label_prf::LabelPrf,
         types::{Block, EvaluatorSetup, GarblerSetup, YaoSetup},
     },
 };
@@ -26,23 +27,24 @@ use crate::{
 ///
 /// Delta, wire labels, and the circuit-garbling hash key must not share
 /// ChaCha8 keystream. The input key is stretched into three 32-byte seeds.
-pub fn garbler_delta_and_prf(prf_key: [u8; 32]) -> (Block, ChaCha8Rng, Block) {
-    let mut kdf = ChaCha8Rng::from_seed(prf_key);
-    let mut delta_seed = [0u8; 32];
-    let mut label_seed = [0u8; 32];
-    let mut garble_seed = [0u8; 32];
-    kdf.fill_bytes(&mut delta_seed);
-    kdf.fill_bytes(&mut label_seed);
-    kdf.fill_bytes(&mut garble_seed);
+pub fn garbler_delta_and_prf(prf_key: [u8; 32]) -> (Block, LabelPrf, Block) {
+    let prf_key = Zeroizing::new(prf_key);
+    let mut kdf = LabelPrf::from_seed(*prf_key);
+    let mut delta_seed = Zeroizing::new([0u8; 32]);
+    let mut label_seed = Zeroizing::new([0u8; 32]);
+    let mut garble_seed = Zeroizing::new([0u8; 32]);
+    kdf.fill_bytes(delta_seed.as_mut());
+    kdf.fill_bytes(label_seed.as_mut());
+    kdf.fill_bytes(garble_seed.as_mut());
 
     let mut delta = Block::default();
-    ChaCha8Rng::from_seed(delta_seed).fill_bytes(&mut delta);
+    LabelPrf::from_seed(*delta_seed).fill_bytes(&mut delta);
     delta[0] |= 1;
 
     let mut garble_key = Block::default();
     garble_key.copy_from_slice(&garble_seed[..16]);
 
-    (delta, ChaCha8Rng::from_seed(label_seed), garble_key)
+    (delta, LabelPrf::from_seed(*label_seed), garble_key)
 }
 
 pub async fn setup_yao_functionality<T, R>(

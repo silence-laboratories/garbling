@@ -7,11 +7,15 @@ mod phase;
 mod phases;
 mod serde_types;
 
+use core::fmt;
+
 use pasta_curves::pallas::Scalar;
 use rand::RngCore;
-use rand_chacha::ChaCha8Rng;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use garbled_circuit::functionality::utils_dep::ProtocolError;
+use garbled_circuit::{
+    functionality::utils_dep::ProtocolError, utilities::label_prf::LabelPrf,
+};
 
 use self::{
     context::Context,
@@ -26,7 +30,7 @@ pub use message::Message;
 pub const DERIVATION_PARTIES: u8 = 3;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct DerivedOrchardKeys {
     pub ask: [u8; 32],
     pub nk: [u8; 32],
@@ -35,6 +39,12 @@ pub struct DerivedOrchardKeys {
     pub internal_ivk: [u8; 64],
     #[cfg_attr(feature = "serde", serde(with = "serde_bytes"))]
     pub external_ivk: [u8; 64],
+}
+
+impl fmt::Debug for DerivedOrchardKeys {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("DerivedOrchardKeys { [redacted] }")
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -51,16 +61,12 @@ pub struct Session {
 /// the session layer stays in lockstep with `setup_yao_functionality`.
 pub(crate) fn setup_delta_from_seed(
     prf_seed: [u8; 32],
-) -> (SerializableBlock, ChaCha8Rng, SerializableBlock) {
+) -> (SerializableBlock, LabelPrf, SerializableBlock) {
     let (delta, prf, garble_key) =
         garbled_circuit::functionality::setup::garbler_delta_and_prf(
             prf_seed,
         );
-    (
-        SerializableBlock(delta),
-        prf,
-        SerializableBlock(garble_key),
-    )
+    (SerializableBlock(delta), prf, SerializableBlock(garble_key))
 }
 
 pub(crate) fn prev_party(party_id: u8) -> u8 {
@@ -125,7 +131,7 @@ impl Session {
         let mut context = Context {
             party_id,
             shamir_share: shamir_share.into(),
-            seed,
+            seed: seed.into(),
             yao_setup: None,
         };
         let mut outgoing = Vec::new();

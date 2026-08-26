@@ -5,6 +5,7 @@ use aes::{
     cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit},
     Aes128,
 };
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::utilities::{
     hash_function::HashFunction,
@@ -31,7 +32,7 @@ pub fn double_gf2_128_bytes(x: &Block) -> Block {
 }
 
 /// Represents a structure of hash function based on AES-128 encryption.
-#[derive(Clone)]
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct AesGarbleHash {
     /// `Aes128` object used for hashing.
     key: Block,
@@ -44,10 +45,10 @@ impl AesGarbleHash {
         AesGarbleHash { key }
     }
 
-    fn aes_call(key: [u8; 16], msg: [u8; 16]) -> [u8; 16] {
-        let keyar = GenericArray::from(key);
+    fn aes_call(key: &Block, msg: &Block) -> Block {
+        let keyar = GenericArray::clone_from_slice(key);
         let aes = Aes128::new(&keyar);
-        let mut msgar = GenericArray::from(msg);
+        let mut msgar = GenericArray::clone_from_slice(msg);
         aes.encrypt_block(&mut msgar);
         msgar.into()
     }
@@ -62,14 +63,12 @@ impl AesGarbleHash {
         );
 
         // to be changed for reduce block size.
-        let h = self.key;
-        let b = input[0..16]
-            .to_owned()
-            .try_into()
-            .expect("Conversion failed");
+        let h = Zeroizing::new(self.key);
+        let mut b = Zeroizing::new(Block::default());
+        b.copy_from_slice(&input[0..16]);
 
         // for block in padded_blocks {
-        let cipher_output = AesGarbleHash::aes_call(b, h);
+        let cipher_output = AesGarbleHash::aes_call(&b, &h);
 
         // to be changed for reduce block size
         let mut out = Block::default();
@@ -119,6 +118,32 @@ impl HashFunction for AesGarbleHash {
 
     /// Implementation of the `initialize` function for a `AesGarbleHash`.
     fn initialize(&mut self, key: Block) {
+        self.key.zeroize();
         self.key = key;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AesGarbleHash;
+
+    #[test]
+    fn hash_uses_input_as_aes_key() {
+        let hash = AesGarbleHash::new([
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa,
+            0xbb, 0xcc, 0xdd, 0xee, 0xff,
+        ]);
+        let input = [
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+            0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        ];
+
+        assert_eq!(
+            hash.hash(&input),
+            [
+                0x69, 0xc4, 0xe0, 0xd8, 0x6a, 0x7b, 0x04, 0x30, 0xd8, 0xcd,
+                0xb7, 0x80, 0x70, 0xb4, 0xc5, 0x5a,
+            ]
+        );
     }
 }

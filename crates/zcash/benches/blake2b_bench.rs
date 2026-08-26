@@ -10,6 +10,7 @@ use garbled_circuit::{
     },
     utilities::{
         garble_hash::AesGarbleHash,
+        label_prf::LabelPrf,
         types::{
             BLOCK_SIZE, Block, GarblerSetup, YaoEvaluatorShare,
             YaoGarblerShare, YaoShare,
@@ -54,7 +55,7 @@ pub fn garb_blake2b_benchmark(c: &mut Criterion) {
                     delta,
                     comm_crs: Block::default(),
                     garble_key: Block::default(),
-                    prf: ChaCha8Rng::from_seed([0; 32]),
+                    prf: LabelPrf::from_seed([0; 32]),
                     party_id: 0,
                 },
                 &hash,
@@ -108,7 +109,7 @@ pub fn eval_blake2b_benchmark(c: &mut Criterion) {
         &gin,
         &mut GarblerSetup {
             delta,
-            prf: ChaCha8Rng::from_seed([0; 32]),
+            prf: LabelPrf::from_seed([0; 32]),
             comm_crs: Block::default(),
             garble_key: Block::default(),
             party_id: 0,

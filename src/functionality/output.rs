@@ -3,6 +3,7 @@
 
 use sl_compute_common::BinaryString;
 use sl_messages::{relay::Relay, setup::ProtocolParticipant};
+use zeroize::Zeroizing;
 
 use crate::{
     config::constants::{
@@ -41,8 +42,10 @@ where
         }
 
         YaoShare::G(share) => {
-            let out: Block =
-                receive_from_one_party(setup, tag1, 2, r).await?;
+            let out = Zeroizing::new(
+                receive_from_one_party::<Block, _, _>(setup, tag1, 2, r)
+                    .await?,
+            );
             Ok(label_matches_wire(&out, &share.f_label, &share.delta))
         }
     }
@@ -62,8 +65,10 @@ where
 
     match input {
         YaoShare::G(share) => {
-            let wxs: Block =
-                receive_from_one_party(setup, tag1, 2, relay).await?;
+            let wxs = Zeroizing::new(
+                receive_from_one_party::<Block, _, _>(setup, tag1, 2, relay)
+                    .await?,
+            );
 
             if !label_matches_wire(&wxs, &share.f_label, &share.delta) {
                 return Err(ProtocolError::InvalidShare);
@@ -109,8 +114,10 @@ where
     let party_id = setup.participant_index();
 
     if party_id == 0 || party_id == 1 {
-        let wxs: Vec<Block> =
-            receive_from_one_party(setup, tag1, 2, relay).await?;
+        let wxs = Zeroizing::new(
+            receive_from_one_party::<Vec<Block>, _, _>(setup, tag1, 2, relay)
+                .await?,
+        );
 
         if wxs.len() != input.len() {
             return Err(ProtocolError::InvalidMessage);
@@ -121,7 +128,7 @@ where
         for i in 0..batch_size {
             let share = input[i].as_garbler();
 
-            let wx = wxs[i];
+            let wx = Zeroizing::new(wxs[i]);
 
             if !label_matches_wire(&wx, &share.f_label, &share.delta) {
                 return Err(ProtocolError::InvalidShare);
@@ -134,14 +141,16 @@ where
 
         send_to_party(setup, tag2, &xval.value, 2, relay).await?;
     } else {
-        let msg = input
-            .iter()
-            .map(YaoShare::as_evaluator)
-            .map(|s| s.label)
-            .collect::<Vec<Block>>();
+        let msg = Zeroizing::new(
+            input
+                .iter()
+                .map(YaoShare::as_evaluator)
+                .map(|s| s.label)
+                .collect::<Vec<Block>>(),
+        );
 
-        send_to_party(setup, tag1, &msg, 0, relay).await?;
-        send_to_party(setup, tag1, &msg, 1, relay).await?;
+        send_to_party(setup, tag1, &*msg, 0, relay).await?;
+        send_to_party(setup, tag1, &*msg, 1, relay).await?;
 
         let outs: Vec<Vec<u8>> =
             receive_from_parties(setup, tag2, &[0, 1], relay).await?;
@@ -207,8 +216,10 @@ where
     } else if party_id == pid {
         let share = input.as_garbler();
 
-        let wxs: Block =
-            receive_from_one_party(setup, tag1, 2, relay).await?;
+        let wxs = Zeroizing::new(
+            receive_from_one_party::<Block, _, _>(setup, tag1, 2, relay)
+                .await?,
+        );
 
         if !label_matches_wire(&wxs, &share.f_label, &share.delta) {
             return Err(ProtocolError::InvalidShare);
@@ -263,22 +274,27 @@ where
             send_to_party(setup, tag1, &msg.value, 2, relay).await?;
         }
     } else if party_id == 2 {
-        let msg = input
-            .iter()
-            .map(YaoShare::as_evaluator)
-            .map(|e| e.label)
-            .collect::<Vec<Block>>();
+        let msg = Zeroizing::new(
+            input
+                .iter()
+                .map(YaoShare::as_evaluator)
+                .map(|e| e.label)
+                .collect::<Vec<Block>>(),
+        );
 
-        send_to_party(setup, tag1, &msg, pid, relay).await?;
+        send_to_party(setup, tag1, &*msg, pid, relay).await?;
     } else if party_id == pid {
-        let wxs: Vec<Block> =
-            receive_from_one_party(setup, tag1, 2, relay).await?;
+        let wxs = Zeroizing::new(
+            receive_from_one_party::<Vec<Block>, _, _>(setup, tag1, 2, relay)
+                .await?,
+        );
 
         if wxs.len() != batch_size {
             return Err(ProtocolError::InvalidMessage);
         }
 
-        for (i, (wx, share)) in wxs.into_iter().zip(input).enumerate() {
+        for (i, (wx, share)) in wxs.iter().zip(input).enumerate() {
+            let wx = Zeroizing::new(*wx);
             let share = share.as_garbler();
 
             if !label_matches_wire(&wx, &share.f_label, &share.delta) {

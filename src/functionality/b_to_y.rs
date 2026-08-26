@@ -1,7 +1,10 @@
 // Copyright (c) Silence Laboratories Pte. Ltd. All Rights Reserved.
 // This software is licensed under the Silence Laboratories License Agreement.
 
+use core::fmt;
+
 use rand::{CryptoRng, RngCore};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use sl_compute_common::BinaryShare;
 use sl_messages::{relay::Relay, setup::ProtocolParticipant};
@@ -27,7 +30,7 @@ use crate::{
     },
 };
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct B2YMsg1 {
     label_1: Block,
     false_com: Block,
@@ -51,18 +54,21 @@ impl Wrap for B2YMsg1 {
     }
 
     fn read(buffer: &[u8]) -> Option<Self> {
-        let (&label_1, buffer) = buffer.split_first_chunk()?;
+        let (label_1_value, buffer) = buffer.split_first_chunk()?;
+        let label_1 = Zeroizing::new(*label_1_value);
         let (&false_com, buffer) = buffer.split_first_chunk()?;
         let (&true_com, buffer) = buffer.split_first_chunk()?;
-        let (&decom0, buffer) = buffer.split_first_chunk()?;
-        let (&decom1, buffer) = buffer.split_first_chunk()?;
+        let (decom0_value, buffer) = buffer.split_first_chunk()?;
+        let decom0 = Zeroizing::new(*decom0_value);
+        let (decom1_value, buffer) = buffer.split_first_chunk()?;
+        let decom1 = Zeroizing::new(*decom1_value);
         let (&hash, _) = buffer.split_first_chunk()?;
 
         Some(Self {
-            label_1,
+            label_1: *label_1,
             false_com,
             true_com,
-            decom: (decom0, decom1),
+            decom: (*decom0, *decom1),
             hash,
         })
     }
@@ -70,6 +76,24 @@ impl Wrap for B2YMsg1 {
 
 impl FixedExternalSize for B2YMsg1 {
     const SIZE: usize = BLOCK_SIZE * 6;
+}
+
+impl fmt::Debug for B2YMsg1 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("B2YMsg1")
+            .field("label_1", &"[redacted]")
+            .field("false_com", &"[redacted]")
+            .field("true_com", &"[redacted]")
+            .field("decom", &"[redacted]")
+            .field("hash", &"[redacted]")
+            .finish()
+    }
+}
+
+fn next_secret_block<R: RngCore>(rng: &mut R) -> Zeroizing<Block> {
+    let mut block = Zeroizing::new(Block::default());
+    rng.fill_bytes(&mut *block);
+    block
 }
 
 fn bit_to_yao_create_msg1_p1<C, R>(
@@ -85,69 +109,57 @@ where
     let x1 = share.value2;
     let x3 = share.value1 ^ share.value2;
 
-    let mut label_1f = Block::default();
-    rng.fill_bytes(&mut label_1f);
-
-    let mut witness_2f = Block::default();
-    rng.fill_bytes(&mut witness_2f);
-
-    let mut label_2f = Block::default();
-    rng.fill_bytes(&mut label_2f);
+    let label_1f = next_secret_block(rng);
+    let witness_2f = next_secret_block(rng);
+    let label_2f = next_secret_block(rng);
 
     let comm_2f = comm.commit(&label_2f, &witness_2f);
 
-    let mut witness_2t = Block::default();
-    rng.fill_bytes(&mut witness_2t);
-
-    let label_2t = xor_blocks(&label_2f, delta);
+    let witness_2t = next_secret_block(rng);
+    let label_2t = Zeroizing::new(xor_blocks(&label_2f, delta));
     let comm_2t = comm.commit(&label_2t, &witness_2t);
 
-    let mut witness_3f = Block::default();
-    rng.fill_bytes(&mut witness_3f);
-
-    let mut label_3f = Block::default();
-    rng.fill_bytes(&mut label_3f);
+    let witness_3f = next_secret_block(rng);
+    let label_3f = next_secret_block(rng);
 
     let comm_3f = comm.commit(&label_3f, &witness_3f);
 
-    let mut witness_3t = Block::default();
-    rng.fill_bytes(&mut witness_3t);
-
-    let label_3t = xor_blocks(&label_3f, delta);
+    let witness_3t = next_secret_block(rng);
+    let label_3t = Zeroizing::new(xor_blocks(&label_3f, delta));
     let comm_3t = comm.commit(&label_3t, &witness_3t);
 
     let shahash = Sha512Hash::new();
     let hash_val = shahash.get_hash(&[comm_2f, comm_2t].concat());
 
-    let label_1 = if x1 {
+    let label_1 = Zeroizing::new(if x1 {
         xor_blocks(&label_1f, delta)
     } else {
-        label_1f
-    };
+        *label_1f
+    });
 
     (
         B2YMsg1 {
-            label_1,
+            label_1: *label_1,
             false_com: comm_3f,
             true_com: comm_3t,
             decom: if x3 {
-                (label_3t, witness_3t)
+                (*label_3t, *witness_3t)
             } else {
-                (label_3f, witness_3f)
+                (*label_3f, *witness_3f)
             },
             hash: hash_val,
         },
         YaoGarblerShare {
             delta: *delta,
-            f_label: label_1f,
+            f_label: *label_1f,
         },
         YaoGarblerShare {
             delta: *delta,
-            f_label: label_2f,
+            f_label: *label_2f,
         },
         YaoGarblerShare {
             delta: *delta,
-            f_label: label_3f,
+            f_label: *label_3f,
         },
     )
 }
@@ -165,66 +177,54 @@ where
     let x2 = share.value2;
     let x1 = share.value1 ^ share.value2;
 
-    let mut label_1f = Block::default();
-    rng.fill_bytes(&mut label_1f);
-
-    let mut witness_2f = Block::default();
-    rng.fill_bytes(&mut witness_2f);
-
-    let mut label_2f = Block::default();
-    rng.fill_bytes(&mut label_2f);
+    let label_1f = next_secret_block(rng);
+    let witness_2f = next_secret_block(rng);
+    let label_2f = next_secret_block(rng);
     let comm_2f = comm.commit(&label_2f, &witness_2f);
 
-    let mut witness_2t = Block::default();
-    rng.fill_bytes(&mut witness_2t);
-
-    let label_2t = xor_blocks(&label_2f, delta);
+    let witness_2t = next_secret_block(rng);
+    let label_2t = Zeroizing::new(xor_blocks(&label_2f, delta));
     let comm_2t = comm.commit(&label_2t, &witness_2t);
 
-    let mut witness_3f = Block::default();
-    rng.fill_bytes(&mut witness_3f);
-
-    let mut label_3f = Block::default();
-    rng.fill_bytes(&mut label_3f);
+    let witness_3f = next_secret_block(rng);
+    let label_3f = next_secret_block(rng);
     let comm_3f = comm.commit(&label_3f, &witness_3f);
 
-    let mut witness_3t = Block::default();
-    rng.fill_bytes(&mut witness_3t);
-
-    let label_3t = xor_blocks(&label_3f, delta);
+    let witness_3t = next_secret_block(rng);
+    let label_3t = Zeroizing::new(xor_blocks(&label_3f, delta));
     let comm_3t = comm.commit(&label_3t, &witness_3t);
 
     let hash_val = Sha512Hash::new().get_hash(&[comm_3f, comm_3t].concat());
 
-    let label_1 = if x1 {
+    let label_1 = Zeroizing::new(if x1 {
         xor_blocks(&label_1f, delta)
     } else {
-        label_1f
-    };
+        *label_1f
+    });
 
     (
         B2YMsg1 {
-            label_1,
+            label_1: *label_1,
             false_com: comm_2f,
             true_com: comm_2t,
             decom: if x2 {
-                (label_2t, witness_2t)
+                (*label_2t, *witness_2t)
             } else {
-                (label_2f, witness_2f)
+                (*label_2f, *witness_2f)
             },
             hash: hash_val,
         },
         YaoGarblerShare {
             delta: *delta,
-            f_label: label_1f,
+            f_label: *label_1f,
         },
         YaoGarblerShare {
             delta: *delta,
-            f_label: label_2f,
+            f_label: *label_2f,
         },
         YaoGarblerShare {
             delta: *delta,
-            f_label: label_3f,
+            f_label: *label_3f,
         },
     )
 }

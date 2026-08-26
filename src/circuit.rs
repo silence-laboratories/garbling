@@ -224,11 +224,10 @@ impl BinaryCircuit {
             })
             .ok_or(FileParsingError::InputNoParsingError)?;
 
-        let total_input_wires: u32 = input_sizes.iter().try_fold(
-            0u32,
-            |acc, &w| acc.checked_add(w),
-        )
-        .ok_or(FileParsingError::CircuitTooLarge)?;
+        let total_input_wires: u32 = input_sizes
+            .iter()
+            .try_fold(0u32, |acc, &w| acc.checked_add(w))
+            .ok_or(FileParsingError::CircuitTooLarge)?;
 
         let num_outputs = reader
             .next()
@@ -260,9 +259,8 @@ impl BinaryCircuit {
         let output_base = num_wires
             .checked_sub(num_outputs)
             .ok_or(FileParsingError::FileFormatError(0))?;
-        let output_gate_ids = (0..num_outputs)
-            .map(|i| output_base + i)
-            .collect();
+        let output_gate_ids =
+            (0..num_outputs).map(|i| output_base + i).collect();
 
         let mut totalcount = 0u32;
         for (ipcnt, &width) in input_sizes.iter().enumerate() {
@@ -1100,7 +1098,10 @@ mod tests {
     #[test]
     fn parse_rejects_oversized_header() {
         let err = BinaryCircuit::parse("2000001 10\n1 1\n1 1\n").unwrap_err();
-        assert!(matches!(err, crate::config::errors::FileParsingError::CircuitTooLarge));
+        assert!(matches!(
+            err,
+            crate::config::errors::FileParsingError::CircuitTooLarge
+        ));
     }
 
     #[test]

@@ -3,6 +3,8 @@
 
 pub mod commitments;
 
+pub mod label_prf;
+
 pub mod hash_function;
 
 pub mod utils;

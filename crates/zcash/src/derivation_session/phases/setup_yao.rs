@@ -8,11 +8,12 @@ use crate::derivation_session::{
     message::{Message, MessageBody, SetupYaoMessage},
     phase::{Phase, PhaseHandleResult},
     phases::common_randomness::CommonRandomnessState,
-    serde_types::{SerializableBlock, SerializableYaoSetup},
+    serde_types::{SecretBytes32, SerializableBlock, SerializableYaoSetup},
 };
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum SetupYaoState {
     WaitCrs,
     WaitPrf { comm_crs: SerializableBlock },
@@ -32,13 +33,11 @@ impl SetupYaoState {
                         from: ctx.party_id(),
                         to,
                         body: MessageBody::SetupYao(
-                            SetupYaoMessage::CommCrs(comm_crs),
+                            SetupYaoMessage::CommCrs(comm_crs.clone()),
                         ),
                     });
                 }
-                Ok(Phase::SetupYao(SetupYaoState::WaitGarbleKey {
-                    comm_crs,
-                }))
+                Ok(Phase::SetupYao(SetupYaoState::WaitGarbleKey { comm_crs }))
             }
             0 | 1 => Ok(Phase::SetupYao(SetupYaoState::WaitCrs)),
             _ => Err(ProtocolError::InvalidMessage),
@@ -100,10 +99,10 @@ impl SetupYaoState {
                     else {
                         return Err(ProtocolError::InvalidMessage);
                     };
-                    if p0_comm_crs != *comm_crs {
+                    if &p0_comm_crs != comm_crs {
                         return Err(ProtocolError::InconsistentMessage);
                     }
-                    ctx.setup_garbler(*comm_crs, prf_seed);
+                    ctx.setup_garbler(comm_crs.clone(), prf_seed.to_bytes());
                     CommonRandomnessState::start(ctx, outgoing)
                         .map(|phase| PhaseHandleResult::Consumed(Some(phase)))
                 } else {
@@ -124,7 +123,7 @@ impl SetupYaoState {
                         return Err(ProtocolError::InvalidMessage);
                     };
                     ctx.yao_setup = Some(SerializableYaoSetup::Evaluator {
-                        comm_crs: *comm_crs,
+                        comm_crs: comm_crs.clone(),
                         garble_key,
                     });
                     CommonRandomnessState::start(ctx, outgoing)
@@ -144,16 +143,19 @@ impl SetupYaoState {
     ) -> Result<Phase, ProtocolError> {
         match ctx.party_id() {
             0 => {
-                let prf_seed = ctx.derive_32(b"setup-yao/prf-seed", 0);
+                let prf_seed = SecretBytes32::from(
+                    ctx.derive_32(b"setup-yao/prf-seed", 0),
+                );
                 outgoing.push(Message {
                     from: ctx.party_id(),
                     to: 1,
                     body: MessageBody::SetupYao(SetupYaoMessage::PrfSeed {
-                        seed: prf_seed,
-                        comm_crs,
+                        seed: prf_seed.clone(),
+                        comm_crs: comm_crs.clone(),
                     }),
                 });
-                let garble_key = ctx.setup_garbler(comm_crs, prf_seed);
+                let garble_key =
+                    ctx.setup_garbler(comm_crs, prf_seed.to_bytes());
                 outgoing.push(Message {
                     from: ctx.party_id(),
                     to: 2,
@@ -179,7 +181,7 @@ mod tests {
         Context {
             party_id,
             shamir_share: Scalar::from(1u64).into(),
-            seed: [7u8; 32],
+            seed: [7u8; 32].into(),
             yao_setup: None,
         }
     }
@@ -218,7 +220,7 @@ mod tests {
                     from: 2,
                     to: 0,
                     body: MessageBody::CommonRandomness(
-                        CommonRandomnessMessage::KeyNext([0; 32]),
+                        CommonRandomnessMessage::KeyNext([0; 32].into()),
                     ),
                 },
             )
@@ -235,7 +237,7 @@ mod tests {
             from: 0,
             to: 1,
             body: MessageBody::SetupYao(SetupYaoMessage::PrfSeed {
-                seed: [0; 32],
+                seed: [0; 32].into(),
                 comm_crs: SerializableBlock([0; 16]),
             }),
         };
@@ -265,7 +267,7 @@ mod tests {
                     from: 2,
                     to: 1,
                     body: MessageBody::SetupYao(SetupYaoMessage::PrfSeed {
-                        seed: [0; 32],
+                        seed: [0; 32].into(),
                         comm_crs: SerializableBlock([0; 16]),
                     }),
                 },
@@ -289,7 +291,7 @@ mod tests {
                     from: 0,
                     to: 1,
                     body: MessageBody::SetupYao(SetupYaoMessage::PrfSeed {
-                        seed: [0; 32],
+                        seed: [0; 32].into(),
                         comm_crs: SerializableBlock([2; 16]),
                     }),
                 },
@@ -312,7 +314,7 @@ mod tests {
                     from: 2,
                     to: 0,
                     body: MessageBody::SetupYao(SetupYaoMessage::CommCrs(
-                        comm_crs,
+                        comm_crs.clone(),
                     )),
                 },
             )
@@ -334,7 +336,7 @@ mod tests {
         else {
             panic!("expected garbler setup");
         };
-        assert_eq!(*stored_crs, comm_crs);
+        assert_eq!(stored_crs, &comm_crs);
         let MessageBody::SetupYao(SetupYaoMessage::GarbleKey(sent)) =
             &outgoing[1].body
         else {
@@ -359,7 +361,7 @@ mod tests {
                     from: 0,
                     to: 2,
                     body: MessageBody::SetupYao(SetupYaoMessage::GarbleKey(
-                        garble_key,
+                        garble_key.clone(),
                     )),
                 },
             )
@@ -371,6 +373,53 @@ mod tests {
                 comm_crs: SerializableBlock([3; 16]),
                 garble_key,
             })
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn deserializes_legacy_setup_yao_state_names() {
+        #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
+        #[allow(clippy::enum_variant_names)]
+        enum LegacySetupYaoState {
+            WaitCrs,
+            WaitPrf { comm_crs: SerializableBlock },
+            WaitGarbleKey { comm_crs: SerializableBlock },
+        }
+
+        fn encode<T: serde::Serialize>(value: &T) -> Vec<u8> {
+            let mut encoded = Vec::new();
+            ciborium::ser::into_writer(value, &mut encoded).unwrap();
+            encoded
+        }
+
+        fn decode(legacy: &LegacySetupYaoState) -> SetupYaoState {
+            ciborium::de::from_reader(encode(legacy).as_slice()).unwrap()
+        }
+
+        assert_eq!(
+            decode(&LegacySetupYaoState::WaitCrs),
+            SetupYaoState::WaitCrs
+        );
+        let encoded = encode(&SetupYaoState::WaitCrs);
+        let decoded: LegacySetupYaoState =
+            ciborium::de::from_reader(encoded.as_slice()).unwrap();
+        assert_eq!(decoded, LegacySetupYaoState::WaitCrs);
+        assert_eq!(
+            decode(&LegacySetupYaoState::WaitPrf {
+                comm_crs: SerializableBlock([0x42; 16]),
+            }),
+            SetupYaoState::WaitPrf {
+                comm_crs: SerializableBlock([0x42; 16]),
+            }
+        );
+        assert_eq!(
+            decode(&LegacySetupYaoState::WaitGarbleKey {
+                comm_crs: SerializableBlock([0x24; 16]),
+            }),
+            SetupYaoState::WaitGarbleKey {
+                comm_crs: SerializableBlock([0x24; 16]),
+            }
         );
     }
 }
