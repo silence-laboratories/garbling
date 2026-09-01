@@ -20,9 +20,7 @@ use crate::{
     },
     utilities::{
         commitments::Commitment,
-        types::{
-            Block, GarblerSetup, YaoGarblerShare, YaoSetup, YaoShare, ZBLOCK,
-        },
+        types::{Block, GarblerSetup, YaoGarblerShare, YaoSetup, YaoShare},
         utils::{blocks_ct_eq, label_in_pair, lsb, xor_blocks},
     },
 };
@@ -138,19 +136,15 @@ where
                     &mut g.prf,
                     garbler_share,
                 );
-                // Party 1 sends only matching commitments, so its locally
-                // generated witnesses can be discarded before the await.
+                // Both garblers derive witnesses from the shared PRF; P2 sends
+                // its copies so P3 can reject a mismatch before opening.
+                let message = Zeroizing::new((
+                    (com0, com1),
+                    (*witnesses.0, *witnesses.1),
+                ));
+                send_to_party(setup, tag2, &*message, 2, relay).await?;
+                drop(message);
                 drop(witnesses);
-
-                send_to_party(
-                    setup,
-                    tag2,
-                    &((com0, com1), (ZBLOCK, ZBLOCK)),
-                    2,
-                    relay,
-                )
-                .await?;
-
                 let wxz = Zeroizing::new(
                     receive_from_one_party::<Block, _, _>(
                         setup, tag3, 2, relay,
@@ -207,8 +201,13 @@ where
             let (com0, com1) = &msg2s[0].0;
             let (com01, com11) = &msg2s[1].0;
             let (wit0, wit1) = &msg2s[0].1;
+            let (wit01, wit11) = &msg2s[1].1;
 
-            if com0 != com01 || com1 != com11 {
+            if !bool::from(blocks_ct_eq(com0, com01))
+                || !bool::from(blocks_ct_eq(com1, com11))
+                || !bool::from(blocks_ct_eq(wit0, wit01))
+                || !bool::from(blocks_ct_eq(wit1, wit11))
+            {
                 return Err(ProtocolError::InconsistentMessage);
             }
 
@@ -305,7 +304,7 @@ where
                     return Err(ProtocolError::InvalidMessage);
                 }
 
-                let mut msgs = Vec::new();
+                let mut msgs = Zeroizing::new(Vec::new());
                 let mut wz0s =
                     Zeroizing::new(Vec::with_capacity(input.len()));
                 let mut wz1s =
@@ -322,14 +321,13 @@ where
                             share,
                         );
 
-                    msgs.push((com0, com1));
-                    drop(witnesses);
+                    msgs.push(((com0, com1), (*witnesses.0, *witnesses.1)));
 
                     wz0s.push(*wz.0);
                     wz1s.push(*wz.1);
                 }
 
-                send_to_party(setup, tag4, &msgs, 2, relay).await?;
+                send_to_party(setup, tag4, &*msgs, 2, relay).await?;
 
                 let msg2s = Zeroizing::new(
                     receive_from_one_party::<Vec<Block>, _, _>(
@@ -410,8 +408,15 @@ where
                     .await?,
                 );
 
-            let msg2s_1: Vec<(Block, Block)> =
-                receive_from_one_party(setup, tag4, 1, relay).await?;
+            let msg2s_1 =
+                Zeroizing::new(
+                    receive_from_one_party::<
+                        Vec<CommitmentsWithWitnesses>,
+                        _,
+                        _,
+                    >(setup, tag4, 1, relay)
+                    .await?,
+                );
 
             if msg2s_0.len() != input.len() {
                 return Err(ProtocolError::InvalidMessage);
@@ -425,15 +430,20 @@ where
                 .iter()
                 .map(YaoShare::as_evaluator)
                 .zip(msg2s_0.iter())
-                .zip(&msg2s_1)
+                .zip(msg2s_1.iter())
                 .zip(ys.iter())
                 .zip(wxzs.iter())
                 .map(|((((share, m0), m1), &ys_i), wxz)| {
                     let (com0, com1) = &m0.0;
-                    let (com01, com11) = &m1;
+                    let (com01, com11) = &m1.0;
                     let (wit0, wit1) = &m0.1;
+                    let (wit01, wit11) = &m1.1;
 
-                    if com0 != com01 || com1 != com11 {
+                    if !bool::from(blocks_ct_eq(com0, com01))
+                        || !bool::from(blocks_ct_eq(com1, com11))
+                        || !bool::from(blocks_ct_eq(wit0, wit01))
+                        || !bool::from(blocks_ct_eq(wit1, wit11))
+                    {
                         return Err(ProtocolError::InconsistentMessage);
                     }
 
@@ -499,8 +509,53 @@ mod tests {
     };
 
     use super::{
-        batch_yao_to_binary_functionality, yao_to_binary_functionality,
+        batch_yao_to_binary_functionality, create_yao_to_binary_msg2,
+        yao_to_binary_functionality,
     };
+
+    /// Both garblers must derive byte-identical commitments and witnesses from
+    /// the shared PRF so the evaluator can reject a mismatch before opening.
+    #[test]
+    fn garblers_derive_identical_commitments_and_witnesses() {
+        use rand::SeedableRng;
+
+        use crate::utilities::{
+            commitments::Commitment,
+            label_prf::LabelPrf,
+            types::{Block, YaoGarblerShare, BLOCK_SIZE},
+        };
+
+        let mut delta = [9u8; BLOCK_SIZE];
+        delta[0] |= 1;
+
+        let share = YaoGarblerShare {
+            delta,
+            f_label: [3u8; BLOCK_SIZE],
+        };
+        let wr0: Block = [7u8; BLOCK_SIZE];
+        let comm = HashCommitment::new(Sha512Hash::new());
+
+        let mut prf_p1 = LabelPrf::from_seed([42; 32]);
+        let mut prf_p2 = LabelPrf::from_seed([42; 32]);
+
+        let p1 = create_yao_to_binary_msg2(&wr0, &comm, &mut prf_p1, &share);
+        let p2 = create_yao_to_binary_msg2(&wr0, &comm, &mut prf_p2, &share);
+
+        assert_eq!(p1.0, p2.0, "com0 must match");
+        assert_eq!(p1.1, p2.1, "com1 must match");
+        assert_eq!(*p1.3 .0, *p2.3 .0, "wit0 must match");
+        assert_eq!(*p1.3 .1, *p2.3 .1, "wit1 must match");
+
+        let (com0, com1, wz, witnesses) = p1;
+        let wit0 = *witnesses.0;
+        let wit1 = *witnesses.1;
+        let wz0 = *wz.0;
+        let wz1 = *wz.1;
+        let p = crate::utilities::utils::lsb(&share.f_label);
+        let (msg0, msg1) = if p == 0 { (wz0, wz1) } else { (wz1, wz0) };
+        assert!(comm.verify(&msg0, &wit0, &com0));
+        assert!(comm.verify(&msg1, &wit1, &com1));
+    }
 
     fn aes128_circuit() -> BinaryCircuit {
         prebuilt::decode(include_bytes!(concat!(
