@@ -137,7 +137,9 @@ mod tests {
     use crate::{
         circuit::prebuilt,
         customcircuits::comparison::build_comparison_circuit,
-        utilities::{garble_hash::AesGarbleHash, label_prf::LabelPrf},
+        utilities::{
+            blake_garble_hash::BlakeGarbleHash, label_prf::LabelPrf,
+        },
     };
 
     use super::*;
@@ -161,7 +163,7 @@ mod tests {
             party_id: 0,
         };
 
-        let hash = AesGarbleHash::new(Block::default());
+        let hash = BlakeGarbleHash::new();
 
         let gin: Vec<Vec<_>> = circuit
             .input_gate_ids()
@@ -201,7 +203,7 @@ mod tests {
             party_id: 0,
         };
 
-        let hash = AesGarbleHash::new(Block::default());
+        let hash = BlakeGarbleHash::new();
 
         let gin: Vec<Vec<_>> = circuit
             .input_gate_ids()

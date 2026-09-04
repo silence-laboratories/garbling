@@ -9,7 +9,7 @@ use garbled_circuit::{
         evaluate::evaluate_functionality, garble::garble_functionality,
     },
     utilities::{
-        garble_hash::AesGarbleHash,
+        blake_garble_hash::BlakeGarbleHash,
         label_prf::LabelPrf,
         types::{
             BLOCK_SIZE, Block, GarblerSetup, YaoEvaluatorShare,
@@ -29,7 +29,7 @@ pub fn garb_blake2b_benchmark(c: &mut Criterion) {
 
     let delta = random();
 
-    let hash = AesGarbleHash::new(AES_KEY);
+    let hash = BlakeGarbleHash::new();
 
     let zero = Block::default();
     let gin: Vec<Vec<_>> = circuit
@@ -76,7 +76,7 @@ pub fn eval_blake2b_benchmark(c: &mut Criterion) {
     let mut delta = Block::default();
     rng.fill_bytes(&mut delta);
 
-    let hash = AesGarbleHash::new(AES_KEY);
+    let hash = BlakeGarbleHash::new();
 
     let zero = Block::default();
     let gin: Vec<Vec<_>> = circuit

@@ -2,6 +2,7 @@
 // This software is licensed under the Silence Laboratories License Agreement.
 
 use ff::{FromUniformBytes, PrimeField};
+use garbled_circuit::utilities::blake_garble_hash::BlakeGarbleHash;
 use pasta_curves::pallas::{Base, Scalar};
 use rand::RngCore;
 use rand::{SeedableRng, rngs::StdRng};
@@ -150,7 +151,7 @@ where
 
     let mut yao_setup = setup_yao_functionality(&setup, &mut relay).await?;
 
-    let hash = AesHash::new(yao_setup.garble_key());
+    let hash = BlakeGarbleHash::new();
     let comm = HashCommitment::new(AesHash::new(yao_setup.comm_crs()));
 
     let mut randomness =

@@ -10,7 +10,7 @@ use garbled_circuit::{
         evaluate::evaluate_functionality, garble::garble_functionality,
         utils_dep::ProtocolError,
     },
-    utilities::{hash_function::AesHash, types::YaoShare},
+    utilities::{blake_garble_hash::BlakeGarbleHash, types::YaoShare},
 };
 
 use crate::{
@@ -89,7 +89,7 @@ impl CircuitEvalState {
             return Err(ProtocolError::InconsistentMessage);
         }
         let circuit = build_zcash_import_function();
-        let hash = AesHash::new(ctx.garble_key()?.0);
+        let hash = BlakeGarbleHash::new();
         let yao_inputs = to_yao_inputs(&self.inputs);
         let output: HashMap<u32, YaoShare> =
             evaluate_functionality(&circuit, &yao_inputs, &f, &hash)?;
@@ -112,7 +112,7 @@ fn garble_or_hash(
         .as_garbler_mut()
         .ok_or(ProtocolError::InvalidMessage)?;
     let circuit = build_zcash_import_function();
-    let hash = AesHash::new(ctx.garble_key()?.0);
+    let hash = BlakeGarbleHash::new();
     let yao_inputs = to_yao_inputs(inputs);
     let (f, out): (Vec<_>, HashMap<_, YaoShare>) =
         garble_functionality(&circuit, &yao_inputs, g, &hash);

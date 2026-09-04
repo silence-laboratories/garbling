@@ -44,6 +44,7 @@ impl Context {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn garble_key(
         &self,
     ) -> Result<SerializableBlock, ProtocolError> {
