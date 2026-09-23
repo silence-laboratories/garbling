@@ -55,7 +55,7 @@ aes = { version = "0.8.4", features = ["zeroize"] }
 chacha20 = { version = "0.9.1", features = ["zeroize"] }
 derivation-path = "0.2.0"
 ff = "0.13.0"
-generic-array = { version = "=0.14.7" }
+generic-array = { version = "=1.4.2" }
 group = "0.13.0"
 hmac = { version = "0.12.1" }
 k256 = { version = "0.13", default-features = false }
