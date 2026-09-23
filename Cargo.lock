@@ -596,7 +596,7 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
 name = "garbled-circuit"
-version = "1.3.1-pre.2"
+version = "1.3.1-pre.3"
 dependencies = [
  "aes",
  "chacha20",
@@ -685,7 +685,7 @@ dependencies = [
 
 [[package]]
 name = "hd-migration"
-version = "1.3.1-pre.2"
+version = "1.3.1-pre.3"
 dependencies = [
  "derivation-path",
  "garbled-circuit",
@@ -1382,18 +1382,13 @@ dependencies = [
 
 [[package]]
 name = "sl-messages"
-version = "1.3.0-pre.1"
+version = "1.3.0-pre.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e54aeea5765d7fa65dbe33cd40727518e1e5c8655749c024f76e8ed8fca285af"
+checksum = "80ce803c6dc23c40e0bdee5a5b188cc90e0a9637cc201cd1d579d3f1debd3be4"
 dependencies = [
- "aead",
  "bytemuck",
  "bytes",
- "chacha20",
- "chacha20poly1305",
  "derivation-path",
- "generic-array",
- "rand_core",
  "sha2",
  "signature",
  "x25519-dalek",
@@ -1742,7 +1737,7 @@ dependencies = [
 
 [[package]]
 name = "zcash"
-version = "0.1.0-pre.11"
+version = "0.1.0-pre.12"
 dependencies = [
  "blake2b_simd",
  "chacha20",

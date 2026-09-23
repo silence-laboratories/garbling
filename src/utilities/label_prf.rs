@@ -125,7 +125,7 @@ impl fmt::Debug for LabelPrf {
 
 impl PartialEq for LabelPrf {
     fn eq(&self, other: &Self) -> bool {
-        self.seed.as_ref() == other.seed.as_ref()
+        self.seed == other.seed
             && self.stream == other.stream
             && self.word_pos == other.word_pos
     }

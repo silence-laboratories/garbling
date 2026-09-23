@@ -1,6 +1,6 @@
 [package]
 name = "zcash"
-version = "0.1.0-pre.11"
+version = "0.1.0-pre.12"
 edition = "2024"
 license-file = "../../LICENSE"
 rust-version = "1.88"
@@ -41,6 +41,7 @@ multi-party-schnorr = { version = "1.3.0-pre.1", optional = true, features = [
 [dev-dependencies]
 blake2b_simd = "1.0.4"
 ciborium = "0.2"
+sl-messages = { workspace = true, features = ["std"] }
 criterion = "0.5.1"
 garbled-circuit = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
