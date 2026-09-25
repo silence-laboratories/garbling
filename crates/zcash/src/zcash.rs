@@ -68,7 +68,7 @@ pub(crate) fn build_zcash_import_function() -> BinaryCircuit {
 
 #[cfg(test)]
 mod tests {
-    use ff::{Field, PrimeField};
+    use ff::{Field, FromUniformBytes, PrimeField};
     use garbled_circuit::functionality::{
         circuit_eval::yao_circuit_eval_functionality,
         input::batch_input_yao_functionality,
@@ -77,7 +77,7 @@ mod tests {
         utils::{FilteredMsgRelay, run_init},
         utils_dep::ProtocolError,
     };
-    use pasta_curves::pallas::Scalar;
+    use pasta_curves::pallas::{Base, Scalar};
     use rand::{SeedableRng, rngs::StdRng};
 
     use sl_compute_common::BinaryString;
@@ -87,6 +87,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::utils::bits_to_bytes_le;
 
     /// Converts a vector of `u8` values to a vector of `bool` values
     fn u8_vec_to_bool_vec(vec_u8: Vec<u8>) -> Vec<bool> {
@@ -380,5 +381,58 @@ mod tests {
         println!("ask_i: {:?}", hex::encode(ask_i.value));
         println!("nk_i: {:?}", hex::encode(nk_i.value));
         println!("rivk_i: {:?}", hex::encode(rivk_i.value));
+
+        use orchard::{
+            keys::FullViewingKey,
+            primitives::redpallas::{SigningKey, SpendAuth, VerificationKey},
+        };
+
+        let ask_bytes: [u8; 64] =
+            bits_to_bytes_le(&out[1..513]).try_into().unwrap();
+        let nk_bytes: [u8; 64] =
+            bits_to_bytes_le(&out[513..1025]).try_into().unwrap();
+        let rivk_bytes: [u8; 64] =
+            bits_to_bytes_le(&out[1025..1537]).try_into().unwrap();
+        let mut ask_eff = Scalar::from_uniform_bytes(&ask_bytes);
+        let nk = Base::from_uniform_bytes(&nk_bytes);
+        let rivk = Scalar::from_uniform_bytes(&rivk_bytes);
+        let ak_bytes = loop {
+            let signing_key: SigningKey<SpendAuth> =
+                ask_eff.to_repr().try_into().unwrap();
+            let vk: VerificationKey<SpendAuth> = (&signing_key).into();
+            let ak_bytes: [u8; 32] = (&vk).into();
+
+            if (ak_bytes[31] >> 7) == 1 {
+                // If the last bit of repr_P(ak) is 1, negate ask.
+                ask_eff = -ask_eff;
+                continue;
+            }
+
+            break ak_bytes;
+        };
+        let mut fvk_bytes = [0u8; 96];
+        fvk_bytes[0..32].copy_from_slice(&ak_bytes);
+        fvk_bytes[32..64].copy_from_slice(&nk.to_repr());
+        fvk_bytes[64..96].copy_from_slice(&rivk.to_repr());
+
+        let fvk = FullViewingKey::from_bytes(&fvk_bytes)
+            .expect("valid Orchard FullViewingKey");
+
+        // Derive the incoming viewing keys (ivk) from the full viewing key.
+        let internal_ivk = fvk.to_ivk(orchard::keys::Scope::Internal);
+        let external_ivk = fvk.to_ivk(orchard::keys::Scope::External);
+
+        // Spec sanity checks: `ivk` must be neither 0 nor ⊥.
+        for ivk in [&internal_ivk, &external_ivk] {
+            let ivk_bytes = ivk.to_bytes();
+            assert_ne!(ivk_bytes, [0u8; 64]);
+            assert!(bool::from(
+                orchard::keys::IncomingViewingKey::from_bytes(&ivk_bytes)
+                    .is_some()
+            ));
+        }
+
+        println!("internal_ivk: {:?}", hex::encode(internal_ivk.to_bytes()));
+        println!("external_ivk: {:?}", hex::encode(external_ivk.to_bytes()));
     }
 }
