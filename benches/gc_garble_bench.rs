@@ -8,7 +8,7 @@ use garbled_circuit::{
     circuit::{prebuilt, BinaryCircuit},
     functionality::garble::garble_functionality,
     utilities::{
-        garble_hash::AesGarbleHash,
+        blake_garble_hash::BlakeGarbleHash,
         label_prf::LabelPrf,
         types::{Block, GarblerSetup, YaoGarblerShare, YaoShare, BLOCK_SIZE},
     },
@@ -49,7 +49,7 @@ pub fn garble_aes256_benchmark(c: &mut Criterion) {
     let mut delta = Block::default();
     rng.fill_bytes(&mut delta);
 
-    let hash = AesGarbleHash::new(AES_KEY);
+    let hash = BlakeGarbleHash::new();
 
     let zero = Block::default();
     let gin: Vec<Vec<_>> = circuit
@@ -95,7 +95,7 @@ pub fn garble_aes128_benchmark(c: &mut Criterion) {
     let mut delta = Block::default();
     rng.fill_bytes(&mut delta);
 
-    let hash = AesGarbleHash::new(AES_KEY);
+    let hash = BlakeGarbleHash::new();
 
     let zero = Block::default();
     let gin: Vec<Vec<_>> = circuit
@@ -140,7 +140,7 @@ pub fn garble_sha256_benchmark(c: &mut Criterion) {
     let mut delta = Block::default();
     rng.fill_bytes(&mut delta);
 
-    let hash = AesGarbleHash::new(AES_KEY);
+    let hash = BlakeGarbleHash::new();
 
     let zero = Block::default();
     let gin: Vec<Vec<_>> = circuit

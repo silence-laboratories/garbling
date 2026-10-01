@@ -435,11 +435,8 @@ mod tests {
             utils_dep::ProtocolError,
         },
         utilities::{
-            commitments::HashCommitment,
-            garble_hash::AesGarbleHash,
-            shahash::Sha512Hash,
-            types::{MapArg, YaoSetup},
-            utils::bool_vec_to_hex,
+            blake_garble_hash::BlakeGarbleHash, commitments::HashCommitment,
+            shahash::Sha512Hash, types::MapArg, utils::bool_vec_to_hex,
         },
     };
 
@@ -478,19 +475,8 @@ mod tests {
         let mut yao_setup =
             setup_yao_functionality(&setup, &mut relay).await?;
 
-        let (hash, comm) = match &yao_setup {
-            YaoSetup::E(e) => {
-                let hash = AesGarbleHash::new(e.garble_key);
-                let comm = HashCommitment::new(Sha512Hash::new());
-                (hash, comm)
-            }
-            YaoSetup::G(g) => {
-                let hash = AesGarbleHash::new(g.garble_key);
-                let comm = HashCommitment::new(Sha512Hash::new());
-                (hash, comm)
-            }
-        };
-
+        let comm = HashCommitment::new(Sha512Hash::new());
+        let hash = BlakeGarbleHash::new();
         let mut count = 0;
 
         let mut inputs = [vec![], vec![]];
@@ -842,19 +828,8 @@ mod tests {
         let mut yao_setup =
             setup_yao_functionality(&setup, &mut relay).await?;
 
-        let (hash, comm) = match &yao_setup {
-            YaoSetup::E(e) => {
-                let hash = AesGarbleHash::new(e.garble_key);
-                let comm = HashCommitment::new(Sha512Hash::new());
-                (hash, comm)
-            }
-            YaoSetup::G(g) => {
-                let hash = AesGarbleHash::new(g.garble_key);
-                let comm = HashCommitment::new(Sha512Hash::new());
-                (hash, comm)
-            }
-        };
-
+        let hash = BlakeGarbleHash::new();
+        let comm = HashCommitment::new(Sha512Hash::new());
         let mut count = 0;
 
         let mut inputs = vec![vec![], vec![]];

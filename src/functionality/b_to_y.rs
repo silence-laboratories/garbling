@@ -486,10 +486,7 @@ mod tests {
             utils_dep::ProtocolError,
         },
         utilities::{
-            commitments::HashCommitment,
-            garble_hash::AesGarbleHash,
-            shahash::Sha512Hash,
-            types::{Block, YaoSetup},
+            commitments::HashCommitment, shahash::Sha512Hash, types::Block,
         },
     };
 
@@ -521,18 +518,7 @@ mod tests {
         let mut yao_setup =
             setup_yao_functionality(&setup, &mut relay).await?;
 
-        let (_, comm) = match &yao_setup {
-            YaoSetup::E(e) => {
-                let hash = AesGarbleHash::new(e.garble_key);
-                let comm = HashCommitment::new(Sha512Hash::new());
-                (hash, comm)
-            }
-            YaoSetup::G(g) => {
-                let hash = AesGarbleHash::new(g.garble_key);
-                let comm = HashCommitment::new(Sha512Hash::new());
-                (hash, comm)
-            }
-        };
+        let comm = HashCommitment::new(Sha512Hash::new());
 
         let key =
             BinaryStringShare::from_constant(&s, setup.participant_index());
@@ -592,19 +578,7 @@ mod tests {
         let mut yao_setup =
             setup_yao_functionality(&setup, &mut relay).await?;
 
-        let (_, comm) = match &yao_setup {
-            YaoSetup::E(e) => {
-                let hash = AesGarbleHash::new(e.garble_key);
-                let comm = HashCommitment::new(Sha512Hash::new());
-                (hash, comm)
-            }
-            YaoSetup::G(g) => {
-                let hash = AesGarbleHash::new(g.garble_key);
-                let comm = HashCommitment::new(Sha512Hash::new());
-                (hash, comm)
-            }
-        };
-
+        let comm = HashCommitment::new(Sha512Hash::new());
         let key =
             BinaryStringShare::from_constant(&s, setup.participant_index());
 
