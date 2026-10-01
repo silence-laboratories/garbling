@@ -30,7 +30,7 @@ where
 
     let mut f: Vec<Block> = vec![];
 
-    for (i, gate) in circuit.gates().iter().enumerate() {
+    for gate in circuit.gates() {
         let (out_gate, f_label) = match *gate {
             BinaryGate::Input { no, id, wire } => {
                 let share =
@@ -67,8 +67,10 @@ where
                 let y_label = &w[yid as usize];
                 let yp_label = xor_blocks(y_label, &setup.delta);
 
-                let k0 = (2 * i) as u128;
-                let k1 = (2 * i + 1) as u128;
+                let k0 = setup.hash_tweak;
+                setup.hash_tweak += 1;
+                let k1 = setup.hash_tweak;
+                setup.hash_tweak += 1;
                 let k0_bytes = k0.to_le_bytes();
                 let k1_bytes = k1.to_le_bytes();
 
@@ -159,6 +161,7 @@ mod tests {
             prf: LabelPrf::from_seed([0; 32]),
             delta: Block::default(),
             party_id: 0,
+            hash_tweak: 0,
         };
 
         let hash = AesGarbleHash::new(Block::default());
@@ -199,6 +202,7 @@ mod tests {
             prf: LabelPrf::from_seed([0; 32]),
             delta: Block::default(),
             party_id: 0,
+            hash_tweak: 0,
         };
 
         let hash = AesGarbleHash::new(Block::default());

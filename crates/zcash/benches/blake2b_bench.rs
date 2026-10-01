@@ -12,8 +12,8 @@ use garbled_circuit::{
         garble_hash::AesGarbleHash,
         label_prf::LabelPrf,
         types::{
-            BLOCK_SIZE, Block, GarblerSetup, YaoEvaluatorShare,
-            YaoGarblerShare, YaoShare,
+            BLOCK_SIZE, Block, EvaluatorSetup, GarblerSetup,
+            YaoEvaluatorShare, YaoGarblerShare, YaoShare,
         },
     },
 };
@@ -57,6 +57,7 @@ pub fn garb_blake2b_benchmark(c: &mut Criterion) {
                     garble_key: Block::default(),
                     prf: LabelPrf::from_seed([0; 32]),
                     party_id: 0,
+                    hash_tweak: 0,
                 },
                 &hash,
             );
@@ -113,6 +114,7 @@ pub fn eval_blake2b_benchmark(c: &mut Criterion) {
             comm_crs: Block::default(),
             garble_key: Block::default(),
             party_id: 0,
+            hash_tweak: 0,
         },
         &hash,
     );
@@ -120,7 +122,15 @@ pub fn eval_blake2b_benchmark(c: &mut Criterion) {
     group.bench_function("blake2b_eval", |b| {
         b.iter(|| {
             let _ = evaluate_functionality::<YaoEvaluatorShare, _>(
-                &circuit, &ein, &gc, &hash,
+                &circuit,
+                &ein,
+                &gc,
+                &hash,
+                &mut EvaluatorSetup {
+                    comm_crs: Block::default(),
+                    garble_key: Block::default(),
+                    hash_tweak: 0,
+                },
             )
             .unwrap();
         })

@@ -92,6 +92,7 @@ impl Context {
             prf: Box::new(SerializableLabelPrf::from_prf(&prf)),
             delta,
             party_id: self.party_id,
+            hash_tweak: 0,
         });
         garble_key
     }
@@ -126,6 +127,7 @@ mod tests {
             yao_setup: Some(SerializableYaoSetup::Evaluator {
                 comm_crs: SerializableBlock([0x33; 16]),
                 garble_key: SerializableBlock([0x44; 16]),
+                hash_tweak: 2139,
             }),
         };
 
@@ -136,11 +138,13 @@ mod tests {
         let Some(SerializableYaoSetup::Evaluator {
             comm_crs,
             garble_key,
+            hash_tweak,
         }) = &context.yao_setup
         else {
             unreachable!();
         };
         assert_eq!(comm_crs.0, [0; 16]);
         assert_eq!(garble_key.0, [0; 16]);
+        assert_eq!(*hash_tweak, 0)
     }
 }

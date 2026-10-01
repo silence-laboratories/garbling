@@ -248,10 +248,12 @@ pub enum SerializableYaoSetup {
         prf: Box<SerializableLabelPrf>,
         delta: SerializableBlock,
         party_id: u8,
+        hash_tweak: u128,
     },
     Evaluator {
         comm_crs: SerializableBlock,
         garble_key: SerializableBlock,
+        hash_tweak: u128,
     },
 }
 
@@ -277,19 +279,23 @@ impl Zeroize for SerializableYaoSetup {
                 garble_key,
                 prf,
                 delta,
+                hash_tweak,
                 ..
             } => {
                 comm_crs.zeroize();
                 garble_key.zeroize();
                 prf.zeroize();
                 delta.zeroize();
+                hash_tweak.zeroize();
             }
             Self::Evaluator {
                 comm_crs,
                 garble_key,
+                hash_tweak,
             } => {
                 comm_crs.zeroize();
                 garble_key.zeroize();
+                hash_tweak.zeroize()
             }
         }
     }
@@ -310,19 +316,23 @@ impl SerializableYaoSetup {
                 prf,
                 delta,
                 party_id,
+                hash_tweak,
             } => Ok(YaoSetup::G(GarblerSetup {
                 comm_crs: comm_crs.0,
                 garble_key: garble_key.0,
                 prf: prf.to_prf(),
                 delta: delta.0,
                 party_id: usize::from(*party_id),
+                hash_tweak: *hash_tweak,
             })),
             SerializableYaoSetup::Evaluator {
                 comm_crs,
                 garble_key,
+                hash_tweak,
             } => Ok(YaoSetup::E(EvaluatorSetup {
                 comm_crs: comm_crs.0,
                 garble_key: garble_key.0,
+                hash_tweak: *hash_tweak,
             })),
         }
     }
@@ -337,10 +347,12 @@ impl From<YaoSetup> for SerializableYaoSetup {
                 prf: Box::new(SerializableLabelPrf::from_prf(&g.prf)),
                 delta: SerializableBlock(g.delta),
                 party_id: g.party_id as u8,
+                hash_tweak: g.hash_tweak,
             },
             YaoSetup::E(e) => SerializableYaoSetup::Evaluator {
                 comm_crs: SerializableBlock(e.comm_crs),
                 garble_key: SerializableBlock(e.garble_key),
+                hash_tweak: e.hash_tweak,
             },
         }
     }
@@ -444,11 +456,13 @@ mod tests {
             prf: Box<ChaCha8Rng>,
             delta: LegacyBlock,
             party_id: u8,
+            hash_tweak: u128,
         },
         #[allow(dead_code)]
         Evaluator {
             comm_crs: LegacyBlock,
             garble_key: LegacyBlock,
+            hash_tweak: u128,
         },
     }
 
@@ -531,6 +545,7 @@ mod tests {
             }),
             delta: SerializableBlock([0x99; 16]),
             party_id: 1,
+            hash_tweak: 1234,
         };
         setup.zeroize();
         let SerializableYaoSetup::Garbler {
@@ -538,6 +553,7 @@ mod tests {
             garble_key,
             prf,
             delta,
+            hash_tweak,
             ..
         } = &setup
         else {
@@ -549,6 +565,7 @@ mod tests {
         assert_eq!(prf.stream, 0);
         assert_eq!(prf.word_pos, 0);
         assert_eq!(delta.0, [0; 16]);
+        assert_eq!(*hash_tweak, 0);
     }
 
     #[test]
@@ -587,6 +604,7 @@ mod tests {
             prf: Box::new(old),
             delta: LegacyBlock([0x33; 16]),
             party_id: 1,
+            hash_tweak: 1234,
         };
         let new_setup = SerializableYaoSetup::Garbler {
             comm_crs: SerializableBlock([0x11; 16]),
@@ -594,6 +612,7 @@ mod tests {
             prf: Box::new(new),
             delta: SerializableBlock([0x33; 16]),
             party_id: 1,
+            hash_tweak: 1234,
         };
         assert_eq!(encode(&new_setup), encode(&old_setup));
     }

@@ -74,6 +74,7 @@ where
         Ok(YaoSetup::E(EvaluatorSetup {
             comm_crs: crs,
             garble_key,
+            hash_tweak: 0,
         }))
     } else {
         let comm_crs = receive_from_one_party(setup, tag1, 2, relay).await?;
@@ -103,6 +104,7 @@ where
             prf,
             delta,
             party_id,
+            hash_tweak: 0,
         }))
     }
 }
