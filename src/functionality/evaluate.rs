@@ -10,7 +10,7 @@ use crate::{
     functionality::utils_dep::ProtocolError,
     utilities::{
         hash_function::HashFunction,
-        types::{Block, YaoEvaluatorShare, YaoShare, ZBLOCK},
+        types::{Block, EvaluatorSetup, YaoEvaluatorShare, YaoShare, ZBLOCK},
         utils::{lsb, xor_blocks},
     },
 };
@@ -20,6 +20,7 @@ pub fn evaluate_functionality<T, H>(
     input_encoding_shares: &[Vec<YaoShare>],
     f: &[Block],
     hash: &H,
+    setup: &mut EvaluatorSetup,
 ) -> Result<HashMap<u32, T>, ProtocolError>
 where
     H: HashFunction,
@@ -28,7 +29,7 @@ where
     let mut f_index = 0;
     let mut w = Zeroizing::new(vec![ZBLOCK; circuit.num_wires() as usize]);
 
-    for (i, gate) in circuit.gates().iter().enumerate() {
+    for gate in circuit.gates() {
         let (out_gate, f_label) = match *gate {
             BinaryGate::Input { no, id, wire } => {
                 let share = input_encoding_shares
@@ -69,8 +70,10 @@ where
                     .get(yid as usize)
                     .ok_or(ProtocolError::InvalidLength)?;
 
-                let k0 = (2 * i) as u128;
-                let k1 = (2 * i + 1) as u128;
+                let k0 = setup.hash_tweak;
+                setup.hash_tweak += 1;
+                let k1 = setup.hash_tweak;
+                setup.hash_tweak += 1;
                 let k0_bytes = k0.to_le_bytes();
                 let k1_bytes = k1.to_le_bytes();
 
@@ -149,6 +152,11 @@ mod tests {
             &inputs,
             &[],
             &hash,
+            &mut EvaluatorSetup {
+                comm_crs: Block::default(),
+                garble_key: Block::default(),
+                hash_tweak: 0,
+            },
         )
         .unwrap_err();
         assert!(matches!(err, ProtocolError::InvalidLength));
@@ -164,6 +172,11 @@ mod tests {
             &[],
             &[[0; 16], [0; 16]],
             &hash,
+            &mut EvaluatorSetup {
+                comm_crs: Block::default(),
+                garble_key: Block::default(),
+                hash_tweak: 0,
+            },
         )
         .unwrap_err();
         assert!(matches!(err, ProtocolError::InvalidLength));

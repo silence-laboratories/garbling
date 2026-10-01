@@ -17,7 +17,9 @@ use crate::{
     },
     utilities::{
         hash_function::HashFunction,
-        types::{Block, GarblerSetup, MapArg, YaoSetup, YaoShare},
+        types::{
+            Block, EvaluatorSetup, GarblerSetup, MapArg, YaoSetup, YaoShare,
+        },
     },
 };
 
@@ -28,11 +30,12 @@ pub fn yao_circuit_eval_process_msg1_p2<H>(
     fs: &[Block],
     circuit: &BinaryCircuit,
     hash: &H,
+    eval_setup: &mut EvaluatorSetup,
 ) -> Result<HashMap<u32, YaoShare>, ProtocolError>
 where
     H: HashFunction,
 {
-    evaluate_functionality(circuit, input, fs, hash)
+    evaluate_functionality(circuit, input, fs, hash, eval_setup)
 }
 
 fn yao_circuit_eval_create_msg1_p01<H>(
@@ -73,7 +76,7 @@ where
     let tag2 = relay.next_tag(YAO_CIRC_EVAL_FUNC_MSG2);
 
     match yao_setup {
-        YaoSetup::E(_) => {
+        YaoSetup::E(e) => {
             let hashes: [u8; 32] =
                 receive_from_one_party(setup, tag2, 0, relay).await?;
 
@@ -90,7 +93,9 @@ where
                 return Err(ProtocolError::InconsistentMessage);
             }
 
-            Ok(yao_circuit_eval_process_msg1_p2(input, &fs, circuit, hash)?)
+            Ok(yao_circuit_eval_process_msg1_p2(
+                input, &fs, circuit, hash, e,
+            )?)
         }
 
         YaoSetup::G(g) => {
@@ -132,7 +137,7 @@ where
     let mut output = Vec::new();
 
     match yao_setup {
-        YaoSetup::E(_e) => match *circuits {
+        YaoSetup::E(e) => match *circuits {
             MapArg::Scalar(circuit) => match *inputs {
                 MapArg::Scalar(input) => {
                     let hashes: [u8; 32] =
@@ -152,7 +157,7 @@ where
                     }
 
                     output.push(yao_circuit_eval_process_msg1_p2(
-                        input, &fs, circuit, hash,
+                        input, &fs, circuit, hash, e,
                     )?);
                 }
 
@@ -181,7 +186,7 @@ where
                         .zip(fs.chunks_exact(complen))
                         .map(|(i, f)| {
                             yao_circuit_eval_process_msg1_p2(
-                                i, f, circuit, hash,
+                                i, f, circuit, hash, e,
                             )
                         })
                         .collect::<Result<Vec<_>, _>>()?;
@@ -216,7 +221,7 @@ where
                                 .get(len..len + complen)
                                 .ok_or(ProtocolError::InvalidLength)?;
                             let out = yao_circuit_eval_process_msg1_p2(
-                                input, f, circuit, hash,
+                                input, f, circuit, hash, e,
                             )?;
                             len += complen;
 
@@ -257,7 +262,7 @@ where
                                 .get(len..len + complen)
                                 .ok_or(ProtocolError::InvalidLength)?;
                             let out = yao_circuit_eval_process_msg1_p2(
-                                ip, f, circuit, hash,
+                                ip, f, circuit, hash, e,
                             )?;
                             len += complen;
 

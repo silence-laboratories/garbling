@@ -88,11 +88,20 @@ impl CircuitEvalState {
         if actual_hash != expected_hash {
             return Err(ProtocolError::InconsistentMessage);
         }
+        let mut setup = ctx
+            .yao_setup
+            .as_ref()
+            .ok_or(ProtocolError::MissingMessage)?
+            .try_to_yao_setup()?;
+        let e = setup
+            .as_evaluator_mut()
+            .ok_or(ProtocolError::InvalidMessage)?;
         let circuit = build_zcash_import_function();
         let hash = AesHash::new(ctx.garble_key()?.0);
         let yao_inputs = to_yao_inputs(&self.inputs);
         let output: HashMap<u32, YaoShare> =
-            evaluate_functionality(&circuit, &yao_inputs, &f, &hash)?;
+            evaluate_functionality(&circuit, &yao_inputs, &f, &hash, e)?;
+        ctx.yao_setup = Some(setup.into());
         OutputVerificationState::start(ctx, outgoing, output)
             .map(|phase| PhaseHandleResult::Consumed(Some(phase)))
     }

@@ -125,6 +125,7 @@ impl SetupYaoState {
                     ctx.yao_setup = Some(SerializableYaoSetup::Evaluator {
                         comm_crs: comm_crs.clone(),
                         garble_key,
+                        hash_tweak: 0,
                     });
                     CommonRandomnessState::start(ctx, outgoing)
                         .map(|phase| PhaseHandleResult::Consumed(Some(phase)))
@@ -372,6 +373,7 @@ mod tests {
             Some(SerializableYaoSetup::Evaluator {
                 comm_crs: SerializableBlock([3; 16]),
                 garble_key,
+                hash_tweak: 0,
             })
         );
     }

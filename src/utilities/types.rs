@@ -187,6 +187,8 @@ pub struct GarblerSetup {
     pub prf: LabelPrf,
     pub delta: Block,
     pub party_id: usize,
+    /// Tweak for hash used during circuit garbling
+    pub hash_tweak: u128,
 }
 
 impl fmt::Debug for GarblerSetup {
@@ -208,6 +210,7 @@ impl GarblerSetup {
         self.garble_key.zeroize();
         self.delta.zeroize();
         self.prf.zeroize();
+        self.hash_tweak.zeroize();
     }
 }
 
@@ -222,6 +225,8 @@ pub struct EvaluatorSetup {
     pub comm_crs: Block,
     /// Garbler-shared key for circuit garbling / evaluation hashes.
     pub garble_key: Block,
+    /// Tweak for hash used during circuit evaluation
+    pub hash_tweak: u128,
 }
 
 impl fmt::Debug for EvaluatorSetup {
@@ -237,6 +242,7 @@ impl EvaluatorSetup {
     pub fn wipe(&mut self) {
         self.comm_crs.zeroize();
         self.garble_key.zeroize();
+        self.hash_tweak.zeroize();
     }
 }
 
@@ -293,6 +299,13 @@ impl YaoSetup {
     }
 
     pub fn as_evaluator(&self) -> Option<&EvaluatorSetup> {
+        match self {
+            YaoSetup::E(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    pub fn as_evaluator_mut(&mut self) -> Option<&mut EvaluatorSetup> {
         match self {
             YaoSetup::E(e) => Some(e),
             _ => None,
@@ -384,6 +397,7 @@ mod tests {
             prf: LabelPrf::from_seed([7; 32]),
             delta: [0xa5; BLOCK_SIZE],
             party_id: 0,
+            hash_tweak: 0,
         };
         garbler.wipe();
         assert_eq!(garbler.comm_crs, Block::default());
@@ -393,6 +407,7 @@ mod tests {
         let mut evaluator = EvaluatorSetup {
             comm_crs: [0x33; BLOCK_SIZE],
             garble_key: [0x44; BLOCK_SIZE],
+            hash_tweak: 0,
         };
         evaluator.wipe();
         assert_eq!(evaluator.comm_crs, Block::default());
